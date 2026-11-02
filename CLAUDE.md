@@ -1,6 +1,6 @@
 # Matrimoney — Guia do Repositório para Agentes
 
-App de finanças para casais, open source e auto-hospedado: cada pessoa instala na própria AWS, com as próprias chaves. Conecta contas e cartões, categoriza as transações com IA (obrigatória) e oferece um assistente com voz (opcional). Idioma: português do Brasil. Stack: a definir no EPIC-00, a partir do protótipo.
+App de finanças para casais, open source e auto-hospedado: cada pessoa instala na própria conta da Cloudflare, com as próprias chaves. Conecta contas e cartões, categoriza as transações com IA (obrigatória) e oferece um assistente com voz (opcional). Idioma: português do Brasil. Stack: PWA em Hono + React (Vite), num Worker da Cloudflare, com banco D1 (ADR-006 e ADR-007 no doc). Estrutura e comandos: EPIC-00.
 
 ## Fonte da verdade
 
@@ -20,11 +20,13 @@ A definir no EPIC-00 (instalar, dev, lint, typecheck, testes, build).
 3. **As chaves de quem instala vivem no banco**, entradas pelo app ([ADR-003](../matrimoney-doc/06-decisoes/ADR-003-chaves-no-banco.md)). Nenhuma rota devolve uma chave; chave nunca aparece em log ou mensagem de erro.
 4. **Só o servidor fala com a Anthropic, o Google e o agregador de Open Finance.** O app (cliente) nunca recebe uma chave.
 5. **Dado financeiro real nunca** em teste, fixture, log ou print. Testes usam dados fictícios prefixados `[TEST]`.
-6. **Git:** nunca commite nem faça push direto na `main`. Branch `task/<nnxx>-<slug>`, commits `TASK-NNXX: <verbo no imperativo>`, PR em rascunho contra a `main`, merge commit (nunca squash), merge só com o aceite da Fable e o "pode mergear" de Gustavo. O `matrimoney-doc` não tem proteção: o executor e a Fable commitam local, o Opus empurra.
+6. **Tudo cabe no plano gratuito da Cloudflare** ([ADR-008](../matrimoney-doc/06-decisoes/ADR-008-plano-gratuito.md)): cada rota e cada cron em até 10 ms de CPU, até 50 chamadas externas por execução (cada consulta ao D1 conta), consultas com índice e em lote. Regras em `../matrimoney-doc/02-arquitetura/plano-gratuito.md`.
+7. **Git:** nunca commite nem faça push direto na `main`. Branch `task/<nnxx>-<slug>`, commits `TASK-NNXX: <verbo no imperativo>`, PR em rascunho contra a `main`, merge commit (nunca squash), merge só com o aceite da Fable e o "pode mergear" de Gustavo. O `matrimoney-doc` não tem proteção: o executor e a Fable commitam local, o Opus empurra.
 
 ## Arquitetura — o que você precisa saber
 
 - Visão geral e o que está decidido: `../matrimoney-doc/02-arquitetura/stack-e-estrutura.md`.
+- Limites do plano gratuito e o aviso de uso: `../matrimoney-doc/02-arquitetura/plano-gratuito.md`.
 - Chaves, modo configuração e funções ligadas pela configuração: `../matrimoney-doc/02-arquitetura/configuracao-e-chaves.md`.
 - IA (categorização, assistente, insights) e voz: `../matrimoney-doc/02-arquitetura/ia-e-voz.md`.
 - Invariantes que toda revisão confere: `../matrimoney-doc/05-guias/guia-revisao.md`, seção 4.
