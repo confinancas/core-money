@@ -136,6 +136,26 @@ app.post("/chat", async (c) => {
   return new Response(body, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 });
 
+// Variante: o Worker só repassa os bytes do streaming (SSE) da Anthropic; o navegador interpreta.
+app.post("/chat-raw", async (c) => {
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "Secret ANTHROPIC_API_KEY ainda não configurado." }, 503);
+  const { prompt } = await c.req.json<{ prompt: string }>();
+  const client = new Anthropic({ apiKey: c.env.ANTHROPIC_API_KEY });
+  const upstream = await client.messages
+    .create({
+      model: "claude-opus-5-5",
+      max_tokens: 2048,
+      output_config: { effort: "low" },
+      stream: true,
+      messages: [{ role: "user", content: String(prompt).slice(0, 2000) }],
+    })
+    .asResponse();
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store" },
+  });
+});
+
 async function scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
   const meter = newMeter();
   const db = drizzle(meteredD1(env.DB, meter), { schema });
