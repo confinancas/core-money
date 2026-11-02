@@ -1,0 +1,24 @@
+// Spike TASK-0001: um Worker serve a API (Hono) e as telas (React/Vite) como arquivos estáticos.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "matrimoney-spike",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application",
+    // só /api/* executa o Worker; o resto é arquivo estático (não conta no limite)
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "matrimoney-spike-db",
+      "database_id": "482da790-9fc8-4994-8bfb-664c49053c5b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": { "enabled": true }
+}
