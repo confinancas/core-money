@@ -151,11 +151,36 @@ function Chat() {
       setOut((o) => o + decoder.decode(value, { stream: true }));
     }
   };
+  // Modo direto: o Worker repassa o SSE da Anthropic e o navegador extrai o texto.
+  const sendRaw = async () => {
+    setOut("");
+    const res = await fetch("/api/chat-raw", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt }) });
+    if (!res.ok || !res.body) return setOut(`HTTP ${res.status}: ${await res.text()}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const event of events) {
+        const data = event.split("\n").find((line) => line.startsWith("data: "));
+        if (!data) continue;
+        const payload = JSON.parse(data.slice(6));
+        if (payload.type === "content_block_delta" && payload.delta?.type === "text_delta") setOut((o) => o + payload.delta.text);
+        if (payload.type === "message_delta" && payload.delta?.stop_reason === "refusal") setOut((o) => o + "\n[o modelo recusou responder]");
+        if (payload.type === "error") setOut((o) => o + `\n[erro: ${payload.error?.message}]`);
+      }
+    }
+  };
   return (
     <section>
       <h2>IA em streaming</h2>
       <textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
       <button onClick={send}>Perguntar</button>
+      <button onClick={sendRaw}>Perguntar (modo direto)</button>
       <p className="out">{out}</p>
     </section>
   );
@@ -169,21 +194,42 @@ function Backup() {
     exportBackup(password, setStatus)
       .then((r) => setStatus(`Backup baixado: ${r.rows} linhas.`))
       .catch((e) => setStatus(e.message));
-  const doRestore = () => {
-    if (!file) return setStatus("Escolha o arquivo.");
-    if (!confirm("Restaurar apaga as notas atuais e põe as do arquivo. Continuar?")) return;
-    restoreBackup(file, password, setStatus)
-      .then((r) => setStatus(r.ok ? `Restaurado e conferido: ${r.rows} linhas.` : `Restaurado, mas a conferência falhou (${r.rows} linhas).`))
-      .catch((e) => setStatus(e.message));
+  // Confirmação dentro da tela: o confirm() do navegador pode ser bloqueado em silêncio em apps instalados.
+  const [confirming, setConfirming] = useState(false);
+  const askRestore = () => {
+    setStatus(`Botão clicado (${new Date().toLocaleTimeString("pt-BR")}).`);
+    if (!file) return setStatus("Botão clicado, mas nenhum arquivo foi escolhido.");
+    if (!password) return setStatus("Botão clicado, mas falta a senha do backup.");
+    setConfirming(true);
+  };
+  const doRestore = async () => {
+    setConfirming(false);
+    setStatus("Confirmado. Lendo o arquivo…");
+    try {
+      const r = await restoreBackup(file!, password, setStatus);
+      setStatus(r.ok ? `Restaurado e conferido: ${r.rows} linhas.` : `Restaurado, mas a conferência falhou (${r.rows} linhas).`);
+    } catch (e) {
+      setStatus(`Erro: ${(e as Error)?.message ?? String(e)}`);
+    }
   };
   return (
     <section>
       <h2>Backup .sql</h2>
       <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha do backup" />
       <button onClick={doExport}>Exportar</button>
-      <input type="file" accept=".enc" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <button className="danger" onClick={doRestore}>Restaurar</button>
-      <p className="muted">{status}</p>
+      {/* sem filtro de extensão: celulares às vezes bloqueiam extensões desconhecidas como .enc */}
+      <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+      <p className="muted">{file ? `Arquivo escolhido: ${file.name}` : "Nenhum arquivo escolhido."}</p>
+      <button className="danger" onClick={askRestore}>Restaurar</button>
+      {confirming && (
+        <p>
+          Restaurar apaga as notas atuais e põe as do arquivo.{" "}
+          <button className="danger" onClick={doRestore}>Sim, restaurar</button>
+          <button onClick={() => { setConfirming(false); setStatus("Restauração cancelada."); }}>Cancelar</button>
+        </p>
+      )}
+      {status && <p><strong>{status}</strong></p>}
+      <p className="muted">Versão da tela: restauração v3</p>
     </section>
   );
 }
