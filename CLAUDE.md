@@ -1,6 +1,6 @@
-# Matrimoney — Guia do Repositório para Agentes
+# core-money — Guia do Repositório para Agentes
 
-App de finanças para casais, open source e auto-hospedado: cada pessoa instala na própria conta da Cloudflare, com as próprias chaves. Conecta contas e cartões, categoriza as transações com IA (obrigatória) e oferece um assistente com voz (opcional). Idioma: português do Brasil. Stack: PWA em Hono + React (Vite), num Worker da Cloudflare, com banco D1 (ADR-006 e ADR-007 no doc). Estrutura e comandos: EPIC-00.
+Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depois o Meumoney), open source e auto-hospedados: cada pessoa instala na própria conta da Cloudflare, com as próprias chaves. Cada app tem um repositório fino, que usa este como dependência, presa a uma tag do GitHub (ADR-012 no doc). Conecta contas e cartões, categoriza as transações com IA (opcional) e oferece um assistente com voz (opcional). Idioma: português do Brasil. Stack: PWA em Hono + React (Vite), num Worker da Cloudflare, com banco D1 (ADR-006 e ADR-007 no doc). Estrutura e comandos: EPIC-00.
 
 ## Fonte da verdade
 
