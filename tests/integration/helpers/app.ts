@@ -2,6 +2,11 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import type { Hono } from "hono";
 import type { AppEnv } from "../../../src/worker/env";
 
+// Esvazia as tabelas do lar antes de cada teste. Filhos antes dos pais: members referencia households.
+export async function limparBanco(db: D1Database): Promise<void> {
+  await db.batch([db.prepare("DELETE FROM members"), db.prepare("DELETE FROM households")]);
+}
+
 // Chama a API pelo app montado com createApp(), com o D1 de teste (sem SELF).
 export async function callApi(
   app: Hono<AppEnv>,

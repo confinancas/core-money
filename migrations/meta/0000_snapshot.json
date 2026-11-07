@@ -1,0 +1,230 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "7f1c4854-a474-41a3-a87e-c00c850de500",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "households": {
+      "name": "households",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "brand": {
+          "name": "brand",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_start_day": {
+          "name": "cycle_start_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 11
+        },
+        "pct_fixed": {
+          "name": "pct_fixed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 35
+        },
+        "pct_comfort": {
+          "name": "pct_comfort",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10
+        },
+        "pct_education": {
+          "name": "pct_education",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 5
+        },
+        "pct_extras": {
+          "name": "pct_extras",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 5
+        },
+        "pct_goals": {
+          "name": "pct_goals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10
+        },
+        "pct_pleasures": {
+          "name": "pct_pleasures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10
+        },
+        "paid_plan": {
+          "name": "paid_plan",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "households_brand_ck": {
+          "name": "households_brand_ck",
+          "value": "\"households\".\"brand\" IN ('matrimoney', 'meumoney')"
+        },
+        "households_cycle_start_day_ck": {
+          "name": "households_cycle_start_day_ck",
+          "value": "\"households\".\"cycle_start_day\" BETWEEN 1 AND 28"
+        },
+        "households_pct_fixed_ck": {
+          "name": "households_pct_fixed_ck",
+          "value": "\"households\".\"pct_fixed\" BETWEEN 0 AND 100"
+        },
+        "households_pct_comfort_ck": {
+          "name": "households_pct_comfort_ck",
+          "value": "\"households\".\"pct_comfort\" BETWEEN 0 AND 100"
+        },
+        "households_pct_education_ck": {
+          "name": "households_pct_education_ck",
+          "value": "\"households\".\"pct_education\" BETWEEN 0 AND 100"
+        },
+        "households_pct_extras_ck": {
+          "name": "households_pct_extras_ck",
+          "value": "\"households\".\"pct_extras\" BETWEEN 0 AND 100"
+        },
+        "households_pct_goals_ck": {
+          "name": "households_pct_goals_ck",
+          "value": "\"households\".\"pct_goals\" BETWEEN 0 AND 100"
+        },
+        "households_pct_pleasures_ck": {
+          "name": "households_pct_pleasures_ck",
+          "value": "\"households\".\"pct_pleasures\" BETWEEN 0 AND 100"
+        },
+        "households_pct_sum_ck": {
+          "name": "households_pct_sum_ck",
+          "value": "\"households\".\"pct_fixed\" + \"households\".\"pct_comfort\" + \"households\".\"pct_education\" + \"households\".\"pct_extras\" + \"households\".\"pct_goals\" + \"households\".\"pct_pleasures\" <= 100"
+        }
+      }
+    },
+    "members": {
+      "name": "members",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "household_id": {
+          "name": "household_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "members_household_role_uq": {
+          "name": "members_household_role_uq",
+          "columns": [
+            "household_id",
+            "role"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "members_household_id_households_id_fk": {
+          "name": "members_household_id_households_id_fk",
+          "tableFrom": "members",
+          "tableTo": "households",
+          "columnsFrom": [
+            "household_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "members_role_ck": {
+          "name": "members_role_ck",
+          "value": "\"members\".\"role\" IN ('titular', 'conjuge')"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
