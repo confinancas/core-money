@@ -45,7 +45,8 @@
     "check:build": "node scripts/dev/check-build.mjs",
     "check:app-fino": "node scripts/dev/check-app-fino.mjs",
     "gate": "npm run lint && npm run typecheck && npm run test:unit && npm run build && npm run check:build && npm run test:integration",
-    "cpu": "node scripts/dev/measure-cpu.mjs"
+    "cpu": "node scripts/dev/measure-cpu.mjs",
+    "pluggy:sonda": "tsx scripts/dev/pluggy-sonda.ts"
   },
   "dependencies": {
     "@cloudflare/workers-types": "^5.20261102.1",

@@ -1,0 +1,45 @@
+{
+  "results": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000a6",
+      "accountId": "00000000-0000-4000-8000-000000000013",
+      "date": "2026-11-02T03:00:00.000Z",
+      "description": "[TEST] Restaurante Teste 02/10",
+      "descriptionRaw": null,
+      "amount": 45.9,
+      "currencyCode": "BRL",
+      "type": "DEBIT",
+      "status": "POSTED",
+      "category": "Food",
+      "categoryId": null,
+      "operationType": "OUTROS",
+      "providerId": null,
+      "paymentData": null,
+      "creditCardMetadata": {
+        "installmentNumber": 2,
+        "totalInstallments": 10,
+        "billId": "00000000-0000-4000-8000-0000000000b1",
+        "billForecastDate": null,
+        "purchaseDate": "2026-10-30T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a7",
+      "accountId": "00000000-0000-4000-8000-000000000013",
+      "date": "2026-11-03T03:00:00.000Z",
+      "description": "[TEST] Pagamento Fatura Teste",
+      "descriptionRaw": null,
+      "amount": -2870.4,
+      "currencyCode": "BRL",
+      "type": "CREDIT",
+      "status": "POSTED",
+      "category": "Credit card payment",
+      "categoryId": null,
+      "operationType": "PAGAMENTO_FATURA",
+      "providerId": null,
+      "paymentData": null,
+      "creditCardMetadata": null
+    }
+  ],
+  "next": null
+}
