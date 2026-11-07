@@ -57,4 +57,5 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Marca:** o nome não entra em `src/` nem em `index.html`; o teste `brand-literals` confere. `src/web/assets/rosto-ia.svg` não tem `<style>`: as animações estão no `global.css`.
 - **Regra que decide pela vizinhança:** só escreve onde a vizinhança inteira está na leitura (ler ±10 dias para escrever ±5), em grupos de 45 ids, para caber em 100 parâmetros.
 - **App fino e JSON:** `criarWorker({ marca })` precisa de cast no app, porque o JSON importado tem tipos alargados. O `concurrently` fica em `dependencies`, porque o `dev` do app o usa.
+- **Instalador:** `scripts/instalar.ts` e `scripts/recuperar-acesso.ts` rodam na pasta do app, pelos `bin`. O estado fica em `.core-money/instalacao.json`, com nome fixo para qualquer marca. Os testes usam um runner falso; nenhum teste fala com a Cloudflare.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
