@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { generateAccessCode, normalizeAccessCode, sha256Hex } from "../src/shared/access-code";
-import { CONFIG_DA_INSTALACAO, geraConfigDaInstalacao } from "./lib/config-instalacao";
+import { CONFIG_DA_INSTALACAO, geraConfigDaInstalacao, leWranglerJsonc } from "./lib/config-instalacao";
 import { confirmaConta } from "./lib/conta";
 import { ensureSecrets } from "./lib/ensure-secrets";
 import { caminhoDoEstado, type EstadoDaInstalacao, gravaEstado, lerEstado } from "./lib/estado";
@@ -78,13 +78,6 @@ export function leVersaoDoApp(pastaApp: string): string {
   return versao;
 }
 
-function leWranglerJsonc(pastaApp: string): string {
-  const caminho = join(pastaApp, "wrangler.jsonc");
-  if (!existsSync(caminho))
-    throw new ErroDeUso("Sem wrangler.jsonc nesta pasta: rode este comando na raiz do seu app.");
-  return readFileSync(caminho, "utf8");
-}
-
 function ehNodeAceito(versao: string): boolean {
   return Number(versao.split(".")[0]) >= 22;
 }
@@ -109,6 +102,7 @@ async function executaInstalacao(opcoes: OpcoesInstalar): Promise<number> {
     throw new ErroDeUso(`Precisa de Node 22 ou mais novo (aqui: ${opcoes.versaoDoNode}).`);
   }
   const marca: Marca = lerMarca(pastaApp);
+  terminal.escreve(`✔ Node ${opcoes.versaoDoNode} e marca ${marca.name} conferidos.`);
   const nome = nomeDaFlag ?? marca.workerName;
   const bancoNome = `${nome}-db`;
   const versao = leVersaoDoApp(pastaApp);
@@ -120,6 +114,7 @@ async function executaInstalacao(opcoes: OpcoesInstalar): Promise<number> {
   // Passo 2: a conta é conferida antes de qualquer escrita.
   const conta = await confirmaConta(wrangler, terminal, sim, opcoes.definirConta);
   if (!conta) return 1;
+  terminal.escreve(`✔ Conta da Cloudflare confirmada: ${conta.nome}.`);
 
   // Passo 3: o banco é criado em ENAM, se ainda não existe.
   let bancos = await wrangler.listaBancosD1();
