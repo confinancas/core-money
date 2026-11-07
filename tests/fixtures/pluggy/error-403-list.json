@@ -1,0 +1,5 @@
+{
+  "code": 403,
+  "message": "[TEST] listagem de items não habilitada",
+  "codeDescription": "LIST_ITEMS_FEATURE_NOT_ENABLED"
+}
