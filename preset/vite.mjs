@@ -8,7 +8,8 @@ export function presetVite() {
     server: {
       port: 5173,
       strictPort: true,
-      proxy: { "/api": "http://localhost:8787" },
+      // 127.0.0.1, não localhost: o wrangler escuta em IPv4 e o Node pode resolver localhost para ::1.
+      proxy: { "/api": "http://127.0.0.1:8787" },
     },
   };
 }
