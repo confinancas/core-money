@@ -18,6 +18,8 @@ const AQUECIMENTO = 2;
 const MEDIDAS = 10;
 const ESPERA_ANTES_DAS_REQUISICOES_MS = 5000;
 const ESPERA_DEPOIS_DAS_REQUISICOES_MS = 10000;
+// Uma requisição por segundo: em rajada o tail do Cloudflare perde eventos (medido na TASK-0003: 13 de 24 perdidos).
+const INTERVALO_ENTRE_REQUISICOES_MS = 1000;
 const wranglerJs = join(raiz, "node_modules", "wrangler", "bin", "wrangler.js");
 const viteJs = join(raiz, "node_modules", "vite", "bin", "vite.js");
 
@@ -225,6 +227,7 @@ async function main() {
     tailFilho.stdout.on("data", (pedaco) => {
       textoDoTail += pedaco;
     });
+    tailFilho.stderr.on("data", () => {});
     await esperar(ESPERA_ANTES_DAS_REQUISICOES_MS);
 
     for (const rota of pedido.requests) {
@@ -243,6 +246,7 @@ async function main() {
         } catch {
           falha(`Requisição ${rota.method} ${rota.path} falhou (rede).`);
         }
+        await esperar(INTERVALO_ENTRE_REQUISICOES_MS);
       }
     }
 
