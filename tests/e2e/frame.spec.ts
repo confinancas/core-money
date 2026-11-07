@@ -1,10 +1,11 @@
 import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
+import { marca } from "./marca";
 
 // Moldura nas três larguras (projetos do playwright.config.ts: celular 390, tablet 834, desktop 1440).
 // As asserções mudam conforme o projeto; cada uma confere o que aquela largura deve mostrar.
 
 const MENU = "Navegação principal";
-const IA = "Assistente de IA do Matrimoney";
+const IA = `Assistente de IA do ${marca.name}`;
 const ABAS_SEM_IA = ["Início", "Cartões", "Contas do mês (despesas)", "Renda", "Relatório", "Configurações"];
 
 type Largura = "celular" | "tablet" | "desktop";
@@ -92,7 +93,7 @@ test.describe("menu", () => {
       const relatorio = await caixa(linkDoMenu(page, "Relatório"));
       const configuracoes = await caixa(linkDoMenu(page, "Configurações"));
       expect(configuracoes.y).toBeGreaterThan(relatorio.y + relatorio.height);
-      await expect(page.getByRole("link", { name: "Matrimoney, início" })).toBeVisible();
+      await expect(page.getByRole("link", { name: `${marca.name}, início` })).toBeVisible();
     }
 
     if (largura === "desktop") {
