@@ -1,0 +1,10 @@
+language js
+
+`window.$metodo($_)` where {
+  $metodo <: or {
+    `confirm`,
+    `alert`,
+    `prompt`
+  },
+  register_diagnostic(span=$metodo, message="window.confirm(), window.alert() e window.prompt() são bloqueados no PWA instalado; use o ConfirmDialog (useConfirm).")
+}
