@@ -3,7 +3,15 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    "types": ["node", "vite/client", "vite-plugin-pwa/client"],
     "paths": { "@/*": ["../../src/web/*"] }
   },
-  "include": ["**/*.ts", "**/*.tsx", "../setup/web.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "../setup/web.ts",
+    "../setup/globais.ts",
+    "../setup/pwa-register.ts",
+    "../../src/web/vite-env.d.ts"
+  ]
 }
