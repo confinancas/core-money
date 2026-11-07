@@ -1,0 +1,140 @@
+{
+  "results": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000a1",
+      "accountId": "00000000-0000-4000-8000-000000000011",
+      "date": "2026-11-04T03:00:00.000Z",
+      "description": "[TEST] Pix enviado Pessoa Teste",
+      "descriptionRaw": null,
+      "amount": -150.37,
+      "currencyCode": "BRL",
+      "type": "DEBIT",
+      "status": "POSTED",
+      "category": "Transfers",
+      "categoryId": null,
+      "operationType": "PIX",
+      "providerId": null,
+      "paymentData": {
+        "payer": null,
+        "receiver": {
+          "name": "[TEST] Pessoa Teste",
+          "documentNumber": { "type": "CPF", "value": "00000000000" },
+          "routingNumber": "341",
+          "routingNumberISPB": "60701190"
+        },
+        "paymentMethod": "PIX"
+      },
+      "creditCardMetadata": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a2",
+      "accountId": "00000000-0000-4000-8000-000000000011",
+      "date": "2026-11-05T03:00:00.000Z",
+      "description": "[TEST] Folha Empresa Teste",
+      "descriptionRaw": null,
+      "amount": 2500,
+      "currencyCode": "BRL",
+      "type": "CREDIT",
+      "status": "POSTED",
+      "category": "Income",
+      "categoryId": null,
+      "operationType": "FOLHA_PAGAMENTO",
+      "providerId": null,
+      "paymentData": {
+        "payer": {
+          "name": "[TEST] Empresa Teste",
+          "documentNumber": { "type": "CNPJ", "value": "00000000000000" },
+          "routingNumber": null,
+          "routingNumberISPB": null
+        },
+        "receiver": null,
+        "paymentMethod": null
+      },
+      "creditCardMetadata": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a3",
+      "accountId": "00000000-0000-4000-8000-000000000011",
+      "date": "2026-11-05T00:00:00.000Z",
+      "description": "[TEST] Boleto Conta Teste",
+      "descriptionRaw": "[TEST] Boleto Conta Teste  ",
+      "amount": 42.5,
+      "currencyCode": "BRL",
+      "type": "DEBIT",
+      "status": "POSTED",
+      "category": "Utilities",
+      "categoryId": null,
+      "operationType": "BOLETO",
+      "providerId": "[TEST] provider-boleto-1",
+      "paymentData": {
+        "payer": null,
+        "receiver": {
+          "name": "[TEST] Concessionaria Teste",
+          "documentNumber": { "type": "CNPJ", "value": "00000000000000" },
+          "routingNumber": null,
+          "routingNumberISPB": null
+        },
+        "paymentMethod": "BOLETO"
+      },
+      "creditCardMetadata": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a4",
+      "accountId": "00000000-0000-4000-8000-000000000011",
+      "date": "2026-11-06T12:00:00.000Z",
+      "description": "[TEST] Rendimento Caixinha Teste",
+      "descriptionRaw": null,
+      "amount": 12.34,
+      "currencyCode": "BRL",
+      "type": "CREDIT",
+      "status": "POSTED",
+      "category": null,
+      "categoryId": null,
+      "operationType": "RENDIMENTO_APLIC_FINANCEIRA",
+      "providerId": null,
+      "paymentData": null,
+      "creditCardMetadata": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a5",
+      "accountId": "00000000-0000-4000-8000-000000000013",
+      "date": "2026-12-03T03:00:00.000Z",
+      "description": "[TEST] COMPRA MERCADO 03/10",
+      "descriptionRaw": null,
+      "amount": 189.9,
+      "currencyCode": "BRL",
+      "type": "DEBIT",
+      "status": "PENDING",
+      "category": "Shopping",
+      "categoryId": null,
+      "operationType": "OUTROS",
+      "providerId": null,
+      "paymentData": null,
+      "creditCardMetadata": {
+        "installmentNumber": 3,
+        "totalInstallments": 10,
+        "billId": null,
+        "billForecastDate": "2026-12",
+        "purchaseDate": "2026-11-06T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a8",
+      "accountId": "00000000-0000-4000-8000-000000000011",
+      "date": "2026-11-02T00:00:00.000Z",
+      "description": "[TEST] Pix pendente Pessoa Teste",
+      "descriptionRaw": null,
+      "amount": -20,
+      "currencyCode": "BRL",
+      "type": "DEBIT",
+      "status": "PENDING",
+      "category": null,
+      "categoryId": null,
+      "operationType": "PIX",
+      "providerId": null,
+      "paymentData": null,
+      "creditCardMetadata": null
+    }
+  ],
+  "next": "?accountId=00000000-0000-4000-8000-000000000011&after=QUJD"
+}
