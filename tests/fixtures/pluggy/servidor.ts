@@ -17,9 +17,13 @@ export function lerFixture(nome: string): unknown {
 
 export type ServidorFixtures = { url: string; fechar: () => Promise<void> };
 
-export function iniciarServidorFixtures(): Promise<ServidorFixtures> {
+// substituicoes: fixtures trocadas por outras (nome do arquivo → objeto). Serve aos testes de campo nulo.
+export function iniciarServidorFixtures(
+  substituicoes: Record<string, unknown> = {},
+): Promise<ServidorFixtures> {
   const apiKey = (lerFixture("auth.json") as { apiKey: string }).apiKey;
-  const servidor = createServer((req, res) => tratar(req, res, apiKey));
+  const ler = (nome: string): unknown => (nome in substituicoes ? substituicoes[nome] : lerFixture(nome));
+  const servidor = createServer((req, res) => tratar(req, res, apiKey, ler));
   return new Promise((resolver, rejeitar) => {
     servidor.once("error", rejeitar);
     servidor.listen(0, "127.0.0.1", () => {
@@ -47,13 +51,18 @@ const ROTAS_SIMPLES: Record<string, string | undefined> = {
   "/investments": "investments.json",
 };
 
-function tratar(req: IncomingMessage, res: ServerResponse, apiKeyValida: string): void {
+function tratar(
+  req: IncomingMessage,
+  res: ServerResponse,
+  apiKeyValida: string,
+  ler: (nome: string) => unknown,
+): void {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   const caminho = url.pathname;
 
   if (req.method === "POST" && caminho === "/auth") {
     req.resume();
-    enviarJson(res, 200, lerFixture("auth.json"));
+    enviarJson(res, 200, ler("auth.json"));
     return;
   }
 
@@ -77,7 +86,7 @@ function tratar(req: IncomingMessage, res: ServerResponse, apiKeyValida: string)
 
   if (caminho.startsWith("/items/")) {
     if (caminho === `/items/${ITEM_ID}`) {
-      enviarJson(res, 200, lerFixture("item-meupluggy.json"));
+      enviarJson(res, 200, ler("item-meupluggy.json"));
     } else {
       enviarJson(res, 404, {
         code: 404,
@@ -97,7 +106,7 @@ function tratar(req: IncomingMessage, res: ServerResponse, apiKeyValida: string)
       : ROTAS_SIMPLES[caminho];
 
   if (arquivo !== undefined) {
-    enviarJson(res, 200, lerFixture(arquivo));
+    enviarJson(res, 200, ler(arquivo));
     return;
   }
 

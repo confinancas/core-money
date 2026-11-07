@@ -15,6 +15,7 @@ describe("classifyPluggyResponse: tabela de kind", () => {
     [422, "bad_request"],
     [500, "temporary"],
     [502, "temporary"],
+    [408, "temporary"],
     [503, "temporary"],
   ];
 

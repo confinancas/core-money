@@ -3,6 +3,7 @@ import { type ResultadoSonda, rodarSonda } from "../../../../scripts/dev/pluggy-
 import {
   ITEM_ID,
   iniciarServidorFixtures,
+  lerFixture,
   type ServidorFixtures,
   valoresSensiveis,
 } from "../../../fixtures/pluggy/servidor";
@@ -88,10 +89,11 @@ describe("sonda contra o servidor de fixtures (PLUGGY_BASE_URL)", () => {
     expect(contas.comBalanceDueDate).toBe(1);
   });
 
-  it("item 1: transações da primeira página de cada conta (3 contas x 5), e não as páginas seguintes", () => {
+  it("item 1: transações da primeira página de cada conta (3 contas x 6), e não as páginas seguintes", () => {
     const transacoes = (itens()[0] as Registro).transacoes as Registro;
-    expect(transacoes.total).toBe(15);
-    expect(transacoes.horaDeDate).toEqual({ "T00:00:00.000Z": 6, "T03:00:00.000Z": 6, outra: 3 });
+    expect(transacoes.total).toBe(18);
+    // Fixture assimétrica: T00 aparece 2 vezes por conta, T03 3 vezes e "outra" 1 vez. Trocar os rótulos muda o resultado.
+    expect(transacoes.horaDeDate).toEqual({ "T00:00:00.000Z": 6, "T03:00:00.000Z": 9, outra: 3 });
   });
 
   it("item 1: sinal de amount por tipo de conta (as quatro contagens DEBIT/CREDIT x sinal)", () => {
@@ -99,16 +101,22 @@ describe("sonda contra o servidor de fixtures (PLUGGY_BASE_URL)", () => {
       string,
       Record<string, Record<string, number>>
     >;
-    expect(tipos.BANK?.DEBIT).toEqual({ amountNegativo: 2, amountPositivo: 4 });
+    expect(tipos.BANK?.DEBIT).toEqual({ amountNegativo: 4, amountPositivo: 4 });
     expect(tipos.BANK?.CREDIT).toEqual({ amountPositivo: 4 });
-    expect(tipos.CREDIT?.DEBIT).toEqual({ amountNegativo: 1, amountPositivo: 2 });
+    expect(tipos.CREDIT?.DEBIT).toEqual({ amountNegativo: 2, amountPositivo: 2 });
     expect(tipos.CREDIT?.CREDIT).toEqual({ amountPositivo: 2 });
   });
 
   it("item 1: PENDING por tipo de conta, com a contagem das datas futuras", () => {
     const pendentes = ((itens()[0] as Registro).transacoes as Registro).pendentes as Record<string, Registro>;
-    expect(pendentes.CREDIT).toEqual({ total: 1, comDataFutura: 1 });
-    expect(pendentes.BANK).toEqual({ total: 2, comDataFutura: 2 });
+    // Há um PENDING com data futura (cartão) e um PENDING com data passada (conta). Só o futuro conta.
+    expect(pendentes.CREDIT).toEqual({ total: 2, comDataFutura: 1 });
+    expect(pendentes.BANK).toEqual({ total: 4, comDataFutura: 2 });
+  });
+
+  it("item 1: POSTED e PENDING contados por status", () => {
+    const status = ((itens()[0] as Registro).transacoes as Registro).status as Record<string, number>;
+    expect(status).toEqual({ POSTED: 12, PENDING: 6 });
   });
 
   it("item 1: presença dos campos do Pluggy (paymentData, billId, billForecastDate, category...)", () => {
@@ -125,8 +133,9 @@ describe("sonda contra o servidor de fixtures (PLUGGY_BASE_URL)", () => {
     const formas = ((itens()[0] as Registro).transacoes as Registro).formaDaParcela as Record<string, number>;
     const chaves = Object.keys(formas);
     expect(chaves.length).toBeGreaterThan(0);
-    // A descrição original tem letras minúsculas ("Loja", "Teste"); a forma só tem A, 9 e a pontuação.
+    // A descrição de teste está em maiúsculas ("COMPRA MERCADO"): a forma não pode trazer letra real, só A.
     expect(chaves.every((chave) => !/[a-z]/.test(chave))).toBe(true);
+    expect(chaves.every((chave) => !/[B-Z]/.test(chave))).toBe(true);
     expect(chaves.some((chave) => /9/.test(chave))).toBe(true);
     expect(Object.values(formas).reduce((soma, n) => soma + n, 0)).toBe(3);
   });
@@ -146,6 +155,50 @@ describe("sonda contra o servidor de fixtures (PLUGGY_BASE_URL)", () => {
       porTipo: { "FIXED_INCOME/CDB": 1, "MUTUAL_FUND/(nulo)": 1 },
       comCaixinhaOuCofrinho: 1,
     });
+  });
+});
+
+describe("sonda com campos nulos", () => {
+  const clonar = (valor: unknown): Registro => JSON.parse(JSON.stringify(valor)) as Registro;
+
+  it("date, description e name nulos não derrubam a saída, e nada vaza", async () => {
+    const page1 = clonar(lerFixture("transactions-page1.json"));
+    const transacoes = page1.results as Registro[];
+    transacoes[0].date = null; // primeiro movimento sem data
+    transacoes[5].date = null; // PENDING sem data (passa pela contagem de datas futuras)
+    transacoes[4].description = null; // parcela sem descrição (entra na forma da parcela)
+    transacoes[4].descriptionRaw = null;
+    const investimentos = clonar(lerFixture("investments.json"));
+    (investimentos.results as Registro[])[0].name = null;
+    const contas = clonar(lerFixture("accounts.json"));
+    (contas.results as Registro[])[0].name = null;
+    const item = clonar(lerFixture("item-meupluggy.json"));
+    (item.connector as Registro).name = null;
+
+    const nulo = await iniciarServidorFixtures({
+      "transactions-page1.json": page1,
+      "investments.json": investimentos,
+      "accounts.json": contas,
+      "item-meupluggy.json": item,
+    });
+    try {
+      const r = await rodarSonda(
+        {
+          PLUGGY_CLIENT_ID: CLIENT_ID,
+          PLUGGY_CLIENT_SECRET: CLIENT_SECRET,
+          PLUGGY_ITEM_IDS: ITEM_ID,
+          PLUGGY_BASE_URL: nulo.url,
+        },
+        { now: () => AGORA },
+      );
+      expect(r.codigo).toBe(0);
+      const saida = JSON.parse(r.saida) as Registro;
+      expect(saida.itens as Registro[]).toHaveLength(1);
+      const vazamentos = valoresSensiveis().filter((valor) => r.saida.includes(valor));
+      expect(vazamentos).toEqual([]);
+    } finally {
+      await nulo.fechar();
+    }
   });
 });
 
