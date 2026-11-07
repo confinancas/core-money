@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "@fontsource-variable/nunito";
+
+/* Os componentes ficam em src/web. Num app, o núcleo está em node_modules, onde o Tailwind não procura classes. */
+@source "..";
+
+/* Tokens do manual (design system). Cores só daqui; os componentes usam as classes geradas. */
+@theme {
+  --color-bg: #f2f5f3;
+  --color-card: #ffffff;
+  --color-primary: #0e9a63;
+  --color-primary-ink: #0a7d50;
+  --color-primary-soft: #e6f6ee;
+  --color-primary-soft-2: #c8ebd8;
+  --color-chip-border: #c9e9d8;
+  --color-ink: #18221e;
+  --color-ink-2: #66756e;
+  --color-ink-3: #5c6b64;
+  --color-nav-idle: #9faba5;
+  --color-divider: #edf1ef;
+  --color-field: #f4f7f5;
+  --color-field-border: #e7ece9;
+  --color-tile-border: #e1e7e4;
+  --color-switch-off: #dbe3df;
+  --color-switch-off-border: #d2dad6;
+  --color-warn: #c27400;
+  --color-warn-bg: #fff5e4;
+  --color-danger: #e5484d;
+  --color-danger-bg: #fff0f1;
+  --color-success: #1e9e63;
+  --color-success-ink: #17804f;
+  --color-success-bg: #e7f7ef;
+  --color-insight: #10261e;
+  --color-hidden-a: #f7f9f8;
+  --color-hidden-b: #edf1ef;
+  --color-hidden-border: #d2dad6;
+  --color-hidden-ink: #98a39d;
+  --color-badge: #ff5a5f;
+  --color-badge-ring: #1aa571;
+  --color-st-fixos: #3d7bf7;
+  --color-st-conforto: #13b5a6;
+  --color-st-educacao: #a35bf0;
+  --color-st-extras: #c4995b;
+  --color-st-prazeres: #f0559a;
+  --color-st-metas: #f7931e;
+  --color-st-investimentos: #1e9e63;
+
+  --shadow-card: 0 8px 24px rgba(22, 60, 45, 0.07);
+  --shadow-primary: 0 8px 18px rgba(14, 154, 99, 0.24);
+  --shadow-top: 0 12px 30px rgba(11, 140, 90, 0.25);
+  --shadow-insight: 0 12px 28px rgba(16, 38, 30, 0.25);
+  --shadow-segment: 0 4px 12px rgba(22, 60, 45, 0.12);
+
+  --radius-card: 24px;
+  --radius-top: 34px;
+  --radius-field: 16px;
+  --radius-tile: 14px;
+  --radius-glass: 22px;
+
+  --font-sans: "Nunito Variable", system-ui, sans-serif;
+
+  --breakpoint-tablet: 768px;
+  --breakpoint-desktop: 1200px;
+}
+
+/* Fora do @theme: um gradiente não vira classe de cor. */
+:root {
+  --gradient-top: linear-gradient(150deg, #22b47a 0%, #0b8c5a 100%);
+}
+
+@layer base {
+  html {
+    background: var(--color-bg);
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  a {
+    color: var(--color-primary);
+  }
+
+  a:hover {
+    color: var(--color-primary-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* Valores: centavos a 60% da parte inteira, algarismos tabulares, sem quebra de linha. */
+.mm-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mm-cents {
+  font-size: 0.6em;
+}
+
+[data-v] {
+  transition: filter 0.2s;
+}
+
+/* Olho de ocultar valores: vale para o app inteiro, inclusive diálogos em portal. */
+.mm-oculto [data-v] {
+  filter: blur(7px);
+  user-select: none;
+}
+
+/* Esqueleto: blocos pulsando de divider para field em 1,2 s. */
+@keyframes mm-pulsar {
+  0%,
+  100% {
+    background-color: var(--color-divider);
+  }
+  50% {
+    background-color: var(--color-field);
+  }
+}
+
+.mm-esqueleto {
+  background-color: var(--color-divider);
+  animation: mm-pulsar 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-v] {
+    transition: none;
+  }
+
+  .mm-esqueleto {
+    animation: none;
+  }
+}

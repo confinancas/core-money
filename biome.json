@@ -1,4 +1,8 @@
 {
+  "plugins": ["./scripts/dev/biome/dialogos-do-navegador.grit"],
+  "css": {
+    "parser": { "tailwindDirectives": true }
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
