@@ -58,4 +58,7 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Regra que decide pela vizinhança:** só escreve onde a vizinhança inteira está na leitura (ler ±10 dias para escrever ±5), em grupos de 45 ids, para caber em 100 parâmetros.
 - **App fino e JSON:** `criarWorker({ marca })` precisa de cast no app, porque o JSON importado tem tipos alargados. O `concurrently` fica em `dependencies`, porque o `dev` do app o usa.
 - **Instalador:** `scripts/instalar.ts` e `scripts/recuperar-acesso.ts` rodam na pasta do app, pelos `bin`. O estado fica em `.core-money/instalacao.json`, com nome fixo para qualquer marca. Os testes usam um runner falso; nenhum teste fala com a Cloudflare.
+- **Medidor (`metered-d1`):** um comando preparado por um `Db` só entra no `batch` desse mesmo `Db`. Um `batch` com comando de outro medidor falha com `ZodError` do miniflare.
+- **`rows_written` do D1:** conta as entradas de índice. Uma linha com dois índices sobre a coluna alterada conta mais que 1.
+- **Lista de ids sem limite:** `json_each(?)`, com o JSON num único parâmetro, como em `src/worker/cycle/assign.ts`. Evita os grupos de 90.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.

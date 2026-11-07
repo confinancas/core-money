@@ -286,7 +286,7 @@ describe("PATCH /api/household", () => {
 });
 
 describe("chamadas ao D1", () => {
-  it("GET e PATCH fazem uma chamada cada", async () => {
+  it("GET e PATCH de percentuais fazem uma chamada cada", async () => {
     const { householdId, memberId } = await criarLarDeUma();
     const medidas: Meter[] = [];
     const app = createApp({
@@ -297,7 +297,23 @@ describe("chamadas ao D1", () => {
     await callApi(app, "GET", "/api/household");
     expect(medidas.at(-1)?.calls).toBe(1);
 
-    await callApi(app, "PATCH", "/api/household", { cycleStartDay: 5 });
+    await callApi(app, "PATCH", "/api/household", {
+      percentages: { fixos: 40, conforto: 10, educacao: 5, extras: 5, metas: 10, prazeres: 10 },
+    });
     expect(medidas.at(-1)?.calls).toBe(1);
+  });
+
+  // TASK-0801: mudar o dia de início lê o calendário, grava o dia (e o calendário, se houver) e grava o lar.
+  // Sem calendário: leitura, gravação do dia e gravação do lar. Medido pelo Meter.
+  it("PATCH que muda o dia de início faz três chamadas, sem calendário", async () => {
+    const { householdId, memberId } = await criarLarDeUma();
+    const medidas: Meter[] = [];
+    const app = createApp({
+      resolveSession: async () => ({ memberId, householdId }),
+      onMeter: (meter) => medidas.push({ ...meter }),
+    });
+
+    await callApi(app, "PATCH", "/api/household", { cycleStartDay: 5 });
+    expect(medidas.at(-1)?.calls).toBe(3);
   });
 });
