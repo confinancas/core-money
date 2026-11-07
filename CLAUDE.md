@@ -46,4 +46,7 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Proxy do Vite:** aponta para `127.0.0.1`; `localhost` resolve para `::1`, e o wrangler escuta em IPv4.
 - **`wrangler tail`:** perde eventos em rajada, por isso o `npm run cpu` espaça as requisições em 1 s.
 - **Testes de integração:** o D1 de teste é compartilhado e aplica chaves estrangeiras. O `vitest.integration.config.ts` roda um arquivo por vez (`fileParallelism: false`), e o setup esvazia as tabelas antes de cada teste, filhos antes dos pais.
+- **Tailwind 4 não procura classes em `node_modules`:** o núcleo declara `@source ".."` em `src/web/styles/global.css`. Sem isso, as classes dos componentes somem nos apps finos.
+- **Os apps finos só chamam `montarApp()`:** CSS e provedores ficam em `src/web/montar-app.tsx`, nunca em `src/web/main.tsx`. Caminhos do preset saem de `import.meta.url`, porque num app o núcleo está em `node_modules`.
+- **shadcn:** o CLI não roda sem interação neste repositório; os componentes ficam escritos à mão em `src/web/components/ui/`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
