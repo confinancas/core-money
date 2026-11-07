@@ -23,5 +23,7 @@ export default defineConfig({
   test: {
     include: ["tests/integration/**/*.test.ts"],
     setupFiles: ["tests/setup/apply-migrations.ts"],
+    // Os arquivos dividem o mesmo D1 de teste (sem armazenamento isolado): um de cada vez.
+    fileParallelism: false,
   },
 });
