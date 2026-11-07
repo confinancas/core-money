@@ -18,6 +18,7 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - Gate, antes de entregar: `npm run gate` (lint, typecheck, testes unitários, build e integração), 2× seguidas.
 - E2E: `npm run test:e2e` (obrigatório se a task tocou `src/web`, `index.html`, `vite.config.ts`, `preset/` ou arquivos públicos).
 - CPU: `npm run cpu -- tests/cpu/TASK-NNXX.json` (obrigatório se a task criou ou mudou rota ou cron; precisa do `.env` no worktree).
+- App fino: `npm run check:app-fino` monta uma fixture com o núcleo empacotado (`npm pack`, instalação, build, typecheck e dry-run). Quebrar um item de `exports` faz o job `app-fino` falhar.
 - Arquivos locais a copiar para o worktree: `.env` da pasta principal, só para `npm run cpu`. O dev local e o gate não usam.
 
 ## Regras rígidas
@@ -55,4 +56,5 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Vitest 4 não aplica o `define` aos projetos:** `__BRAND__` e `__DEV_ROUTES__` dos testes vêm de `tests/setup/globais.ts`.
 - **Marca:** o nome não entra em `src/` nem em `index.html`; o teste `brand-literals` confere. `src/web/assets/rosto-ia.svg` não tem `<style>`: as animações estão no `global.css`.
 - **Regra que decide pela vizinhança:** só escreve onde a vizinhança inteira está na leitura (ler ±10 dias para escrever ±5), em grupos de 45 ids, para caber em 100 parâmetros.
+- **App fino e JSON:** `criarWorker({ marca })` precisa de cast no app, porque o JSON importado tem tipos alargados. O `concurrently` fica em `dependencies`, porque o `dev` do app o usa.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
