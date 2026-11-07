@@ -10,6 +10,7 @@
     "drizzle.config.ts",
     "vitest*.config.ts",
     "playwright.config.ts",
-    "scripts/**/*"
+    "scripts/**/*",
+    "src/shared/household.ts"
   ]
 }
