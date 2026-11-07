@@ -45,3 +45,5 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Windows:** scripts Node chamam `node node_modules/<pacote>/bin/...` com `spawn`, sem shell. Encerre todo processo que subiu (wrangler, workerd, vite, playwright), ou a pasta do worktree não pode ser apagada.
 - **Proxy do Vite:** aponta para `127.0.0.1`; `localhost` resolve para `::1`, e o wrangler escuta em IPv4.
 - **`wrangler tail`:** perde eventos em rajada, por isso o `npm run cpu` espaça as requisições em 1 s.
+- **Testes de integração:** o D1 de teste é compartilhado e aplica chaves estrangeiras. O `vitest.integration.config.ts` roda um arquivo por vez (`fileParallelism: false`), e o setup esvazia as tabelas antes de cada teste, filhos antes dos pais.
+- **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
