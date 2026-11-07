@@ -156,6 +156,40 @@ test.describe("menu", () => {
     await expect(linkDoMenu(page, "Configurações")).toHaveAttribute("aria-current", "page");
   });
 
+  // A seta de voltar é um Link do react-router: a navegação é do app. Um marcador em window sobrevive a ela
+  // só se a página não recarregou.
+  test("seta de voltar navega dentro do app: o marcador continua e a rota vira a da aba", async ({
+    page,
+  }) => {
+    await page.goto("/compras/abc");
+    await page.evaluate(() => {
+      (window as unknown as { marcador: string }).marcador = "sem-recarregar";
+    });
+
+    await page.getByRole("link", { name: "Voltar" }).click();
+
+    await expect(page).toHaveURL(/\/cartoes$/);
+    await expect(linkDoMenu(page, "Cartões")).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => (window as unknown as { marcador?: string }).marcador)).toBe(
+      "sem-recarregar",
+    );
+  });
+
+  // O X de /contas/nova (tela cheia) também é um Link: mesma regra, sem recarregar a página.
+  test("X navega dentro do app: o marcador continua e a rota vira a da aba", async ({ page }) => {
+    await page.goto("/contas/nova");
+    await page.evaluate(() => {
+      (window as unknown as { marcador: string }).marcador = "sem-recarregar";
+    });
+
+    await page.getByRole("link", { name: "Fechar" }).click();
+
+    await expect(page).toHaveURL(/\/contas$/);
+    expect(await page.evaluate(() => (window as unknown as { marcador?: string }).marcador)).toBe(
+      "sem-recarregar",
+    );
+  });
+
   test("cenário 6: a aba de origem (fromTab) marca Início; sem estado, Cartões", async ({
     page,
   }, testInfo) => {
