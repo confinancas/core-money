@@ -24,6 +24,7 @@
   "scripts": {
     "dev": "concurrently -k -n web,api \"npm:dev:web\" \"npm:dev:api\"",
     "dev:web": "vite",
+    "predev:api": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\"",
     "dev:api": "wrangler dev --port 8787",
     "build": "vite build",
     "preview": "npm run build && wrangler dev --port 8787",
