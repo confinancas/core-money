@@ -1,4 +1,5 @@
 import type { MouseEventHandler, ReactNode } from "react";
+import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -8,12 +9,14 @@ type Props = {
   badge?: number;
   pressed?: boolean;
   onClick?: MouseEventHandler<HTMLButtonElement>;
-  // Com `to`, vira link.
+  // Com `to`, vira um Link do react-router (navega dentro do app, sem recarregar a página).
   to?: string;
+  // Estado que vai junto com o Link (location.state), como o `fromTab` das telas de detalhe.
+  state?: unknown;
 };
 
 // Botão redondo de 44 px sobre o verde do topo.
-export function TopIconButton({ label, icon, badge = 0, pressed, onClick, to }: Props) {
+export function TopIconButton({ label, icon, badge = 0, pressed, onClick, to, state }: Props) {
   const estilo = cn(
     "relative inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-white/28 bg-white/18 text-white",
   );
@@ -30,9 +33,9 @@ export function TopIconButton({ label, icon, badge = 0, pressed, onClick, to }: 
 
   if (to !== undefined) {
     return (
-      <a href={to} aria-label={label} className={estilo}>
+      <Link to={to} state={state} aria-label={label} className={estilo}>
         {conteudo}
-      </a>
+      </Link>
     );
   }
 
