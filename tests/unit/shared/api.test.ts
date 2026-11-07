@@ -7,7 +7,7 @@ describe("isApiErrorBody", () => {
     [{ error: "x", message: "y" }],
     [{ error: "validacao", fields: { nome: "Informe o nome." } }],
   ])("aceita o corpo %o", (corpo) => {
-    expect(isApiErrorBody(corpo)).toBe(false);
+    expect(isApiErrorBody(corpo)).toBe(true);
   });
 
   it.each([[null], ["texto"], [{ error: 1 }], [{ error: { code: "x" } }]])("recusa o valor %o", (valor) => {
