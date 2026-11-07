@@ -15,6 +15,13 @@
       "when": 1794022664968,
       "tag": "0001_bank",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794028420831,
+      "tag": "0002_cycles",
+      "breakpoints": true
     }
   ]
 }

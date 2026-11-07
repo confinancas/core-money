@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Lar: um por instalação. Os percentuais são as colunas dos seis tipos de gasto planejados; investimentos é a sobra.
 export const households = sqliteTable(
@@ -244,5 +244,35 @@ export const transactions = sqliteTable(
     index("transactions_bill_idx").on(t.billId),
     index("transactions_household_establishment_idx").on(t.householdId, t.establishmentKey),
     index("transactions_household_fixed_bill_cycle_idx").on(t.householdId, t.fixedBillId, t.cycleKey),
+  ],
+);
+
+// Calendário do lar: um ciclo por linha (TASK-0801). A chave é o mês em que o ciclo começa. As colunas de número e de
+// percentual são da fotografia do ciclo (TASK-0803) e ficam nulas até lá.
+export const cycles = sqliteTable(
+  "cycles",
+  {
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id),
+    key: text("key").notNull(),
+    startsOn: text("starts_on").notNull(),
+    endsOn: text("ends_on").notNull(),
+    prevIncomeCents: integer("prev_income_cents"),
+    spendLimitCents: integer("spend_limit_cents"),
+    recurringCents: integer("recurring_cents"),
+    dailyTargetCents: integer("daily_target_cents"),
+    targetComputedOn: text("target_computed_on"),
+    balanceClosedAt: text("balance_closed_at"),
+    pctFixed: integer("pct_fixed"),
+    pctComfort: integer("pct_comfort"),
+    pctEducation: integer("pct_education"),
+    pctExtras: integer("pct_extras"),
+    pctGoals: integer("pct_goals"),
+    pctPleasures: integer("pct_pleasures"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.householdId, t.key] }),
+    index("cycles_household_starts_idx").on(t.householdId, t.startsOn),
   ],
 );
