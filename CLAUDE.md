@@ -49,4 +49,6 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Tailwind 4 não procura classes em `node_modules`:** o núcleo declara `@source ".."` em `src/web/styles/global.css`. Sem isso, as classes dos componentes somem nos apps finos.
 - **Os apps finos só chamam `montarApp()`:** CSS e provedores ficam em `src/web/montar-app.tsx`, nunca em `src/web/main.tsx`. Caminhos do preset saem de `import.meta.url`, porque num app o núcleo está em `node_modules`.
 - **shadcn:** o CLI não roda sem interação neste repositório; os componentes ficam escritos à mão em `src/web/components/ui/`.
+- **`ON CONFLICT` numa chave única:** o `INSERT` não pode reusar o id da linha existente: a chave primária fica fora do conflito, e o SQLite falha. Gere um id novo em todo `INSERT`.
+- **Limite do D1:** 100 parâmetros por comando. A gravação de movimentos usa 4 linhas por `INSERT`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
