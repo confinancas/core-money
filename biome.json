@@ -27,6 +27,15 @@
     }
   },
   "files": {
-    "includes": ["**", "!dist", "!.wrangler", "!migrations/meta", "!node_modules"]
+    "includes": [
+      "**",
+      "!dist",
+      "!.wrangler",
+      "!migrations/meta",
+      "!node_modules",
+      "!coverage",
+      "!playwright-report",
+      "!test-results"
+    ]
   }
 }
