@@ -1,0 +1,16 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "connector": {
+    "id": 200,
+    "name": "MeuPluggy",
+    "primaryColor": "#6A3DE8",
+    "type": "PERSONAL_BANK",
+    "isSandbox": false
+  },
+  "status": "UPDATED",
+  "executionStatus": "SUCCESS",
+  "error": null,
+  "lastUpdatedAt": "2026-11-06T03:00:00.000Z",
+  "consentExpiresAt": "2027-10-01T00:00:00.000Z",
+  "products": ["ACCOUNTS", "CREDIT_CARDS", "TRANSACTIONS", "IDENTITY", "INVESTMENTS"]
+}
