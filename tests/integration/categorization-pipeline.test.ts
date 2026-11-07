@@ -380,4 +380,102 @@ describe("custo do pipeline e da gravação", () => {
       `[medicao] gravação 200 linhas com regra: calls=${medidor.calls} statements=${medidor.statements} rowsRead=${medidor.rowsRead} rowsWritten=${medidor.rowsWritten} maiorComando=${espiado.maiorComando()}`,
     );
   });
+
+  it("o pipeline lê o mesmo número de linhas num lar de 200 e num de 5.000 transações (não cresce com a tabela)", async () => {
+    const lar = await criarLar();
+    await criarRegra(lar, {
+      scope: "estabelecimento",
+      matchValue: "PAG*JOSEDASILVA",
+      setCategoryId: categoriaDoLar(lar, "servicos"),
+    });
+    await criarRegra(lar, {
+      scope: "destinatario",
+      matchValue: "[TEST] MARIA|***.456.789-**",
+      setCategoryId: categoriaDoLar(lar, "lazer"),
+      createdFrom: "lembrar",
+    });
+    // Cada medida processa 100 transações novas (50 compras e 50 Pix). O resto do lar são linhas de outras chaves.
+    await inserirAlvos(lar, "a1-c", 50, "compra", "PAG*JOSEDASILVA", null, null);
+    await inserirAlvos(lar, "a1-p", 50, "pix", "[TEST] Pix", "[TEST] Maria", "***.456.789-**");
+    await inserirOutrasLinhas(lar, "o1-", 100);
+    const pequeno = newMeter();
+    await processNewTransactions(
+      createDb(env.DB, pequeno),
+      lar.householdId,
+      await idsComPrefixos(["a1-c", "a1-p"]),
+      AGORA,
+    );
+
+    await inserirOutrasLinhas(lar, "o2-", 4800);
+    await inserirAlvos(lar, "a2-c", 50, "compra", "PAG*JOSEDASILVA", null, null);
+    await inserirAlvos(lar, "a2-p", 50, "pix", "[TEST] Pix", "[TEST] Maria", "***.456.789-**");
+    const grande = newMeter();
+    await processNewTransactions(
+      createDb(env.DB, grande),
+      lar.householdId,
+      await idsComPrefixos(["a2-c", "a2-p"]),
+      AGORA,
+    );
+
+    expect(pequeno.rowsRead).toBeLessThanOrEqual(10 * 100);
+    expect(grande.rowsRead).toBeGreaterThanOrEqual(pequeno.rowsRead * 0.95);
+    expect(grande.rowsRead).toBeLessThanOrEqual(pequeno.rowsRead * 1.05);
+  });
 });
+
+async function idsComPrefixos(prefixos: string[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const prefixo of prefixos) {
+    const r = await env.DB.prepare("SELECT id FROM transactions WHERE id LIKE ? ORDER BY id")
+      .bind(`${prefixo}%`)
+      .all<{ id: string }>();
+    ids.push(...r.results.map((l) => l.id));
+  }
+  return ids;
+}
+
+async function inserirAlvos(
+  lar: Lar,
+  prefixo: string,
+  quantidade: number,
+  tipo: "compra" | "pix",
+  descricao: string,
+  contraparte: string | null,
+  doc: string | null,
+): Promise<void> {
+  await env.DB.prepare(
+    `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+     INSERT INTO transactions (id, household_id, external_id, bank_item_id, card_id, account_id, movement, occurred_at, local_date,
+       amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, last_seen_at)
+     SELECT ? || i, ?, ? || i, ?, ?, ?, ?, '2026-11-05T12:00:00.000Z', '2026-11-05', -1000, ?, ?, ?, ?, ? FROM n`,
+  )
+    .bind(
+      quantidade,
+      prefixo,
+      lar.householdId,
+      prefixo,
+      lar.bankItemId,
+      tipo === "compra" ? lar.cardId : null,
+      tipo === "compra" ? null : lar.accountId,
+      tipo === "compra" ? "compra" : "pix_enviado",
+      descricao,
+      descricao.toUpperCase(),
+      contraparte,
+      doc,
+      AGORA,
+    )
+    .run();
+}
+
+// Linhas de outras chaves (não casam com regra nenhuma): o peso do lar.
+async function inserirOutrasLinhas(lar: Lar, prefixo: string, quantidade: number): Promise<void> {
+  await env.DB.prepare(
+    `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+     INSERT INTO transactions (id, household_id, external_id, bank_item_id, card_id, movement, occurred_at, local_date,
+       amount_cents, original_description, establishment_key, last_seen_at)
+     SELECT ? || i, ?, ? || i, ?, ?, 'compra', '2026-11-05T12:00:00.000Z', '2026-11-05', -1000,
+       '[TEST] LOJA ' || i, 'LOJA ' || i, ? FROM n`,
+  )
+    .bind(quantidade, prefixo, lar.householdId, prefixo, lar.bankItemId, lar.cardId, AGORA)
+    .run();
+}

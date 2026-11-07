@@ -35,11 +35,14 @@ type CasamentoDeRegra = {
 
 // Escopo estabelecimento (compras e saídas de cartão e conta) e destinatário (Pix e TED enviados). Cada transação casa
 // no máximo com uma regra: o escopo vem do movimento. Só regra ativa, só transação ainda sem categoria.
+// A lista de ids entra por json_each como laço de fora (CROSS JOIN): cada transação é buscada pela chave primária e
+// cada regra pelo índice rules_active_match. Sem o CROSS JOIN, o planejador usava o índice do lar e lia o lar inteiro
+// para cada consulta (custo que cresce com a tabela). Leituras medidas: ~9 por transação, em lar de 400 e de 5.200.
 const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.id AS rule_id, r.scope AS scope,
     r.match_value AS match_value, r.set_custom_name AS set_custom_name, r.set_category_id AS set_category_id,
     r.set_spend_type AS set_spend_type, r.set_movement AS set_movement, c.id AS categoria_ativa
   FROM json_each(?) AS j
-  JOIN transactions AS t ON t.id = j.value AND t.household_id = ? AND t.category_id IS NULL
+  CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ? AND t.category_id IS NULL
     AND t.movement IN ('compra', 'estorno', 'debito', 'boleto')
   JOIN rules AS r ON r.household_id = t.household_id AND r.disabled_at IS NULL
     AND r.scope = 'estabelecimento' AND r.match_value = t.establishment_key
@@ -49,14 +52,15 @@ const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.i
     r.match_value AS match_value, r.set_custom_name AS set_custom_name, r.set_category_id AS set_category_id,
     r.set_spend_type AS set_spend_type, r.set_movement AS set_movement, c.id AS categoria_ativa
   FROM json_each(?) AS j
-  JOIN transactions AS t ON t.id = j.value AND t.household_id = ? AND t.category_id IS NULL
+  CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ? AND t.category_id IS NULL
     AND t.movement IN ('pix_enviado', 'ted_enviada')
   JOIN rules AS r ON r.household_id = t.household_id AND r.disabled_at IS NULL
     AND r.scope = 'destinatario' AND r.match_value = ${COUNTERPARTY_KEY_SQL}
-  LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL`;
+  LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL
+`;
 
 const SQL_LINHAS = `SELECT t.id, t.movement, t.card_id, t.category_id FROM json_each(?) AS j
-  JOIN transactions AS t ON t.id = j.value WHERE t.household_id = ?`;
+  CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?`;
 
 const PAGAMENTO_DE_FATURA = "pagamento_fatura";
 
