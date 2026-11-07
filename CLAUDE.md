@@ -11,7 +11,12 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 
 ## Comandos
 
-A definir no EPIC-00 (instalar, dev, lint, typecheck, testes, build).
+- Instalar: `npm ci` (Node 22, conforme `.nvmrc`).
+- Desenvolver: `npm run dev` (telas em http://localhost:5173, API em :8787, D1 local). Não precisa de conta na Cloudflare nem de `.env`.
+- Ver como em produção: `npm run preview`.
+- Banco local: `npm run db:migrate:local`.
+- Checar: `npm run lint`, `npm run typecheck`, `npm run build`.
+- Arquivos locais a copiar para o worktree: nenhum para o dev local.
 
 ## Regras rígidas
 

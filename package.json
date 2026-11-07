@@ -1,0 +1,55 @@
+{
+  "name": "@confinancas/core-money",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    "./worker": "./src/worker/criar-worker.ts",
+    "./web": "./src/web/montar-app.tsx",
+    "./vite": "./preset/vite.mjs"
+  },
+  "bin": {
+    "core-money-build": "./bin/core-money-build.mjs"
+  },
+  "files": [
+    "src",
+    "migrations",
+    "preset",
+    "bin"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n web,api \"npm:dev:web\" \"npm:dev:api\"",
+    "dev:web": "vite",
+    "predev:api": "node -e \"require('fs').mkdirSync('dist/client',{recursive:true})\"",
+    "dev:api": "wrangler dev --port 8787",
+    "build": "vite build",
+    "preview": "npm run build && wrangler dev --port 8787",
+    "typecheck": "tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply matrimoney-db --local"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^5.20261102.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.16",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "wrangler": "^4.156.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.6",
+    "concurrently": "^10.0.6",
+    "drizzle-kit": "^0.31.11"
+  }
+}

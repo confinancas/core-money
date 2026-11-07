@@ -1,0 +1,15 @@
+# Segredos locais: nunca no repositório (ele é público)
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+
+# Dependências e build
+node_modules/
+dist/
+.wrangler/
+coverage/
+playwright-report/
+test-results/
+*.log
+.DS_Store
