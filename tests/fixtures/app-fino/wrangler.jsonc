@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // App de teste do núcleo (TASK-0007): não é um app real, e o banco é só o marcador.
+  "name": "app-fino-de-teste",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application",
+    // só /api/* executa o Worker; o resto é arquivo estático
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      // marcador: o dry-run não usa o id
+      "database_name": "app-fino-de-teste-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "node_modules/@confinancas/core-money/migrations"
+    }
+  ],
+  "observability": { "enabled": true }
+}
