@@ -322,6 +322,8 @@ describe("chamadas ao D1", () => {
       resolveSession: async () => ({ memberId, householdId }),
       onMeter: (meter) => medidas.push({ ...meter }),
     });
+    await aquecerOPortao(app);
+    medidas.length = 0;
 
     await callApi(app, "PATCH", "/api/household", { cycleStartDay: 5 });
     expect(medidas.at(-1)?.calls).toBe(3);
