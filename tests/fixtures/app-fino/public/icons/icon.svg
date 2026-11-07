@@ -1,0 +1,7 @@
+<svg width="512" height="512" viewBox="67 67 1111 1120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ícone do Matrimoney"><defs><linearGradient id="mmbg" gradientUnits="userSpaceOnUse" x1="150" y1="120" x2="1000" y2="1180"><stop offset="0" stop-color="#23D692"/><stop offset="0.3" stop-color="#06A56B"/><stop offset="0.55" stop-color="#028F5D"/><stop offset="1" stop-color="#017C55"/></linearGradient></defs><rect x="68" y="67" width="1110" height="1120" rx="444" fill="url(#mmbg)"/><mask id="mmk" maskUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254"><rect x="0" y="0" width="1254" height="1254" fill="#FFFFFF"/><circle cx="766.7" cy="645.7" r="244" fill="#000000"/></mask>
+<g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="473.9" cy="644.4" r="205.4" stroke-width="41" mask="url(#mmk)"/>
+<path d="M405.9 295 H542.9 L568.9 322 L474.9 425 L378.9 322 Z" stroke-width="38"/>
+<circle cx="766.7" cy="645.7" r="205.4" stroke-width="41"/>
+<path d="M522 588 C514 569 497 558 473 558 C443 558 421 575 421 600 C421 626 441 635 473 642 C507 650 527 662 527 693 C527 719 505 728 473 728 C447 728 428 719 418 699 M473 534 V558 M473 728 V755" stroke-width="36" transform="translate(292.8 0)"/>
+</g></svg>
