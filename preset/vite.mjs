@@ -77,6 +77,9 @@ function opcoesDoPwa(marca) {
       navigateFallback: "/index.html",
       navigateFallbackDenylist: [/^\/api\//],
       globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+      // Com injectRegister: false, o plugin não liga estas duas opções: sem elas, uma versão nova fica em waiting.
+      skipWaiting: true,
+      clientsClaim: true,
     },
   };
 }
