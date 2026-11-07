@@ -40,11 +40,12 @@ function novaPasta(): string {
 }
 
 function gravaEstado(pasta: string, url: string): void {
-  mkdirSync(join(pasta, ".marca-teste"));
+  mkdirSync(join(pasta, ".core-money"));
   writeFileSync(
-    join(pasta, ".marca-teste", "instalacao.json"),
+    join(pasta, ".core-money", "instalacao.json"),
     JSON.stringify({
       nome: "matrimoney-teste",
+      marca: "marca-teste",
       databaseName: NOME_DO_BANCO,
       databaseId: "11111111-2222-3333-4444-555555555555",
       url,
