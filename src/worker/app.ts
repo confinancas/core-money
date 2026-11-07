@@ -1,0 +1,51 @@
+import { type Context, Hono } from "hono";
+import type { BrandConfig } from "../shared/brand/types";
+import { createDb } from "./db/client";
+import { type Meter, newMeter } from "./db/metered-d1";
+import type { AppEnv } from "./env";
+import { apiError } from "./http/errors";
+import { healthRoute } from "./routes/health";
+
+export type AppOptions = {
+  onMeter?: (meter: Meter, c: Context<AppEnv>) => void;
+  rotasDoApp?: (app: Hono<AppEnv>) => void;
+  marca?: BrandConfig;
+  versao?: string;
+};
+
+// Valores de desenvolvimento para os testes; a entrada de dev (index.ts) passa os do dev/marca.json.
+const MARCA_DE_DESENVOLVIMENTO: BrandConfig = {
+  id: "matrimoney",
+  workerName: "matrimoney",
+  repositorio: "confinancas/matrimoney",
+  name: "Matrimoney",
+};
+const VERSAO_DE_DESENVOLVIMENTO = "0.1.0";
+
+export function createApp(options: AppOptions = {}): Hono<AppEnv> {
+  const app = new Hono<AppEnv>().basePath("/api");
+
+  // Primeiro middleware: mede o uso do D1 desta requisição e expõe marca e versão no contexto.
+  app.use(async (c, next) => {
+    const meter = newMeter();
+    c.set("meter", meter);
+    c.set("db", createDb(c.env.DB, meter));
+    c.set("marca", options.marca ?? MARCA_DE_DESENVOLVIMENTO);
+    c.set("versao", options.versao ?? VERSAO_DE_DESENVOLVIMENTO);
+    await next();
+    options.onMeter?.(meter, c);
+  });
+
+  // As rotas do app entram antes das do núcleo, para o app poder trocar uma delas.
+  options.rotasDoApp?.(app);
+  app.route("/", healthRoute);
+
+  app.notFound((c) => apiError(c, 404, "rota_inexistente", "Rota não encontrada."));
+
+  app.onError((err, c) => {
+    console.error(`${c.req.method} ${c.req.path} ${err.name}: ${err.message}`);
+    return apiError(c, 500, "erro_interno", "Algo deu errado. Tente de novo.");
+  });
+
+  return app;
+}
