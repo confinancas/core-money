@@ -22,6 +22,13 @@
       "when": 1794025845002,
       "tag": "0002_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794037874015,
+      "tag": "0003_app_secrets",
+      "breakpoints": true
     }
   ]
 }
