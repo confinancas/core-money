@@ -3,7 +3,7 @@
     {
       "id": "00000000-0000-4000-8000-0000000000a1",
       "accountId": "00000000-0000-4000-8000-000000000011",
-      "date": "2026-11-04T00:00:00.000Z",
+      "date": "2026-11-04T03:00:00.000Z",
       "description": "[TEST] Pix enviado Pessoa Teste",
       "descriptionRaw": null,
       "amount": -150.37,
@@ -99,7 +99,7 @@
       "id": "00000000-0000-4000-8000-0000000000a5",
       "accountId": "00000000-0000-4000-8000-000000000013",
       "date": "2026-12-03T03:00:00.000Z",
-      "description": "[TEST] Loja Teste 03/10",
+      "description": "[TEST] COMPRA MERCADO 03/10",
       "descriptionRaw": null,
       "amount": 189.9,
       "currencyCode": "BRL",
@@ -117,6 +117,23 @@
         "billForecastDate": "2026-12",
         "purchaseDate": "2026-11-06T00:00:00.000Z"
       }
+    },
+    {
+      "id": "00000000-0000-4000-8000-0000000000a8",
+      "accountId": "00000000-0000-4000-8000-000000000011",
+      "date": "2026-11-02T00:00:00.000Z",
+      "description": "[TEST] Pix pendente Pessoa Teste",
+      "descriptionRaw": null,
+      "amount": -20,
+      "currencyCode": "BRL",
+      "type": "DEBIT",
+      "status": "PENDING",
+      "category": null,
+      "categoryId": null,
+      "operationType": "PIX",
+      "providerId": null,
+      "paymentData": null,
+      "creditCardMetadata": null
     }
   ],
   "next": "?accountId=00000000-0000-4000-8000-000000000011&after=QUJD"

@@ -169,7 +169,7 @@ function formaDoFim(descricao: string): string {
 
 function acumular(agregado: Agregado, transacao: PluggyTransaction, tipoConta: string, hoje: string): void {
   agregado.total += 1;
-  contar(agregado.horaDeDate, horaDeDate(transacao.date));
+  contar(agregado.horaDeDate, horaDeDate(transacao.date ?? ""));
 
   if (agregado.porTipoDeConta[tipoConta] === undefined) agregado.porTipoDeConta[tipoConta] = {};
   const porTipo = agregado.porTipoDeConta[tipoConta] as Record<string, Contagem>;
@@ -199,11 +199,14 @@ function acumular(agregado: Agregado, transacao: PluggyTransaction, tipoConta: s
       agregado.pendentes[tipoConta] = { total: 0, comDataFutura: 0 };
     const pendentes = agregado.pendentes[tipoConta] as { total: number; comDataFutura: number };
     pendentes.total += 1;
-    if (transacao.date.slice(0, 10) > hoje) pendentes.comDataFutura += 1;
+    if ((transacao.date ?? "").slice(0, 10) > hoje) pendentes.comDataFutura += 1;
   }
 
   if (presente(meta?.installmentNumber)) {
-    contar(agregado.formaDaParcela, formaDoFim(transacao.descriptionRaw?.trim() || transacao.description));
+    contar(
+      agregado.formaDaParcela,
+      formaDoFim(transacao.descriptionRaw?.trim() || transacao.description || ""),
+    );
   }
 }
 
@@ -275,7 +278,7 @@ async function sondarInvestimentos(cliente: PluggyClient, itemId: string) {
   let caixinhas = 0;
   for (const investimento of investimentos.valor) {
     contar(porTipo, `${investimento.type}/${investimento.subtype ?? "(nulo)"}`);
-    if (/caixinha|cofrinho/.test(normalizar(investimento.name))) caixinhas += 1;
+    if (/caixinha|cofrinho/.test(normalizar(investimento.name ?? ""))) caixinhas += 1;
   }
   return { erro: null, total: investimentos.valor.length, porTipo, comCaixinhaOuCofrinho: caixinhas };
 }

@@ -223,7 +223,7 @@ describe("endpoints", () => {
       `https://api.pluggy.ai/v2/transactions?accountId=${CONTA}&dateFrom=2026-09-08&dateTo=2026-11-07`,
     );
     expect(f.chamadas[1]?.url).not.toContain("after");
-    expect(pagina.results).toHaveLength(5);
+    expect(pagina.results).toHaveLength(6);
     expect(pagina.next).toBe(`?accountId=${CONTA}&after=QUJD`);
   });
 
@@ -275,6 +275,14 @@ describe("endpoints", () => {
     expect(f.chamadas[1]?.url).toBe(`https://api.pluggy.ai/identity?itemId=${ITEM}`);
   });
 
+  it("getIdentity: 403 não vira null, sai como forbidden", async () => {
+    const f = autenticado({ code: 403, codeDescription: "[TEST] SEM_PERMISSAO" }, 403);
+    const erro = await criar(f.fetch)
+      .getIdentity(ITEM)
+      .catch((e: unknown) => e);
+    expect(erro).toMatchObject({ kind: "forbidden", status: 403 });
+  });
+
   it("getIdentity: 200 devolve o objeto", async () => {
     const f = autenticado(lerFixture("identity.json"));
     const identidade = await criar(f.fetch).getIdentity(ITEM);
@@ -287,6 +295,14 @@ describe("endpoints", () => {
     expect(investimentos).toHaveLength(2);
     expect(f.chamadas.filter(ehGet)).toHaveLength(1);
     expect(f.chamadas[1]?.url).toBe(`https://api.pluggy.ai/investments?itemId=${ITEM}&pageSize=500`);
+  });
+
+  it("listInvestments: uma chamada só, mesmo com totalPages maior que 1", async () => {
+    const investimentos = { ...(lerFixture("investments.json") as Record<string, unknown>), totalPages: 3 };
+    const f = autenticado(investimentos);
+    const resultado = await criar(f.fetch).listInvestments(ITEM);
+    expect(resultado).toHaveLength(2);
+    expect(f.chamadas.filter(ehGet)).toHaveLength(1);
   });
 
   it("não é usado nenhum GET /transactions nem PATCH /items", async () => {
@@ -356,6 +372,22 @@ describe("falhas temporárias e limite de uso", () => {
       .getIdentity(ITEM)
       .catch((e: unknown) => e);
     expect(erro).toMatchObject({ kind: "temporary", status: 503 });
+  });
+});
+
+describe("só o 401 repete a chamada", () => {
+  it.each([403, 404, 500, 503])("status %i faz um GET só, sem reautenticar", async (status) => {
+    const f = fetchFalso((c) =>
+      ehAuth(c)
+        ? respostaJson(200, { apiKey: "[TEST] key-1" })
+        : respostaJson(status, { codeDescription: "[TEST] CODIGO_DE_TESTE" }),
+    );
+    const erro = await criar(f.fetch)
+      .getItem(ITEM)
+      .catch((e: unknown) => e);
+    expect(erro).toMatchObject({ status });
+    expect(f.chamadas.filter(ehGet)).toHaveLength(1);
+    expect(f.chamadas.filter(ehAuth)).toHaveLength(1);
   });
 });
 
