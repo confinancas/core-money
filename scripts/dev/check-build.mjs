@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Falha se o build de produção (dist/client) trouxer o catálogo do design system.
 // O catálogo só existe em `npm run dev` e no build --mode e2e. Procura o texto cru e a forma com escapes \uXXXX.
+// Também falha se o sw.js gerado não pedir skipWaiting e clientsClaim (com injectRegister: false, o plugin não pede).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,4 +55,18 @@ if (achados.length > 0) {
   process.exit(1);
 }
 
-console.log(`check-build: ok, nenhum trecho do catálogo em dist/client (${arquivos.length} arquivos).`);
+// No sw.js minificado, skipWaiting é uma chamada no topo (depois de ; { ou ,); o ouvinte de SKIP_WAITING a chama depois de &&.
+const swGerado = readFileSync(join(saida, "sw.js"), "utf8");
+const faltam = [];
+if (!/[;{,]self\.skipWaiting\(\)/.test(swGerado)) faltam.push("skipWaiting");
+if (!/\.clientsClaim\(\)/.test(swGerado)) faltam.push("clientsClaim");
+if (faltam.length > 0) {
+  console.error(
+    `check-build: o sw.js gerado não tem ${faltam.join(" nem ")} (o preset deve passar as duas opções ao workbox).`,
+  );
+  process.exit(1);
+}
+
+console.log(
+  `check-build: ok, nenhum trecho do catálogo em dist/client (${arquivos.length} arquivos) e sw.js com skipWaiting e clientsClaim.`,
+);
