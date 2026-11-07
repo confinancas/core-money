@@ -1,0 +1,12 @@
+{
+  "task": "TASK-0006",
+  "requests": [
+    { "name": "GET /api/household sem sessão", "method": "GET", "path": "/api/household" },
+    {
+      "name": "PATCH /api/household sem sessão",
+      "method": "PATCH",
+      "path": "/api/household",
+      "body": { "cycleStartDay": 5 }
+    }
+  ]
+}
