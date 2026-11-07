@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e29d9bb7-1973-4808-bf2f-3d0598a4b185",
+  "id": "0f767600-22e1-498e-9477-895cbd08923f",
   "prevId": "11b539b5-edcd-4211-ad17-91e28e0591f3",
   "tables": {
     "accounts": {
@@ -91,48 +91,40 @@
         }
       }
     },
-    "ai_rules_document": {
-      "name": "ai_rules_document",
+    "app_secrets": {
+      "name": "app_secrets",
       "columns": {
-        "household_id": {
-          "name": "household_id",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
-        "text": {
-          "name": "text",
+        "ciphertext": {
+          "name": "ciphertext",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "''"
+          "autoincrement": false
+        },
+        "iv": {
+          "name": "iv",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         },
         "updated_at": {
           "name": "updated_at",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "ai_rules_document_household_id_households_id_fk": {
-          "name": "ai_rules_document_household_id_households_id_fk",
-          "tableFrom": "ai_rules_document",
-          "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -668,6 +660,35 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "feature_flags": {
+      "name": "feature_flags",
+      "columns": {
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "feature_flags_enabled_ck": {
+          "name": "feature_flags_enabled_ck",
+          "value": "\"feature_flags\".\"enabled\" IN (0, 1)"
+        }
+      }
+    },
     "households": {
       "name": "households",
       "columns": {
@@ -1130,176 +1151,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "rules": {
-      "name": "rules",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "household_id": {
-          "name": "household_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "match_value": {
-          "name": "match_value",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "set_custom_name": {
-          "name": "set_custom_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_category_id": {
-          "name": "set_category_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_spend_type": {
-          "name": "set_spend_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_income_kind": {
-          "name": "set_income_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_income_subtype": {
-          "name": "set_income_subtype",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_fixed_income_id": {
-          "name": "set_fixed_income_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_movement": {
-          "name": "set_movement",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_from": {
-          "name": "created_from",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "disabled_at": {
-          "name": "disabled_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "rules_active_match": {
-          "name": "rules_active_match",
-          "columns": [
-            "household_id",
-            "scope",
-            "match_value"
-          ],
-          "isUnique": true,
-          "where": "\"rules\".\"disabled_at\" IS NULL"
-        }
-      },
-      "foreignKeys": {
-        "rules_household_id_households_id_fk": {
-          "name": "rules_household_id_households_id_fk",
-          "tableFrom": "rules",
-          "tableTo": "households",
-          "columnsFrom": [
-            "household_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "rules_created_by_members_id_fk": {
-          "name": "rules_created_by_members_id_fk",
-          "tableFrom": "rules",
-          "tableTo": "members",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "rules_scope_ck": {
-          "name": "rules_scope_ck",
-          "value": "\"rules\".\"scope\" IN ('estabelecimento', 'destinatario', 'remetente', 'conta_destino')"
-        },
-        "rules_created_from_ck": {
-          "name": "rules_created_from_ck",
-          "value": "\"rules\".\"created_from\" IN ('aplicar_todas', 'lembrar', 'confirmacao', 'manual')"
-        },
-        "rules_spend_type_ck": {
-          "name": "rules_spend_type_ck",
-          "value": "\"rules\".\"set_spend_type\" IS NULL OR \"rules\".\"set_spend_type\" IN ('fixos', 'conforto', 'educacao', 'extras', 'prazeres', 'metas', 'investimentos')"
-        },
-        "rules_movement_ck": {
-          "name": "rules_movement_ck",
-          "value": "\"rules\".\"set_movement\" IS NULL OR \"rules\".\"set_movement\" = 'pagamento_fatura'"
-        }
-      }
     },
     "sync_runs": {
       "name": "sync_runs",
