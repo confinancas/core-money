@@ -1,0 +1,7 @@
+{
+  "task": "TASK-0002",
+  "requests": [
+    { "name": "GET /api/health", "method": "GET", "path": "/api/health" },
+    { "name": "GET /api/nao-existe", "method": "GET", "path": "/api/nao-existe" }
+  ]
+}
