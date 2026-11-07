@@ -19,6 +19,20 @@ describe("TopIconButton", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
   });
 
+  it("com badge 9, mostra 9 e não 9+", () => {
+    render(<TopIconButton label="Avisos" icon={icone} badge={9} />);
+
+    expect(screen.getByText("9")).toBeInTheDocument();
+    expect(screen.queryByText("9+")).toBeNull();
+  });
+
+  it("com badge 10, mostra 9+", () => {
+    render(<TopIconButton label="Avisos" icon={icone} badge={10} />);
+
+    expect(screen.getByText("9+")).toBeInTheDocument();
+    expect(screen.queryByText("10")).toBeNull();
+  });
+
   it("com badge 12, mostra 9+", () => {
     render(<TopIconButton label="Avisos" icon={icone} badge={12} />);
 

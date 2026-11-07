@@ -18,6 +18,12 @@ describe("ChoiceTile", () => {
     expect(aoSelecionar).toHaveBeenCalledTimes(1);
   });
 
+  it("não selecionada, tem aria-checked false", () => {
+    render(<ChoiceTile label="Nós dois" selected={false} onSelect={() => undefined} />);
+
+    expect(screen.getByRole("radio", { name: "Nós dois" })).toHaveAttribute("aria-checked", "false");
+  });
+
   it("com ponto, fica com 60 px e, selecionada, a borda pega a cor do ponto", () => {
     render(<ChoiceTile label="Fixos" dotColor="rgb(61, 123, 247)" selected onSelect={() => undefined} />);
 
