@@ -51,7 +51,11 @@ export function execucaoReal(pastaApp: string, ambiente: AmbienteDoWrangler): Ex
       });
       filho.on("error", rejeitar);
       filho.on("close", (codigo) => resolver({ codigo: codigo ?? 1, stdout, stderr }));
-      if (opcoes.entrada !== undefined) filho.stdin?.end(opcoes.entrada);
+      if (opcoes.entrada !== undefined) {
+        // Se o wrangler fechar o stdin antes de a entrada chegar (EPIPE), o erro sai pelo código de saída, sem stack trace.
+        filho.stdin?.on("error", () => {});
+        filho.stdin?.end(opcoes.entrada);
+      }
     });
 }
 

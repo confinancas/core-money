@@ -1,9 +1,20 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { applyEdits, modify, parse } from "jsonc-parser";
 import { ErroDeUso } from "./marca";
 
 // Configuração gerada a partir do wrangler.jsonc do app, só para a instalação (TASK-0101).
 // Edita só name e o binding DB; o resto (crons, assets, flags, comentários e migrations_dir) fica como está.
 export const CONFIG_DA_INSTALACAO = "wrangler.instalacao.jsonc";
+
+// O wrangler.jsonc versionado do app. Lido só para gerar a configuração da instalação; nunca é alterado.
+export function leWranglerJsonc(pastaApp: string): string {
+  const caminho = join(pastaApp, "wrangler.jsonc");
+  if (!existsSync(caminho)) {
+    throw new ErroDeUso("Sem wrangler.jsonc nesta pasta: rode este comando na raiz do seu app.");
+  }
+  return readFileSync(caminho, "utf8");
+}
 
 export const CABECALHO_DA_CONFIG =
   "// Gerado por npm run instalar. Não edite: o próximo instalar sobrescreve.";

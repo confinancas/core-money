@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { generateLinkToken, sha256Hex } from "../src/shared/access-code";
+import { CONFIG_DA_INSTALACAO, geraConfigDaInstalacao, leWranglerJsonc } from "./lib/config-instalacao";
 import { confirmaConta } from "./lib/conta";
 import { caminhoDoEstado, lerEstado } from "./lib/estado";
 import { ErroDeUso, lerMarca, validaNomeDoWorker } from "./lib/marca";
@@ -65,6 +67,30 @@ function leLinhaDeMembro(linha: Record<string, unknown>): LinhaDeMembro {
   return { id, household_id: householdId, name, role: typeof role === "string" ? role : "" };
 }
 
+// O wrangler resolve o nome do banco pelo wrangler.jsonc versionado antes de chamar a API. Numa instalação normal,
+// esse binding traz o id-marcador 00000000-…, e o SQL iria para o banco errado. Por isso todo SQL usa o
+// wrangler.instalacao.jsonc, que tem o uuid do banco. Se ele faltar, é gerado aqui, com o uuid que a conta tem.
+async function garanteConfigDaInstalacao(
+  wrangler: Wrangler,
+  pastaApp: string,
+  nomeDoWorker: string,
+  banco: string,
+): Promise<void> {
+  if (existsSync(join(pastaApp, CONFIG_DA_INSTALACAO))) return;
+  const encontrado = (await wrangler.listaBancosD1()).find((item) => item.nome === banco);
+  if (!encontrado) {
+    throw new ErroDeUso(
+      `Não achei o banco ${banco} na sua conta da Cloudflare. Rode npm run instalar antes.`,
+    );
+  }
+  const config = geraConfigDaInstalacao(leWranglerJsonc(pastaApp), {
+    nome: nomeDoWorker,
+    bancoNome: banco,
+    bancoId: encontrado.uuid,
+  });
+  writeFileSync(join(pastaApp, CONFIG_DA_INSTALACAO), config);
+}
+
 export async function recuperarAcesso(opcoes: OpcoesRecuperar): Promise<number> {
   try {
     return await executaRecuperacao(opcoes);
@@ -95,9 +121,11 @@ async function executaRecuperacao(opcoes: OpcoesRecuperar): Promise<number> {
   const estado = lerEstado(caminhoDoEstado(pastaApp));
   let url: string;
   let banco: string;
+  let nomeDoWorker: string;
   if (estado) {
     url = estado.url;
     banco = estado.databaseName;
+    nomeDoWorker = estado.nome;
   } else {
     const digitado = (
       await terminal.pergunta("Endereço do seu app (https://<nome>.<subdominio>.workers.dev): ")
@@ -111,9 +139,11 @@ async function executaRecuperacao(opcoes: OpcoesRecuperar): Promise<number> {
     }
     url = digitado;
     banco = bancoNome;
+    nomeDoWorker = nome;
   }
 
-  const linhas = await wrangler.executaSql(banco, sqlListaMembros());
+  await garanteConfigDaInstalacao(wrangler, pastaApp, nomeDoWorker, banco);
+  const linhas = await wrangler.executaSql(banco, sqlListaMembros(), CONFIG_DA_INSTALACAO);
   if (linhas.length === 0) {
     terminal.escreve(
       "Ninguém cadastrou acesso ainda: use o código de primeiro acesso (rode npm run instalar).",
@@ -136,7 +166,11 @@ async function executaRecuperacao(opcoes: OpcoesRecuperar): Promise<number> {
   const agora = opcoes.agora();
   const criadoEm = agora.toISOString();
   const expiraEm = new Date(agora.getTime() + MINUTOS_DE_VALIDADE * 60_000).toISOString();
-  await wrangler.executaSql(banco, sqlCancelaRecuperacoesAbertas(escolhido.id, criadoEm));
+  await wrangler.executaSql(
+    banco,
+    sqlCancelaRecuperacoesAbertas(escolhido.id, criadoEm),
+    CONFIG_DA_INSTALACAO,
+  );
   await wrangler.executaSql(
     banco,
     sqlInsereRecuperacao({
@@ -147,6 +181,7 @@ async function executaRecuperacao(opcoes: OpcoesRecuperar): Promise<number> {
       criadoEm,
       expiraEm,
     }),
+    CONFIG_DA_INSTALACAO,
   );
 
   const link = `${url}/recuperar/${token}`;
