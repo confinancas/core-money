@@ -54,4 +54,5 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Caminhos do preset:** `marca` e `publicDir` são do app e saem de `process.cwd()`; o alias `@` vem de `import.meta.url`.
 - **Vitest 4 não aplica o `define` aos projetos:** `__BRAND__` e `__DEV_ROUTES__` dos testes vêm de `tests/setup/globais.ts`.
 - **Marca:** o nome não entra em `src/` nem em `index.html`; o teste `brand-literals` confere. `src/web/assets/rosto-ia.svg` não tem `<style>`: as animações estão no `global.css`.
+- **Regra que decide pela vizinhança:** só escreve onde a vizinhança inteira está na leitura (ler ±10 dias para escrever ±5), em grupos de 45 ids, para caber em 100 parâmetros.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
