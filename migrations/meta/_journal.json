@@ -8,6 +8,13 @@
       "when": 1794019100972,
       "tag": "0000_household",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794022664968,
+      "tag": "0001_bank",
+      "breakpoints": true
     }
   ]
 }
