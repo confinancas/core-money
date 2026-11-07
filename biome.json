@@ -1,0 +1,32 @@
+{
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 110
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "double" }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "confirm": "confirm() é bloqueado no PWA instalado; use a tela do app.",
+              "alert": "alert() é bloqueado no PWA instalado; use a tela do app.",
+              "prompt": "prompt() é bloqueado no PWA instalado; use a tela do app."
+            }
+          }
+        }
+      }
+    }
+  },
+  "files": {
+    "includes": ["**", "!dist", "!.wrangler", "!migrations/meta", "!node_modules"]
+  }
+}
