@@ -3,14 +3,17 @@ import type { BrandConfig } from "../shared/brand/types";
 import { createDb } from "./db/client";
 import { type Meter, newMeter } from "./db/metered-d1";
 import type { AppEnv } from "./env";
+import { noSession, type SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
 import { healthRoute } from "./routes/health";
+import { householdRoutes } from "./routes/household";
 
 export type AppOptions = {
   onMeter?: (meter: Meter, c: Context<AppEnv>) => void;
   rotasDoApp?: (app: Hono<AppEnv>) => void;
   marca?: BrandConfig;
   versao?: string;
+  resolveSession?: SessionResolver;
 };
 
 // Valores de desenvolvimento para os testes; a entrada de dev (index.ts) passa os do dev/marca.json.
@@ -39,6 +42,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   // As rotas do app entram antes das do núcleo, para o app poder trocar uma delas.
   options.rotasDoApp?.(app);
   app.route("/", healthRoute);
+  app.route("/household", householdRoutes(options.resolveSession ?? noSession));
 
   app.notFound((c) => apiError(c, 404, "rota_inexistente", "Rota não encontrada."));
 
