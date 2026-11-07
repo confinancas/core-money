@@ -276,3 +276,28 @@ export const cycles = sqliteTable(
     index("cycles_household_starts_idx").on(t.householdId, t.startsOn),
   ],
 );
+
+// Convites, recuperações e o código de primeiro acesso (TASK-0101). Só o hash do código ou do token fica aqui.
+// O primeiro_acesso não tem lar ainda (household_id nulo) e não expira: vale até ser usado ou substituído.
+export const invites = sqliteTable(
+  "invites",
+  {
+    id: text("id").primaryKey(),
+    householdId: text("household_id").references(() => households.id),
+    kind: text("kind").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    memberId: text("member_id").references(() => members.id),
+    inviteeName: text("invitee_name"),
+    inviteeEmail: text("invitee_email"),
+    createdBy: text("created_by").references(() => members.id),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at"),
+    usedAt: text("used_at"),
+    cancelledAt: text("cancelled_at"),
+  },
+  (t) => [
+    check("invites_kind_ck", sql`${t.kind} IN ('conjuge', 'recuperacao', 'primeiro_acesso')`),
+    uniqueIndex("invites_token_hash_uq").on(t.tokenHash),
+    index("invites_kind_used_idx").on(t.kind, t.usedAt),
+  ],
+);
