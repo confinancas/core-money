@@ -14,6 +14,8 @@ export type AppOptions = {
   marca?: BrandConfig;
   versao?: string;
   resolveSession?: SessionResolver;
+  // Relógio das rotas que precisam de "hoje" (o dia de início muda a partir do ciclo de hoje). Padrão: o relógio real.
+  agora?: () => Date;
 };
 
 // Valores de desenvolvimento para os testes; a entrada de dev (index.ts) passa os do dev/marca.json.
@@ -51,7 +53,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   // As rotas do app entram antes das do núcleo, para o app poder trocar uma delas.
   options.rotasDoApp?.(app);
   app.route("/", healthRoute);
-  app.route("/household", householdRoutes(options.resolveSession ?? noSession));
+  app.route("/household", householdRoutes(options.resolveSession ?? noSession, options.agora));
 
   app.notFound((c) => apiError(c, 404, "rota_inexistente", "Rota não encontrada."));
 

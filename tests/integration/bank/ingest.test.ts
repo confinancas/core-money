@@ -287,7 +287,7 @@ describe("ingestTransactions: o que o casal fez fica", () => {
       `SELECT movement, movement_original, movement_locked, custom_name, category_id, spend_type,
         spend_type_source, hidden, hidden_reason, income_kind, income_subtype, fixed_income_id,
         card_would_accept, ai_category_id, ai_income_kind, ai_income_subtype, ai_fixed_income_id,
-        ai_confidence, ai_reason, categorized_at, categorized_by, rule_id, cycle_key, fixed_bill_id,
+        ai_confidence, ai_reason, categorized_at, categorized_by, rule_id, fixed_bill_id,
         is_backfill, pix_key_masked, household_id, bank_item_id, amount_cents, counterparty_name,
         installment_number, installment_total
        FROM transactions WHERE external_id = ?`,
@@ -317,7 +317,6 @@ describe("ingestTransactions: o que o casal fez fica", () => {
       categorized_at: "2026-11-09T20:00:00.000Z",
       categorized_by: "regra",
       rule_id: "[TEST] regra-1",
-      cycle_key: "2026-11",
       fixed_bill_id: "[TEST] conta-fixa",
       is_backfill: 1,
       pix_key_masked: "***.***",
@@ -329,6 +328,13 @@ describe("ingestTransactions: o que o casal fez fica", () => {
       installment_number: 2,
       installment_total: 5,
     });
+    // cycle_key não é do casal: é derivado da data e da fatura (TASK-0801). O passo 2 o recalcula na reimportação,
+    // e o valor que o casal (ou um teste) plantou some. A data 09/11 cai no ciclo de outubro (dia de início 11).
+    expect(
+      await env.DB.prepare("SELECT cycle_key FROM transactions WHERE external_id = ?")
+        .bind("[TEST] ext-todos")
+        .first(),
+    ).toEqual({ cycle_key: "2026-10" });
   });
 });
 
