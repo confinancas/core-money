@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { marca } from "./marca";
 
 // Cenário 13: o app é instalável, o service worker registra e a moldura abre offline do cache.
 
@@ -14,7 +15,7 @@ test("o manifesto tem nome, ícones 192, 512 e maskable, standalone e start_url 
     icons: { src: string; sizes: string; purpose?: string }[];
   };
 
-  expect(manifesto.name).toBe("Matrimoney");
+  expect(manifesto.name).toBe(marca.name);
   expect(manifesto.start_url).toBe("/");
   expect(manifesto.scope).toBe("/");
   expect(manifesto.display).toBe("standalone");

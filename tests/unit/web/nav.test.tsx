@@ -1,11 +1,13 @@
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { brand } from "../../../src/shared/brand";
 import { renderizarApp } from "./helpers/app";
+
 import { desinstalarMatchMedia, instalarMatchMedia } from "./helpers/larguras";
 
 const MENU = "Navegação principal";
-const IA = "Assistente de IA do Matrimoney";
+const IA = `Assistente de IA do ${brand.name}`;
 
 // Rótulos dos links de um menu, na ordem em que aparecem.
 function rotulosDoMenu(menu: HTMLElement): string[] {
@@ -97,7 +99,7 @@ describe("barra do tablet (834 px)", () => {
       "Relatório",
       "Configurações",
     ]);
-    expect(screen.getByRole("link", { name: "Matrimoney, início" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `${brand.name}, início` })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: IA })).toBeInTheDocument();
   });
 
@@ -105,7 +107,7 @@ describe("barra do tablet (834 px)", () => {
     renderizarApp({ rota: "/inicio" });
 
     expect(screen.getAllByRole("navigation", { name: MENU })).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "Matrimoney, início" }).closest("aside")).not.toBeNull();
+    expect(screen.getByRole("link", { name: `${brand.name}, início` }).closest("aside")).not.toBeNull();
   });
 
   it("sem o assistente: sem o botão da IA", () => {

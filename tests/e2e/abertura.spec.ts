@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { marca } from "./marca";
 
 // Cenário 12: a Abertura mostra a marca, espera a API e leva ao início.
 test("a Abertura mostra a marca e vai para /inicio quando a API responde", async ({ page }) => {
@@ -12,7 +13,7 @@ test("a Abertura mostra a marca e vai para /inicio quando a API responde", async
   });
 
   await page.goto("/");
-  await expect(page.getByRole("status", { name: "Abrindo o Matrimoney" })).toBeVisible();
+  await expect(page.getByRole("status", { name: `Abrindo o ${marca.name}` })).toBeVisible();
   await expect(page.locator("main img").first()).toHaveAttribute("src", "/icons/icon.svg");
 
   liberar();
