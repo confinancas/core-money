@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-test("a página inicial mostra a marca e a API responde", async ({ page }) => {
+test("a Abertura leva ao início, dentro da moldura", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Matrimoney" })).toBeVisible();
-  await expect(page.getByText("API ok · versão 0.1.0")).toBeVisible();
+  await expect(page).toHaveURL(/\/inicio$/);
+  await expect(page.getByRole("heading", { name: "Início", exact: true })).toBeVisible();
 });
 
 test("rota de SPA devolve a página, não 404", async ({ page }) => {
@@ -12,7 +12,7 @@ test("rota de SPA devolve a página, não 404", async ({ page }) => {
 
   expect(resposta?.status()).toBe(200);
   expect(resposta?.headers()["content-type"]).toContain("text/html");
-  await expect(page.getByRole("heading", { name: "Matrimoney" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Página não encontrada" })).toBeVisible();
 });
 
 test("rota de API inexistente devolve 404 JSON", async ({ request }) => {
@@ -23,8 +23,8 @@ test("rota de API inexistente devolve 404 JSON", async ({ request }) => {
 });
 
 test("a página não tem rolagem horizontal", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Matrimoney" })).toBeVisible();
+  await page.goto("/inicio");
+  await expect(page.getByRole("heading", { name: "Início", exact: true })).toBeVisible();
 
   const medidas = await page.evaluate(() => ({
     larguraDoConteudo: document.documentElement.scrollWidth,

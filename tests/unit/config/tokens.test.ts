@@ -39,6 +39,8 @@ const tokens: [string, string][] = [
   ["color-hidden-ink", "#98A39D"],
   ["color-badge", "#FF5A5F"],
   ["color-badge-ring", "#1AA571"],
+  ["color-ai-bg", "#021A10"],
+  ["color-ink-nav", "#33413A"],
   ["shadow-card", "0 8px 24px rgba(22, 60, 45, 0.07)"],
   ["shadow-primary", "0 8px 18px rgba(14, 154, 99, 0.24)"],
   ["shadow-top", "0 12px 30px rgba(11, 140, 90, 0.25)"],

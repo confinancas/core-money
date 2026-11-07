@@ -51,4 +51,7 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **shadcn:** o CLI não roda sem interação neste repositório; os componentes ficam escritos à mão em `src/web/components/ui/`.
 - **`ON CONFLICT` numa chave única:** o `INSERT` não pode reusar o id da linha existente: a chave primária fica fora do conflito, e o SQLite falha. Gere um id novo em todo `INSERT`.
 - **Limite do D1:** 100 parâmetros por comando. A gravação de movimentos usa 4 linhas por `INSERT`.
+- **Caminhos do preset:** `marca` e `publicDir` são do app e saem de `process.cwd()`; o alias `@` vem de `import.meta.url`.
+- **Vitest 4 não aplica o `define` aos projetos:** `__BRAND__` e `__DEV_ROUTES__` dos testes vêm de `tests/setup/globais.ts`.
+- **Marca:** o nome não entra em `src/` nem em `index.html`; o teste `brand-literals` confere. `src/web/assets/rosto-ia.svg` não tem `<style>`: as animações estão no `global.css`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
