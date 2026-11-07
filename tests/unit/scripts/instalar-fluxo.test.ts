@@ -246,6 +246,21 @@ describe("sem autenticação (cenário 7)", () => {
   });
 });
 
+describe("falha ao gravar o convite (passo 7)", () => {
+  it("se o INSERT do código falha, sai com 1, não grava o estado e não imprime o código", async () => {
+    const pasta = novaPasta();
+    const estado = estadoInicial({ falhaAoInserirConvite: true });
+    const { terminal, linhas } = criaTerminalFalso(["s", "s"]);
+
+    const codigo = await instalar(opcoesDeInstalacao({ pastaApp: pasta, estado, terminal }));
+
+    expect(codigo).toBe(1);
+    expect(existsSync(join(pasta, ".core-money", "instalacao.json"))).toBe(false);
+    expect(linhas.join("\n")).not.toContain(CODIGO_FIXO);
+    expect(linhas.join("\n")).toContain("erro simulado ao gravar o convite");
+  });
+});
+
 describe("entradas inválidas", () => {
   it("sem marca.json, diz o que fazer e sai com código 1", async () => {
     const pasta = novaPasta();
