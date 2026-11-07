@@ -61,4 +61,5 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Medidor (`metered-d1`):** um comando preparado por um `Db` só entra no `batch` desse mesmo `Db`. Um `batch` com comando de outro medidor falha com `ZodError` do miniflare.
 - **`rows_written` do D1:** conta as entradas de índice. Uma linha com dois índices sobre a coluna alterada conta mais que 1.
 - **Lista de ids sem limite:** `json_each(?)`, com o JSON num único parâmetro, como em `src/worker/cycle/assign.ts`. Evita os grupos de 90.
+- **Sonda do Pluggy:** `npm run -s pluggy:sonda`, porque o `-s` tira o cabeçalho do npm do stdout. As credenciais entram pelo terminal, nunca por arquivo. A fixture de 500 movimentos sai de `node tests/fixtures/pluggy/gerar-transactions-500.mjs`, seguida de `npx biome format --write` nela.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
