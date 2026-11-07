@@ -1,4 +1,5 @@
 import type { Db } from "../db/client";
+import { classifyMovements } from "./classify";
 
 export type AfterIngestContext = {
   householdId: string;
@@ -9,10 +10,9 @@ export type AfterIngestContext = {
 };
 
 // Passos depois de cada gravação. Ordem fixa: cada task acrescenta o seu, nesta ordem, sem trocar a sequência.
-//   1. classificação de movimentos (TASK-0207)
+//   1. classificação de movimentos (TASK-0207): as inseridas e as atualizadas
 //   2. cycle_key (TASK-0801)
 //   3. processNewTransactions(db, householdId, insertedIds, now) (TASK-0302): só com os inseridos, em lotes de até 100
-// Nesta task nenhum passo existe ainda: a função fica vazia.
-export async function afterIngest(_db: Db, _ctx: AfterIngestContext): Promise<void> {
-  // Vazio: os passos acima entram nas tasks indicadas.
+export async function afterIngest(db: Db, ctx: AfterIngestContext): Promise<void> {
+  await classifyMovements(db, ctx.householdId, [...ctx.insertedIds, ...ctx.updatedIds], ctx.now);
 }

@@ -616,6 +616,8 @@ describe("ingestTransactions: afterIngest e limites", () => {
     const medidor = newMeter();
     const dbMedido = dbComMedidor(medidor);
 
+    // Este teste mede a gravação (2 idas). A classificação do afterIngest tem o seu teste de custo em classify.test.ts.
+    vi.mocked(afterIngest).mockImplementationOnce(async () => undefined);
     const primeira = await ingestTransactions(dbMedido, {
       householdId,
       bankItemId: itemId,
@@ -656,6 +658,7 @@ describe("ingestTransactions: afterIngest e limites", () => {
 
     // A reimportação do mesmo lote também cabe em 2 chamadas.
     const medidorDois = newMeter();
+    vi.mocked(afterIngest).mockImplementationOnce(async () => undefined);
     const segunda = await ingestTransactions(dbComMedidor(medidorDois), {
       householdId,
       bankItemId: itemId,
