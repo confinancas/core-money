@@ -13,6 +13,7 @@ import {
   type EstadoFalso,
   estadoInicial,
   leArquivo,
+  MARCA_DE_TESTE,
   NOME_DO_BANCO,
   opcoesDeInstalacao,
   removePastaDoApp,
@@ -78,7 +79,20 @@ describe("primeira instalação (cenário 1)", () => {
     expect(leArquivo(pasta, "wrangler.jsonc")).toBe(wranglerAntes);
     expect(existsSync(join(pasta, CONFIG_DA_INSTALACAO))).toBe(true);
     expect(parse(leArquivo(pasta, CONFIG_DA_INSTALACAO)).d1_databases[0].database_name).toBe(NOME_DO_BANCO);
-    expect(JSON.parse(leArquivo(pasta, ".marca-teste/instalacao.json")).url).toBe(URL_DO_WORKER);
+    const estadoGravado = JSON.parse(leArquivo(pasta, ".core-money/instalacao.json"));
+    expect(estadoGravado.url).toBe(URL_DO_WORKER);
+    expect(estadoGravado.marca).toBe(MARCA_DE_TESTE.id);
+  });
+
+  it("grava o estado numa pasta fixa, .core-money, e não numa pasta com o nome da marca", async () => {
+    const pasta = novaPasta();
+    const estado = estadoInicial();
+    const { terminal } = criaTerminalFalso(["s", "s"]);
+
+    await instalar(opcoesDeInstalacao({ pastaApp: pasta, estado, terminal }));
+
+    expect(existsSync(join(pasta, ".core-money", "instalacao.json"))).toBe(true);
+    expect(existsSync(join(pasta, `.${MARCA_DE_TESTE.id}`))).toBe(false);
   });
 
   it("usa o código gerado pelo gerador e não guarda o código em texto no banco", async () => {
@@ -107,7 +121,7 @@ describe("conta sem subdomínio (cenário 2)", () => {
     expect(linhas.join("\n")).toContain("Sua conta ainda não tem um subdomínio workers.dev");
     expect(estado.convites).toHaveLength(0);
     expect(estado.segredos.size).toBe(0);
-    expect(existsSync(join(pasta, ".marca-teste", "instalacao.json"))).toBe(false);
+    expect(existsSync(join(pasta, ".core-money", "instalacao.json"))).toBe(false);
   });
 });
 
@@ -123,7 +137,7 @@ describe("endereço recusado (cenário 3)", () => {
     expect(estado.convites).toHaveLength(0);
     expect(linhas.join("\n")).toContain("Nada foi gerado");
     expect(linhas.join("\n")).toContain("Workers e Pages › Subdomínio");
-    expect(existsSync(join(pasta, ".marca-teste", "instalacao.json"))).toBe(false);
+    expect(existsSync(join(pasta, ".core-money", "instalacao.json"))).toBe(false);
   });
 });
 
@@ -192,11 +206,12 @@ describe("endereço mudou depois de configurado (cenário 6)", () => {
         },
       ],
     });
-    mkdirSync(join(pasta, ".marca-teste"));
+    mkdirSync(join(pasta, ".core-money"));
     writeFileSync(
-      join(pasta, ".marca-teste", "instalacao.json"),
+      join(pasta, ".core-money", "instalacao.json"),
       JSON.stringify({
         nome: "matrimoney-teste",
+        marca: "marca-teste",
         databaseName: NOME_DO_BANCO,
         databaseId: "11111111-2222-3333-4444-555555555555",
         url: antigo,
@@ -211,7 +226,7 @@ describe("endereço mudou depois de configurado (cenário 6)", () => {
     expect(codigo).toBe(2);
     expect(perguntas).toEqual(["Continuar? (s/n) "]);
     expect(linhas.join("\n")).toContain(`Atenção: o endereço mudou de ${antigo} para ${URL_DO_WORKER}.`);
-    expect(JSON.parse(leArquivo(pasta, ".marca-teste/instalacao.json")).url).toBe(antigo);
+    expect(JSON.parse(leArquivo(pasta, ".core-money/instalacao.json")).url).toBe(antigo);
   });
 });
 

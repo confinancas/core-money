@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-// Estado local da instalação: sem segredo. Fica na pasta oculta do app, que o .gitignore do app ignora (TASK-0101).
+// Estado local da instalação: sem segredo. Fica em .core-money/instalacao.json, pasta fixa e neutra, que o
+// .gitignore do app ignora (TASK-0101). O campo marca (o id do marca.json) deixa a TASK-1101 ver de qual marca é a instalação.
 export type EstadoDaInstalacao = {
   nome: string;
+  marca: string;
   databaseName: string;
   databaseId: string;
   url: string;
@@ -11,9 +13,11 @@ export type EstadoDaInstalacao = {
   atualizadoEm: string;
 };
 
-// Pasta oculta com o id da marca (o id vem do marca.json do app).
-export function caminhoDoEstado(pastaApp: string, idDaMarca: string): string {
-  return join(pastaApp, `.${idDaMarca}`, "instalacao.json");
+export const PASTA_DO_ESTADO = ".core-money";
+
+// Caminho fixo, igual para qualquer marca: o id da marca vai no JSON, não no nome da pasta.
+export function caminhoDoEstado(pastaApp: string): string {
+  return join(pastaApp, PASTA_DO_ESTADO, "instalacao.json");
 }
 
 const textoDe = (valor: unknown): string | undefined => (typeof valor === "string" ? valor : undefined);
@@ -28,13 +32,14 @@ export function lerEstado(caminho: string): EstadoDaInstalacao | null {
   }
   const registro = (dados ?? {}) as Record<string, unknown>;
   const nome = textoDe(registro.nome);
+  const marca = textoDe(registro.marca);
   const databaseName = textoDe(registro.databaseName);
   const databaseId = textoDe(registro.databaseId);
   const url = textoDe(registro.url);
   const contaId = textoDe(registro.contaId);
   const atualizadoEm = textoDe(registro.atualizadoEm);
-  if (!nome || !databaseName || !databaseId || !url || !contaId || !atualizadoEm) return null;
-  return { nome, databaseName, databaseId, url, contaId, atualizadoEm };
+  if (!nome || !marca || !databaseName || !databaseId || !url || !contaId || !atualizadoEm) return null;
+  return { nome, marca, databaseName, databaseId, url, contaId, atualizadoEm };
 }
 
 export function gravaEstado(caminho: string, estado: EstadoDaInstalacao): void {

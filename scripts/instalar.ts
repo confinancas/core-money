@@ -112,7 +112,7 @@ async function executaInstalacao(opcoes: OpcoesInstalar): Promise<number> {
   const nome = nomeDaFlag ?? marca.workerName;
   const bancoNome = `${nome}-db`;
   const versao = leVersaoDoApp(pastaApp);
-  const caminhoEstado = caminhoDoEstado(pastaApp, marca.id);
+  const caminhoEstado = caminhoDoEstado(pastaApp);
   const estadoAnterior = lerEstado(caminhoEstado);
   // Lido já no começo: sem wrangler.jsonc, o comando para antes de criar qualquer coisa na Cloudflare.
   const textoDoWrangler = leWranglerJsonc(pastaApp);
@@ -175,6 +175,7 @@ async function executaInstalacao(opcoes: OpcoesInstalar): Promise<number> {
 
   const estado: EstadoDaInstalacao = {
     nome,
+    marca: marca.id,
     databaseName: bancoNome,
     databaseId: banco.uuid,
     url,

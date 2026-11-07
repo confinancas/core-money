@@ -92,7 +92,7 @@ async function executaRecuperacao(opcoes: OpcoesRecuperar): Promise<number> {
   if (!conta) return 1;
 
   // O banco e o endereço vêm do estado local. Sem estado, a pessoa informa o endereço e o banco é <nome>-db.
-  const estado = lerEstado(caminhoDoEstado(pastaApp, marca.id));
+  const estado = lerEstado(caminhoDoEstado(pastaApp));
   let url: string;
   let banco: string;
   if (estado) {

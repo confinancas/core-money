@@ -6,7 +6,7 @@
 
 # Gerados pelo instalador de quem instala o app (TASK-0101): a configuração da instalação e o estado local
 wrangler.instalacao.jsonc
-.matrimoney/
+.core-money/
 
 # Dependências e build
 node_modules/
