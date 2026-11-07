@@ -15,8 +15,10 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - Desenvolver: `npm run dev` (telas em http://localhost:5173, API em :8787, D1 local). Não precisa de conta na Cloudflare nem de `.env`.
 - Ver como em produção: `npm run preview`.
 - Banco local: `npm run db:migrate:local`.
-- Checar: `npm run lint`, `npm run typecheck`, `npm run build`.
-- Arquivos locais a copiar para o worktree: nenhum para o dev local.
+- Gate, antes de entregar: `npm run gate` (lint, typecheck, testes unitários, build e integração), 2× seguidas.
+- E2E: `npm run test:e2e` (obrigatório se a task tocou `src/web`, `index.html`, `vite.config.ts`, `preset/` ou arquivos públicos).
+- CPU: `npm run cpu -- tests/cpu/TASK-NNXX.json` (obrigatório se a task criou ou mudou rota ou cron; precisa do `.env` no worktree).
+- Arquivos locais a copiar para o worktree: `.env` da pasta principal, só para `npm run cpu`. O dev local e o gate não usam.
 
 ## Regras rígidas
 
@@ -38,4 +40,8 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 
 ## Armadilhas conhecidas (aprendidas na prática)
 
-Nenhuma ainda.
+- **Pacote novo:** `npm install` precisa de `--legacy-peer-deps` (peer cíclico vite → @vitejs/devtools → vitest). `npm ci` não precisa.
+- **Glob no TypeScript 7:** `dir/**` é recusado; use `dir/**/*`.
+- **Windows:** scripts Node chamam `node node_modules/<pacote>/bin/...` com `spawn`, sem shell. Encerre todo processo que subiu (wrangler, workerd, vite, playwright), ou a pasta do worktree não pode ser apagada.
+- **Proxy do Vite:** aponta para `127.0.0.1`; `localhost` resolve para `::1`, e o wrangler escuta em IPv4.
+- **`wrangler tail`:** perde eventos em rajada, por isso o `npm run cpu` espaça as requisições em 1 s.
