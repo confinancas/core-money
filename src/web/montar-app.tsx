@@ -1,24 +1,32 @@
 import "./styles/global.css";
+import { registerSW } from "virtual:pwa-register";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
+import { createBrowserRouter, RouterProvider } from "react-router";
+import { FeaturesProvider } from "./app/features";
 import { ConfirmProvider } from "./components/ui/confirm-dialog";
 import { HideValuesProvider } from "./components/ui/hide-values";
-import { Catalogo } from "./dev/Catalog";
+import { criarRotas, type TelasDoApp } from "./routes";
 
-// Monta o app em #root. Os apps chamam sem argumento.
-// Os provedores e o CSS ficam aqui (e não em main.tsx) porque os apps finos chamam só esta função.
-// O catálogo entra só fora da produção: __DEV_ROUTES__ vira false no build de produção.
-export function montarApp(): void {
+export type OpcoesDoApp = { telas?: TelasDoApp };
+
+// Monta o app em #root. Os apps chamam com as telas que sobrescrevem as provisórias (pelo path da rota).
+// Os provedores, o CSS e o registro do service worker ficam aqui (e não em main.tsx), porque os apps finos chamam só esta função.
+export function montarApp({ telas = {} }: OpcoesDoApp = {}): void {
   const raiz = document.getElementById("root");
   if (!raiz) throw new Error("Elemento #root não encontrado no index.html.");
 
-  const tela = __DEV_ROUTES__ && window.location.pathname === "/dev/catalogo" ? <Catalogo /> : <App />;
+  registerSW({ immediate: true });
+  const roteador = createBrowserRouter(criarRotas(telas));
 
   createRoot(raiz).render(
     <StrictMode>
       <HideValuesProvider>
-        <ConfirmProvider>{tela}</ConfirmProvider>
+        <ConfirmProvider>
+          <FeaturesProvider>
+            <RouterProvider router={roteador} />
+          </FeaturesProvider>
+        </ConfirmProvider>
       </HideValuesProvider>
     </StrictMode>,
   );
