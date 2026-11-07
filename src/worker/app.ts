@@ -17,11 +17,20 @@ export type AppOptions = {
 };
 
 // Valores de desenvolvimento para os testes; a entrada de dev (index.ts) passa os do dev/marca.json.
+// Sem o nome do produto: o src/worker não pode depender de dev/ (que não vai no pacote), e o aceite proíbe o literal fora de dev/.
 const MARCA_DE_DESENVOLVIMENTO: BrandConfig = {
   id: "matrimoney",
   workerName: "matrimoney",
   repositorio: "confinancas/matrimoney",
-  name: "Matrimoney",
+  name: "App de desenvolvimento",
+  shortName: "App de desenvolvimento",
+  wordmark: ["App", "Dev"],
+  colors: { theme: "#0E9A63", background: "#FFFFFF", wordmarkA: "#3D4943", wordmarkB: "#0E9A63" },
+  texts: {
+    tagline: "Ambiente de desenvolvimento.",
+    assistantCta: "Pergunte ao assistente",
+    householdLabel: "Conta compartilhada",
+  },
 };
 const VERSAO_DE_DESENVOLVIMENTO = "0.1.0";
 
