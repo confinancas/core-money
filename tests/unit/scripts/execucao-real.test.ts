@@ -12,7 +12,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 const spawnFalso = vi.mocked(spawn);
 
 function filhoFalso(codigo = 0, saida = "") {
-  const stdin = { end: vi.fn() };
+  const stdin = Object.assign(new EventEmitter(), { end: vi.fn() });
   const filho = Object.assign(new EventEmitter(), {
     stdout: new EventEmitter(),
     stderr: new EventEmitter(),
@@ -64,6 +64,11 @@ describe("execucaoReal", () => {
     expect(argumentos).not.toContain("valor-secreto");
     expect(opcoes.stdio[0]).toBe("pipe");
     expect(filho.stdin.end).toHaveBeenCalledWith("valor-secreto");
+    // Um EPIPE no stdin (o wrangler fechou antes da entrada) precisa ter ouvinte, senão derruba o processo.
+    expect(filho.stdin.listenerCount("error")).toBeGreaterThan(0);
+    expect(() =>
+      filho.stdin.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" })),
+    ).not.toThrow();
   });
 
   it("o ambiente extra (a conta escolhida) entra no processo do wrangler", async () => {

@@ -21,6 +21,17 @@ describe("generateAccessCode", () => {
 
     expect(codigos.size).toBe(1000);
   });
+
+  it("em 3.000 códigos, os 32 símbolos aparecem: um byte % 31 deixaria um símbolo de fora", () => {
+    const simbolos = new Set(
+      Array.from({ length: 3000 }, () => generateAccessCode().replace(/-/g, ""))
+        .join("")
+        .split(""),
+    );
+
+    expect(simbolos.size).toBe(32);
+    for (const simbolo of ALFABETO_CODIGO) expect(simbolos.has(simbolo)).toBe(true);
+  });
 });
 
 describe("normalizeAccessCode", () => {

@@ -75,6 +75,10 @@ export type EstadoFalso = {
   subdominioRegistrado: boolean;
   urlDoDeploy: string;
   falhaAoGravarSegredo: boolean;
+  // database_name do wrangler.jsonc versionado do app. Um d1 execute sem --config com esse nome cai no id-marcador
+  // 00000000-…, como acontece de verdade numa instalação normal.
+  nomeDoBancoNoWranglerJsonc: string;
+  falhaAoInserirConvite: boolean;
   migracoesAplicadas: number;
   convites: Invite[];
   membros: Membro[];
@@ -90,6 +94,8 @@ export function estadoInicial(parcial: Partial<EstadoFalso> = {}): EstadoFalso {
     subdominioRegistrado: true,
     urlDoDeploy: URL_DO_WORKER,
     falhaAoGravarSegredo: false,
+    nomeDoBancoNoWranglerJsonc: "matrimoney-db",
+    falhaAoInserirConvite: false,
     migracoesAplicadas: 0,
     convites: [],
     membros: [],
@@ -124,6 +130,9 @@ const SQL_LISTA_MEMBROS = "SELECT id, household_id, name, role FROM members ORDE
 
 function executaSqlFalso(estado: EstadoFalso, sql: string): ResultadoExecucao {
   const json = (linhas: Linhas) => resposta(0, JSON.stringify([{ results: linhas, success: true }]));
+  if (estado.falhaAoInserirConvite && sql.startsWith("INSERT INTO invites")) {
+    return resposta(1, "", "erro simulado ao gravar o convite no banco");
+  }
   if (RE_CONTA_PRIMEIROS_USADOS.test(sql)) {
     const n = estado.convites.filter((c) => c.kind === "primeiro_acesso" && c.used_at !== null).length;
     return json([{ n }]);
@@ -218,6 +227,14 @@ export function criaCloudflareFalso(estado: EstadoFalso): Execucao {
       return resposta(0, "Migrations applied");
     }
     if (primeiro === "d1" && segundo === "execute") {
+      // Sem --config, o wrangler resolve o banco pelo wrangler.jsonc versionado e cai no id-marcador (defeito real).
+      if (!args.includes("--config") && args[2] === estado.nomeDoBancoNoWranglerJsonc) {
+        return resposta(
+          1,
+          "",
+          "A database with the id 00000000-0000-0000-0000-000000000000 was not found (código de erro 7400)",
+        );
+      }
       return executaSqlFalso(estado, args[args.indexOf("--command") + 1]);
     }
     if (primeiro === "deploy") {
