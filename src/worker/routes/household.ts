@@ -1,11 +1,13 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
+import { todayInSaoPaulo } from "../../shared/cycle";
 import {
   type HouseholdDto,
   type HouseholdResponse,
   householdPatchSchema,
   type MemberDto,
 } from "../../shared/household";
+import { rebuildFutureCalendar } from "../cycle/calendar";
 import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { getHousehold, type MemberRow, updateHousehold } from "../household/repository";
@@ -24,7 +26,10 @@ const paraResposta = (household: HouseholdDto, pessoas: MemberRow[], memberId: s
   return { household, members };
 };
 
-export function householdRoutes(resolveSession: SessionResolver): Hono<AppEnv> {
+export function householdRoutes(
+  resolveSession: SessionResolver,
+  agora: () => Date = () => new Date(),
+): Hono<AppEnv> {
   const rotas = new Hono<AppEnv>();
   rotas.use(requireHousehold(resolveSession));
 
@@ -59,6 +64,15 @@ export function householdRoutes(resolveSession: SessionResolver): Hono<AppEnv> {
       return apiError(c, 400, "validacao", undefined, { fields });
     }
 
+    // Dia de início novo: o calendário futuro é refeito antes de gravar o lar (no mesmo pedido). Dia igual não refaz nada.
+    if (resultado.data.cycleStartDay !== undefined) {
+      await rebuildFutureCalendar(
+        c.var.db,
+        householdId,
+        resultado.data.cycleStartDay,
+        todayInSaoPaulo(agora()),
+      );
+    }
     const lar = await updateHousehold(c.var.db, householdId, resultado.data);
     if (!lar) return apiError(c, 404, "lar_inexistente");
     return c.json(paraResposta(lar.household, lar.members, memberId), 200);
