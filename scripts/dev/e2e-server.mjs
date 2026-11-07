@@ -31,6 +31,7 @@ function roda(args) {
   if (resultado.status !== 0) process.exit(resultado.status ?? 1);
 }
 
+// Cada wrangler dev tem a sua porta de inspeção (o padrão é a mesma para os dois, e o segundo não sobe no CI).
 function sobeWrangler(porta, estado) {
   return spawn(
     process.execPath,
@@ -41,6 +42,8 @@ function sobeWrangler(porta, estado) {
       "127.0.0.1",
       "--port",
       String(porta),
+      "--inspector-port",
+      String(porta + 1000),
       "--persist-to",
       estado,
       "--var",
