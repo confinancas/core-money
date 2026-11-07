@@ -1,0 +1,19 @@
+{
+  "id": "matrimoney",
+  "workerName": "app-fino-de-teste",
+  "repositorio": "confinancas/app-fino-de-teste",
+  "name": "Marca de Teste",
+  "shortName": "Teste",
+  "wordmark": ["Marca", "Teste"],
+  "colors": {
+    "theme": "#7C3AED",
+    "background": "#FFFFFF",
+    "wordmarkA": "#3D4943",
+    "wordmarkB": "#7C3AED"
+  },
+  "texts": {
+    "tagline": "App de teste do núcleo, sem dado real.",
+    "assistantCta": "Pergunte ao assistente de teste",
+    "householdLabel": "Conta de teste"
+  }
+}
