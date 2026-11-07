@@ -130,52 +130,88 @@ export function applyRuleToTransactionStmt(
     .bind(...escrita.params, entrada.transactionId, entrada.householdId);
 }
 
-// Retroativo (uma fatia): 4 UPDATEs de até 500 linhas e 1 COUNT do que falta, no mesmo lote. Cada UPDATE pega as
-// linhas do lar com a chave e o escopo da regra que ainda não têm esta regra (rule_id). "Todas" inclui as escolhidas à
-// mão e as ocultas. O EXISTS faz uma regra desativada no meio do caminho parar de escrever. Sem categoria nem
-// movimento para gravar, a regra não tem fatia: devolve lista vazia (o chamador trata como nada a fazer).
+// Retroativo (uma fatia), numa só consulta: a regra é lida dentro de cada comando, pelo id (CTE "regra"). Assim a
+// fatia não precisa de ida antes do lote. A regra desativada, sem categoria ativa e sem movimento não casa: a CTE
+// fica vazia e nada grava (o EXISTS da versão anterior). Cada UPDATE pega até 500 linhas do lar com a chave e o escopo
+// da regra que ainda não têm esta regra (rule_id). "Todas" inclui as escolhidas à mão e as ocultas. Devolve 4 UPDATE e
+// 1 COUNT do que falta. Só escopo estabelecimento (a compra); o status da regra vai no mesmo lote (statusDaRegraStmt).
+const MOVIMENTOS_DA_COMPRA = "('compra', 'estorno', 'debito', 'boleto')";
+
+const CTE_DA_REGRA = `WITH regra AS (
+    SELECT r.id AS id, r.match_value AS chave, r.set_custom_name AS nome,
+      CASE WHEN c.id IS NOT NULL THEN r.set_category_id END AS categoria,
+      r.set_spend_type AS tipo, r.set_movement AS movimento
+    FROM rules AS r
+    LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = r.household_id AND c.archived_at IS NULL
+    WHERE r.id = ? AND r.household_id = ? AND r.disabled_at IS NULL AND r.scope = 'estabelecimento'
+      AND (c.id IS NOT NULL OR r.set_movement IS NOT NULL)
+  )`;
+
+const MARCA_DA_REGRA =
+  "((SELECT categoria FROM regra) IS NOT NULL OR (SELECT movimento FROM regra) IS NOT NULL)";
+
+const SET_DA_FATIA = `custom_name = CASE WHEN (SELECT nome FROM regra) IS NOT NULL AND custom_name IS NULL
+      THEN (SELECT nome FROM regra) ELSE custom_name END,
+    spend_type = CASE WHEN (SELECT tipo FROM regra) IS NOT NULL
+      AND NOT (card_id IS NOT NULL AND (SELECT tipo FROM regra) IN ('metas', 'investimentos'))
+      THEN (SELECT tipo FROM regra) ELSE spend_type END,
+    spend_type_source = CASE WHEN (SELECT tipo FROM regra) IS NOT NULL
+      AND NOT (card_id IS NOT NULL AND (SELECT tipo FROM regra) IN ('metas', 'investimentos'))
+      THEN 'regra' ELSE spend_type_source END,
+    movement_original = CASE WHEN (SELECT movimento FROM regra) IS NOT NULL AND movement <> (SELECT movimento FROM regra)
+      THEN COALESCE(movement_original, movement) ELSE movement_original END,
+    movement = COALESCE((SELECT movimento FROM regra), movement),
+    movement_locked = CASE WHEN (SELECT movimento FROM regra) IS NOT NULL THEN 1 ELSE movement_locked END,
+    category_id = COALESCE((SELECT categoria FROM regra), category_id),
+    categorized_at = CASE WHEN ${MARCA_DA_REGRA} THEN ? ELSE categorized_at END,
+    categorized_by = CASE WHEN ${MARCA_DA_REGRA} THEN 'regra' ELSE categorized_by END,
+    rule_id = CASE WHEN ${MARCA_DA_REGRA} THEN (SELECT id FROM regra) ELSE rule_id END`;
+
+const FILTRO_DA_FATIA = `t.household_id = ? AND t.establishment_key = regra.chave AND t.movement IN ${MOVIMENTOS_DA_COMPRA}
+    AND (t.rule_id IS NULL OR t.rule_id <> regra.id) AND t.id <> ?`;
+
 export function applyRuleRetroactiveSliceStmts(
   db: Db,
   entrada: {
     householdId: string;
-    rule: RegraParaAplicar;
+    ruleId: string;
     excludeTransactionId: string | null;
     now: string;
   },
 ): D1PreparedStatement[] {
-  const { rule } = entrada;
-  const escrita = escritaDaRegra(rule, entrada.now, null);
-  if (escrita === null || (rule.setCategoryId === null && rule.setMovement === null)) return [];
-
-  const movimentos = SCOPE_MOVEMENTS[rule.scope];
-  const filtro = `t.household_id = ? AND ${chaveDoEscopo(rule.scope)} = ? AND t.movement IN (${marcas(movimentos.length)})
-    AND (t.rule_id IS NULL OR t.rule_id <> ?) AND t.id <> ?`;
-  const paramsDoFiltro = [
-    entrada.householdId,
-    rule.matchValue,
-    ...movimentos,
-    rule.id,
-    entrada.excludeTransactionId ?? "",
-  ];
-
+  const { householdId, ruleId, now } = entrada;
+  const excluida = entrada.excludeTransactionId ?? "";
   const comandos: D1PreparedStatement[] = [];
   for (let fatia = 0; fatia < FATIAS_POR_REQUISICAO; fatia++) {
     comandos.push(
       db.$client
         .prepare(
-          `UPDATE transactions AS u SET ${escrita.sets.join(", ")}
-            WHERE u.id IN (SELECT t.id FROM transactions AS t WHERE ${filtro} LIMIT ${LIMITE_DA_FATIA})
-            AND EXISTS (SELECT 1 FROM rules AS r WHERE r.id = ? AND r.disabled_at IS NULL)`,
+          `${CTE_DA_REGRA}
+          UPDATE transactions AS u SET ${SET_DA_FATIA}
+          WHERE u.id IN (SELECT t.id FROM transactions AS t JOIN regra ON 1 = 1 WHERE ${FILTRO_DA_FATIA} LIMIT ${LIMITE_DA_FATIA})`,
         )
-        .bind(...escrita.params, ...paramsDoFiltro, rule.id),
+        .bind(ruleId, householdId, now, householdId, excluida),
     );
   }
   comandos.push(
     db.$client
-      .prepare(`SELECT COUNT(*) AS restantes FROM transactions AS t WHERE ${filtro}`)
-      .bind(...paramsDoFiltro),
+      .prepare(
+        `${CTE_DA_REGRA}
+        SELECT COUNT(*) AS restantes FROM transactions AS t JOIN regra ON 1 = 1 WHERE ${FILTRO_DA_FATIA}`,
+      )
+      .bind(ruleId, householdId, householdId, excluida),
   );
   return comandos;
+}
+
+// Status da regra da fatia, no mesmo lote: existe no lar? está ativa? Quem chama responde 404 ou 409 com isto.
+export function statusDaRegraStmt(db: Db, householdId: string, ruleId: string): D1PreparedStatement {
+  return db.$client
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM rules WHERE id = ? AND household_id = ?) AS existe,
+        (SELECT COUNT(*) FROM rules WHERE id = ? AND household_id = ? AND disabled_at IS NULL) AS ativa`,
+    )
+    .bind(ruleId, householdId, ruleId, householdId);
 }
 
 // Os iguais que esperavam (quando nasce uma regra por "Lembrar" ou por confirmação): as outras transações da chave que

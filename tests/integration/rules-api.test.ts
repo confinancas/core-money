@@ -1,6 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import type { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { establishmentKey } from "../../src/shared/establishment-key";
 import { createApp } from "../../src/worker/app";
 import type { MappedTransaction } from "../../src/worker/bank/map";
@@ -9,6 +9,7 @@ import { applyRuleRetroactiveSliceStmts } from "../../src/worker/categorization/
 import { createDb } from "../../src/worker/db/client";
 import { type Meter, newMeter } from "../../src/worker/db/metered-d1";
 import type { AppEnv } from "../../src/worker/env";
+import { aquecerOPortao, semearPronto } from "./helpers/app";
 import { espiaDeParametros } from "./helpers/parametros";
 import {
   AGORA,
@@ -22,6 +23,13 @@ import {
   type Lar,
   lerTransacao,
 } from "./helpers/regras";
+
+// A instalação fica pronta antes de cada teste: o portão (TASK-0102) deixa passar as rotas do app. O aquecimento põe
+// "pronto" no cache do módulo, assim as medidas de D1 contam só o que a rota faz.
+beforeEach(async () => {
+  await semearPronto(env.DB);
+  await aquecerOPortao(createApp({}));
+});
 
 type App = Hono<AppEnv>;
 type Resposta = { status: number; corpo: Record<string, unknown> };
@@ -320,18 +328,9 @@ describe("Aplicar a todas: cenários 1, 3, 6 e 7", () => {
       disabledAt: AGORA,
     });
     const db = createDb(env.DB, newMeter());
-    const regra = (id: string) => ({
-      id,
-      scope: "estabelecimento" as const,
-      matchValue: "[TEST] LOJA EXISTS",
-      setCustomName: null,
-      setCategoryId: SERVICOS(lar),
-      setSpendType: null,
-      setMovement: null,
-    });
     const entrada = (id: string) => ({
       householdId: lar.householdId,
-      rule: regra(id),
+      ruleId: id,
       excludeTransactionId: null,
       now: AGORA,
     });

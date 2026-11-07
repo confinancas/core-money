@@ -175,18 +175,10 @@ export function transacoesRoutes(
       createdBy: memberId,
       now,
     });
-    const regra: RegraParaAplicar = {
-      id: up.id,
-      scope: "estabelecimento",
-      matchValue: chave,
-      setCustomName: up.mesclada.setCustomName,
-      setCategoryId: up.mesclada.setCategoryId,
-      setSpendType: up.mesclada.setSpendType,
-      setMovement: up.mesclada.setMovement,
-    };
+    // A regra acabou de ser gravada no mesmo lote, antes da fatia: a fatia a lê pelo id.
     const fatia = applyRuleRetroactiveSliceStmts(db, {
       householdId,
-      rule: regra,
+      ruleId: up.id,
       excludeTransactionId: id,
       now,
     });
@@ -311,7 +303,12 @@ export function regrasRoutes(
     const comandos: D1PreparedStatement[] = [...up.comandos];
     const fatia =
       createdFrom === "aplicar_todas"
-        ? applyRuleRetroactiveSliceStmts(db, { householdId, rule: regra, excludeTransactionId: null, now })
+        ? applyRuleRetroactiveSliceStmts(db, {
+            householdId,
+            ruleId: regra.id,
+            excludeTransactionId: null,
+            now,
+          })
         : [];
     comandos.push(...fatia);
     const pendentes =

@@ -1,9 +1,9 @@
-import { applyRuleRetroactiveSliceStmts } from "../categorization/apply";
+import { applyRuleRetroactiveSliceStmts, statusDaRegraStmt } from "../categorization/apply";
 import type { Db } from "../db/client";
-import { lerRegraPorId, regraParaAplicar } from "./repo";
 
-// Uma fatia do "Aplicar a todas" (TASK-0302): lê a regra (uma ida ao D1) e grava até 2.000 linhas num lote (outra ida).
-// Devolve quantas mudaram e quantas faltam. Regra desativada devolve motivo "regra_inativa" (409 na rota).
+// Uma fatia do "Aplicar a todas" (TASK-0302) numa ida ao D1: o status da regra e a fatia (4 UPDATE e o COUNT) vão no
+// mesmo lote, e a regra é lida dentro da própria fatia. Devolve quantas mudaram e quantas faltam. Regra de outro lar
+// ou inexistente: "nao_encontrada" (404). Regra desativada: "regra_inativa" (409).
 
 export type FatiaRetroativa =
   | { ok: true; applied: number; remaining: number }
@@ -15,21 +15,17 @@ export async function runRetroactiveSlice(
   ruleId: string,
   now: string,
 ): Promise<FatiaRetroativa> {
-  const regra = await lerRegraPorId(db, householdId, ruleId);
-  if (regra === null) return { ok: false, motivo: "nao_encontrada" };
-  if (regra.disabledAt !== null) return { ok: false, motivo: "regra_inativa" };
-
-  const comandos = applyRuleRetroactiveSliceStmts(db, {
-    householdId,
-    rule: regraParaAplicar(regra),
-    excludeTransactionId: null,
-    now,
-  });
-  if (comandos.length === 0) return { ok: true, applied: 0, remaining: 0 };
-
+  const comandos = [
+    statusDaRegraStmt(db, householdId, ruleId),
+    ...applyRuleRetroactiveSliceStmts(db, { householdId, ruleId, excludeTransactionId: null, now }),
+  ];
   const resultados = await db.$client.batch(comandos);
-  const fatia = resultados.slice(0, -1);
-  const applied = fatia.reduce((total, resultado) => total + (resultado.meta?.changes ?? 0), 0);
-  const contagem = resultados[resultados.length - 1]?.results?.[0] as { restantes: number } | undefined;
+  const status = resultados[0]?.results?.[0] as { existe: number; ativa: number } | undefined;
+  if (!status || status.existe === 0) return { ok: false, motivo: "nao_encontrada" };
+  if (status.ativa === 0) return { ok: false, motivo: "regra_inativa" };
+
+  const fatia = resultados.slice(1);
+  const applied = fatia.slice(0, -1).reduce((total, resultado) => total + (resultado.meta?.changes ?? 0), 0);
+  const contagem = fatia[fatia.length - 1]?.results?.[0] as { restantes: number } | undefined;
   return { ok: true, applied, remaining: contagem?.restantes ?? 0 };
 }
