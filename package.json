@@ -38,6 +38,7 @@
     "test:e2e": "playwright test",
     "e2e:server": "node scripts/dev/e2e-server.mjs",
     "check:build": "node scripts/dev/check-build.mjs",
+    "check:app-fino": "node scripts/dev/check-app-fino.mjs",
     "gate": "npm run lint && npm run typecheck && npm run test:unit && npm run build && npm run check:build && npm run test:integration",
     "cpu": "node scripts/dev/measure-cpu.mjs"
   },
@@ -51,6 +52,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
     "clsx": "^2.1.1",
+    "concurrently": "^10.0.6",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.16",
     "react": "^19.3.1",
@@ -74,7 +76,6 @@
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
     "@types/node": "^22.20.5",
-    "concurrently": "^10.0.6",
     "drizzle-kit": "^0.31.11",
     "jsdom": "^28.1.0",
     "jsonc-parser": "^3.3.1",
