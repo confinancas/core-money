@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "vite-plugin-pwa/client"],
+    "resolveJsonModule": true,
+    "paths": { "@/*": ["./node_modules/@confinancas/core-money/src/web/*"] }
+  },
+  "include": ["src/main.tsx", "node_modules/@confinancas/core-money/src/web/vite-env.d.ts"]
+}
