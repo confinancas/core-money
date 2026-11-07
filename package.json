@@ -55,10 +55,13 @@
     "hono": "^4.13.16",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-router": "^7.18.5",
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "workbox-window": "^7.4.1",
     "wrangler": "^4.156.1",
     "zod": "^4.6.7"
   },

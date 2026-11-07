@@ -2,5 +2,18 @@
   "id": "matrimoney",
   "workerName": "matrimoney",
   "repositorio": "confinancas/matrimoney",
-  "name": "Matrimoney"
+  "name": "Matrimoney",
+  "shortName": "Matrimoney",
+  "wordmark": ["Matri", "money"],
+  "colors": {
+    "theme": "#0E9A63",
+    "background": "#FFFFFF",
+    "wordmarkA": "#3D4943",
+    "wordmarkB": "#0E9A63"
+  },
+  "texts": {
+    "tagline": "O dinheiro de vocês dois, num lugar só.",
+    "assistantCta": "Pergunte sobre o dinheiro de vocês",
+    "householdLabel": "Conta do casal"
+  }
 }
