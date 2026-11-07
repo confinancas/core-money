@@ -1,0 +1,25 @@
+{
+  "page": 1,
+  "total": 2,
+  "totalPages": 1,
+  "results": [
+    {
+      "id": "00000000-0000-4000-8000-000000000021",
+      "itemId": "00000000-0000-4000-8000-000000000001",
+      "type": "FIXED_INCOME",
+      "subtype": "CDB",
+      "name": "[TEST] Caixinha Viagem Teste",
+      "balance": 800,
+      "status": "ACTIVE"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000022",
+      "itemId": "00000000-0000-4000-8000-000000000001",
+      "type": "MUTUAL_FUND",
+      "subtype": null,
+      "name": "[TEST] Fundo Teste",
+      "balance": 1500.5,
+      "status": "ACTIVE"
+    }
+  ]
+}

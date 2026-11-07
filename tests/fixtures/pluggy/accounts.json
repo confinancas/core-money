@@ -1,0 +1,52 @@
+{
+  "page": 1,
+  "total": 3,
+  "totalPages": 1,
+  "results": [
+    {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "itemId": "00000000-0000-4000-8000-000000000001",
+      "type": "BANK",
+      "subtype": "CHECKING_ACCOUNT",
+      "number": "[TEST] 000001-0",
+      "name": "[TEST] Conta Corrente Teste",
+      "marketingName": "[TEST] Itaú Conta Corrente",
+      "balance": 1234.56,
+      "currencyCode": "BRL",
+      "bankData": { "overdraftUsedLimit": 0, "closingBalance": 1234.56 },
+      "creditData": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000012",
+      "itemId": "00000000-0000-4000-8000-000000000001",
+      "type": "BANK",
+      "subtype": "SAVINGS_ACCOUNT",
+      "number": "[TEST] 000002-0",
+      "name": "[TEST] Poupança Teste",
+      "marketingName": null,
+      "balance": 5432.1,
+      "currencyCode": "BRL",
+      "bankData": { "overdraftUsedLimit": null, "closingBalance": 5432.1 },
+      "creditData": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000013",
+      "itemId": "00000000-0000-4000-8000-000000000001",
+      "type": "CREDIT",
+      "subtype": "CREDIT_CARD",
+      "number": "************1234",
+      "name": "[TEST] Cartão Teste",
+      "marketingName": "[TEST] Cartão Nubank Teste",
+      "balance": 1845.37,
+      "currencyCode": "BRL",
+      "bankData": null,
+      "creditData": {
+        "balanceCloseDate": "2026-11-03T00:00:00.000Z",
+        "balanceDueDate": "2026-11-10T00:00:00.000Z",
+        "availableCreditLimit": 3154.63,
+        "creditLimit": 5000,
+        "brand": "MASTERCARD"
+      }
+    }
+  ]
+}
