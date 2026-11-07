@@ -77,6 +77,20 @@ test("cenário 5: chave, segmentado e escolha respondem ao toque e ao teclado", 
   await chave.click();
   await expect(chave).toHaveAttribute("aria-checked", "false");
 
+  // A área de toque da chave tem 46 px de altura: 22 px acima e abaixo do centro ainda acertam a chave.
+  await chave.scrollIntoViewIfNeeded();
+  for (const deslocamento of [-22, 22]) {
+    const acertou = await chave.evaluate((elemento, dy) => {
+      const caixa = elemento.getBoundingClientRect();
+      const alvo = document.elementFromPoint(caixa.left + caixa.width / 2, caixa.top + caixa.height / 2 + dy);
+      return alvo !== null && elemento.contains(alvo);
+    }, deslocamento);
+    expect(
+      acertou,
+      `a ${Math.abs(deslocamento)} px do centro, ${deslocamento < 0 ? "acima" : "abaixo"}`,
+    ).toBe(true);
+  }
+
   await page.getByRole("radio", { name: "Mês", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("radio", { name: "Ciclo", exact: true })).toHaveAttribute(

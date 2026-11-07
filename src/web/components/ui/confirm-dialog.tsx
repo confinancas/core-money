@@ -1,4 +1,13 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./dialog";
@@ -19,22 +28,39 @@ const Contexto = createContext<Confirmar | null>(null);
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [pendente, setPendente] = useState<Pendente | null>(null);
-  // O foco volta a quem abriu a confirmação (o Radix só sabe voltar ao DialogTrigger, que não usamos).
+  // Espelha o pendente para as funções verem a versão atual, sem esperar o próximo render.
+  const pendenteRef = useRef<Pendente | null>(null);
+  // O foco volta a quem abriu a primeira confirmação (o Radix só sabe voltar ao DialogTrigger, que não usamos).
   const gatilho = useRef<HTMLElement | null>(null);
 
   const confirmar = useCallback<Confirmar>(
     (opcoes) =>
       new Promise<boolean>((resolver) => {
-        gatilho.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        setPendente({ ...opcoes, resolver });
+        // Uma confirmação nova substitui a aberta: a anterior resolve como cancelada.
+        pendenteRef.current?.resolver(false);
+        if (!pendenteRef.current) {
+          gatilho.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }
+        const novo: Pendente = { ...opcoes, resolver };
+        pendenteRef.current = novo;
+        setPendente(novo);
       }),
     [],
   );
 
+  // Desmontar o provedor com uma confirmação aberta resolve essa confirmação como cancelada.
+  useEffect(() => {
+    return () => {
+      pendenteRef.current?.resolver(false);
+      pendenteRef.current = null;
+    };
+  }, []);
+
   const valor = useMemo(() => confirmar, [confirmar]);
 
   function responder(confirmado: boolean) {
-    pendente?.resolver(confirmado);
+    pendenteRef.current?.resolver(confirmado);
+    pendenteRef.current = null;
     setPendente(null);
   }
 

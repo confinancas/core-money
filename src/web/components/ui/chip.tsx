@@ -6,7 +6,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   count?: number;
 };
 
-// Pílula de 40 px. A área de toque chega a 48 px.
+// Pílula de 40 px. A área de toque chega a 45 px.
 export function Chip({ selected = false, count, children, className, type = "button", ...rest }: Props) {
   return (
     <button
