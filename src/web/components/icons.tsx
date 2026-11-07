@@ -101,3 +101,55 @@ export function IconeCaixa(props: Props) {
     </Svg>
   );
 }
+
+export function IconeCasa(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
+    </Svg>
+  );
+}
+
+export function IconeCartao(props: Props) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 10h18" />
+    </Svg>
+  );
+}
+
+// Contas do mês (despesas): seta para cima.
+export function IconeSetaParaCima(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 15V4M7 9l5-5 5 5M4 20h16" />
+    </Svg>
+  );
+}
+
+// Renda: seta para baixo.
+export function IconeSetaParaBaixo(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 4v11M7 10l5 5 5-5M4 20h16" />
+    </Svg>
+  );
+}
+
+export function IconeBarras(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+    </Svg>
+  );
+}
+
+export function IconeEngrenagem(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </Svg>
+  );
+}
