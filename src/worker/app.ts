@@ -1,5 +1,6 @@
 import { type Context, Hono } from "hono";
 import type { BrandConfig } from "../shared/brand/types";
+import { verificadorReal, type WebAuthnVerifier } from "./auth/webauthn";
 import { categoriesRoutes } from "./categories/routes";
 import { createDb } from "./db/client";
 import { type Meter, newMeter } from "./db/metered-d1";
@@ -11,6 +12,7 @@ import { healthRoute } from "./routes/health";
 import { householdRoutes } from "./routes/household";
 import { settingsRoutes } from "./routes/settings";
 import { setupRoutes } from "./routes/setup";
+import { setupHouseholdRoutes } from "./routes/setup-household";
 import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
 
@@ -22,6 +24,8 @@ export type AppOptions = {
   resolveSession?: SessionResolver;
   // Padrão: a validação real, na Anthropic. Os testes passam uma falsa; nenhum teste fala com a Anthropic.
   validateClaudeKey?: ValidacaoDaChave;
+  // Padrão: a verificação real do @simplewebauthn/server. Os testes de integração passam uma falsa (TASK-0103).
+  webauthn?: WebAuthnVerifier;
   // Relógio das rotas que precisam de "hoje" (o dia de início muda a partir do ciclo de hoje). Padrão: o relógio real.
   agora?: () => Date;
 };
@@ -47,6 +51,7 @@ const VERSAO_DE_DESENVOLVIMENTO = "0.1.0";
 export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   const app = new Hono<AppEnv>().basePath("/api");
   const validar = options.validateClaudeKey ?? validateClaudeKey;
+  const webauthn = options.webauthn ?? verificadorReal;
 
   // Primeiro middleware: mede o uso do D1 desta requisição e expõe marca e versão no contexto.
   app.use(async (c, next) => {
@@ -66,6 +71,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   options.rotasDoApp?.(app);
   app.route("/", healthRoute);
   app.route("/setup", setupRoutes(validar));
+  app.route("/setup/household", setupHouseholdRoutes(webauthn));
   app.route("/", settingsRoutes(validar));
   app.route("/household", householdRoutes(options.resolveSession ?? noSession, options.agora));
   app.route("/categories", categoriesRoutes(options.resolveSession ?? noSession, options.agora));

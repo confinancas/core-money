@@ -6,6 +6,7 @@ import { Moldura } from "./app/Moldura";
 import { NotFound } from "./app/NotFound";
 import { PlaceholderScreen } from "./app/PlaceholderScreen";
 import { Catalogo } from "./dev/Catalog";
+import { Cadastro } from "./screens/Cadastro";
 import { ConfiguracaoInicial } from "./screens/ConfiguracaoInicial";
 import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
 import { NovaCategoria } from "./screens/categorias/NovaCategoria";
@@ -22,7 +23,7 @@ const provisoria = <PlaceholderScreen />;
 export const ROTAS: RotaDaTabela[] = [
   { path: "/", frame: "bare", title: "Abertura", element: <Abertura /> },
   { path: "/entrar", frame: "bare", title: "Entrar", element: provisoria },
-  { path: "/criar-conta", frame: "bare", title: "Criar conta", element: provisoria },
+  { path: "/criar-conta", frame: "bare", title: "Criar conta", element: <Cadastro /> },
   { path: "/convite/:token", frame: "bare", title: "Aceitar convite", element: provisoria },
   { path: "/recuperar/:token", frame: "bare", title: "Recuperar acesso", element: provisoria },
   {

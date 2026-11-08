@@ -69,5 +69,9 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Escrita de categoria:** só `src/worker/categorization/apply.ts` grava `category_id`. A chave de casamento sai do SQL (`t.establishment_key` e `COUNTERPARTY_KEY_SQL`), nunca do corpo da requisição.
 - **Parâmetros por comando:** `tests/integration/helpers/parametros.ts` conta os `?` de cada SQL no `prepare`, para provar o limite de 100.
 - **UPDATE com alias:** `UPDATE transactions AS t SET ...`; no `SET`, os nomes saem sem alias, e no `WHERE` com `t.`.
-- **E2E com outros agentes:** o Playwright reaproveita o servidor que já estiver na 8788. Com outro executor rodando, use uma porta própria, com config temporária fora do versionado.
+- **E2E com outros agentes:** as portas 8788, 8789 e 8790 são fixas, e o Playwright reaproveita o servidor que já estiver nelas. Com outro executor rodando, espere as três ficarem livres e rode `CI=1 npm run test:e2e`: assim o Playwright recusa a porta ocupada em vez de usar o servidor alheio.
+- **`SETUP_SEM_CACHE=1`:** só nas instâncias que voltam ao cadastro do zero (a 8790 do E2E e o Worker da medição do fluxo `cadastro`): o portão não guarda `pronto` no módulo. Produção nunca define essa variável.
+- **WebAuthn no E2E:** o rpID não pode ser IP, então o `cadastro.spec.ts` usa `http://localhost:<porta>`. O autenticador virtual fica em `tests/e2e/helpers/webauthn.ts`; `setUserVerified(false)` simula o cancelamento (`NotAllowedError`).
+- **Medição por fluxo:** rota que só o navegador chama leva `via` no arquivo de medição e é medida por `scripts/dev/cpu-flows.mjs`. O fluxo `cadastro` reseta o banco de teste a cada rodada, uma chamada por instrução, e leva cerca de 30 minutos para 12 rodadas.
+- **D1 remoto e `pragma_*`:** o D1 remoto recusa `pragma_*` (SQLITE_AUTH). Para ler chaves estrangeiras, use o `CREATE TABLE` em `sqlite_master`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.

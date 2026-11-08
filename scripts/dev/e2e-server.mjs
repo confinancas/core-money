@@ -32,7 +32,9 @@ function roda(args) {
 }
 
 // Cada wrangler dev tem a sua porta de inspeção (o padrão é a mesma para os dois, e o segundo não sobe no CI).
-function sobeWrangler(porta, estado) {
+// extras: variáveis a mais do Worker. A instância de configuração do zero (8790) leva SETUP_SEM_CACHE=1: volta a
+// cadastro no mesmo processo, sem o cache de "pronto" do módulo (TASK-0103 cria o lar nela).
+function sobeWrangler(porta, estado, extras = []) {
   return spawn(
     process.execPath,
     [
@@ -50,6 +52,7 @@ function sobeWrangler(porta, estado) {
       `MASTER_KEY:${CHAVE_MESTRA_DO_E2E}`,
       "--var",
       `ANTHROPIC_BASE_URL:http://127.0.0.1:${PORTA_DO_STUB}`,
+      ...extras.flatMap((variavel) => ["--var", variavel]),
     ],
     { cwd: raiz, stdio: "inherit", env: ambiente },
   );
@@ -68,7 +71,7 @@ const processos = [
     env: ambiente,
   }),
   sobeWrangler(PORTA_PRONTA, estadoPronto),
-  sobeWrangler(PORTA_CONFIGURACAO, estadoConfiguracao),
+  sobeWrangler(PORTA_CONFIGURACAO, estadoConfiguracao, ["SETUP_SEM_CACHE:1"]),
 ];
 
 function encerraTudo(sinal) {

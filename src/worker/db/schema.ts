@@ -405,3 +405,62 @@ export const featureFlags = sqliteTable(
   },
   (t) => [check("feature_flags_enabled_ck", sql`${t.enabled} IN (0, 1)`)],
 );
+
+// Passkeys (TASK-0103): um "aparelho" = uma passkey (ADR-010). O id é o credential id (base64url).
+export const passkeys = sqliteTable(
+  "passkeys",
+  {
+    id: text("id").primaryKey(),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => members.id),
+    publicKey: text("public_key").notNull(),
+    counter: integer("counter").notNull(),
+    transports: text("transports"),
+    deviceName: text("device_name").notNull(),
+    addedVia: text("added_via").notNull(),
+    createdAt: text("created_at").notNull(),
+    lastUsedAt: text("last_used_at"),
+  },
+  (t) => [
+    check("passkeys_added_via_ck", sql`${t.addedVia} IN ('cadastro', 'convite', 'aparelho', 'recuperacao')`),
+    index("passkeys_member_idx").on(t.memberId),
+  ],
+);
+
+// Sessões ligadas ao aparelho (TASK-0103 cria; a TASK-0104 usa). O banco guarda só o sha256 do token.
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => members.id),
+    passkeyId: text("passkey_id")
+      .notNull()
+      .references(() => passkeys.id),
+    createdAt: text("created_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    noticesSeenAt: text("notices_seen_at"),
+  },
+  (t) => [index("sessions_passkey_idx").on(t.passkeyId), index("sessions_member_idx").on(t.memberId)],
+);
+
+// Desafios do WebAuthn: uso único, 5 minutos. member_id não tem FK: no cadastro, é o id do membro que ainda vai ser criado.
+export const webauthnChallenges = sqliteTable(
+  "webauthn_challenges",
+  {
+    id: text("id").primaryKey(),
+    challenge: text("challenge").notNull(),
+    memberId: text("member_id"),
+    purpose: text("purpose").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (t) => [
+    check(
+      "webauthn_challenges_purpose_ck",
+      sql`${t.purpose} IN ('cadastro', 'login', 'convite', 'aparelho', 'recuperacao', 'reivindicar')`,
+    ),
+  ],
+);

@@ -50,6 +50,13 @@
       "when": 1794078388212,
       "tag": "0006_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794105807301,
+      "tag": "0007_passkeys_sessions",
+      "breakpoints": true
     }
   ]
 }

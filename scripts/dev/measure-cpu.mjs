@@ -155,8 +155,11 @@ function soltaTrava() {
   travaCriada = false;
 }
 
-function geraConfigDeDev(env) {
+function geraConfigDeDev(env, pedido) {
   const base = lerJsonc(readFileSync(join(raiz, "wrangler.jsonc"), "utf8"));
+  // Só o fluxo do cadastro volta a cadastro a cada rodada: só ele desliga o cache de "pronto" do portão.
+  // As outras medições rodam com o cache, como em produção.
+  const voltaAoCadastro = (pedido.flows ?? []).some((fluxo) => fluxo.name === "cadastro");
   const config = {
     ...base,
     name: WORKER,
@@ -168,6 +171,7 @@ function geraConfigDeDev(env) {
       database_id: env.MM_DEV_D1_ID,
       migrations_dir: join(raiz, "migrations"),
     })),
+    ...(voltaAoCadastro ? { vars: { ...(base.vars ?? {}), SETUP_SEM_CACHE: "1" } } : {}),
   };
   delete config.triggers;
   delete config.$schema;
@@ -228,6 +232,17 @@ async function main() {
     falha('Arquivo de medição inválido: precisa de "task" e de "requests".');
   }
   if (
+    pedido.flows !== undefined &&
+    !(
+      Array.isArray(pedido.flows) &&
+      pedido.flows.every(
+        (fluxo) => typeof fluxo?.name === "string" && Number.isInteger(fluxo.runs) && fluxo.runs > 0,
+      )
+    )
+  ) {
+    falha('Arquivo de medição inválido: "flows" é uma lista de { "name", "runs" }.');
+  }
+  if (
     pedido.setupSql !== undefined &&
     !(Array.isArray(pedido.setupSql) && pedido.setupSql.every((sql) => typeof sql === "string"))
   ) {
@@ -239,7 +254,7 @@ async function main() {
   pegaTrava(pedido.task);
 
   try {
-    const cfg = geraConfigDeDev(env);
+    const cfg = geraConfigDeDev(env, pedido);
     const build = await executa([viteJs, "build"], process.env);
     if (build.codigo !== 0) falha(`vite build falhou.\n${mascara(build.saida)}`);
 
@@ -297,6 +312,8 @@ async function main() {
     await esperar(ESPERA_ANTES_DAS_REQUISICOES_MS);
 
     for (const rota of pedido.requests) {
+      // Rota com "via" é medida pelo fluxo de navegador indicado (abaixo): não é enviada daqui.
+      if (rota.via !== undefined) continue;
       for (let i = 0; i < AQUECIMENTO + MEDIDAS; i++) {
         const corpo = rota.body === undefined ? undefined : JSON.stringify(rota.body);
         const cabecalhos = { ...(rota.headers ?? {}) };
@@ -314,6 +331,17 @@ async function main() {
         }
         await esperar(INTERVALO_ENTRE_REQUISICOES_MS);
       }
+    }
+
+    // Fluxos de navegador (TASK-0103, cadastro com passkey): rodam com o tail aberto. A URL e a configuração vão pelo
+    // ambiente do processo filho; a saída do fluxo nunca traz a URL (cpu-flows.mjs mascara).
+    for (const fluxo of pedido.flows ?? []) {
+      const rodada = await executa(
+        [join(raiz, "scripts", "dev", "cpu-flows.mjs"), fluxo.name, String(fluxo.runs)],
+        { ...ambienteDoWrangler(env), MM_CPU_URL: urlDoWorker, MM_CPU_CONFIG: cfg },
+      );
+      if (rodada.codigo !== 0) falha(`Fluxo ${fluxo.name} falhou.\n${mascara(rodada.saida)}`);
+      console.log(mascara(rodada.saida).trim());
     }
 
     await esperar(ESPERA_DEPOIS_DAS_REQUISICOES_MS);

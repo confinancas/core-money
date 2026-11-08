@@ -1,0 +1,18 @@
+{
+  "task": "TASK-0103",
+  "requests": [
+    {
+      "name": "POST /api/setup/household/options",
+      "method": "POST",
+      "path": "/api/setup/household/options",
+      "via": "cadastro"
+    },
+    {
+      "name": "POST /api/setup/household/verify",
+      "method": "POST",
+      "path": "/api/setup/household/verify",
+      "via": "cadastro"
+    }
+  ],
+  "flows": [{ "name": "cadastro", "runs": 12 }]
+}

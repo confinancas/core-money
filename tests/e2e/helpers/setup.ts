@@ -36,13 +36,26 @@ export function gravaChaveQueNaoAbre(): void {
   );
 }
 
-// Configuração inicial do zero, na instância de configuração: primeiro acesso aberto, sem chave, sem flag.
+// Configuração inicial do zero, na instância de configuração: primeiro acesso aberto, sem chave, sem flag, sem lar.
+// Filhos antes dos pais: passkeys e sessões referenciam members; members e invites referenciam households.
 export function preparaConfiguracaoDoZero(): void {
   executaSql(
     "configuracao",
-    ["DELETE FROM app_secrets", "DELETE FROM feature_flags", "DELETE FROM invites", insereCodigo(false)].join(
-      "; ",
-    ),
+    [
+      "DELETE FROM sessions",
+      "DELETE FROM passkeys",
+      "DELETE FROM webauthn_challenges",
+      "DELETE FROM invites",
+      "DELETE FROM rules",
+      "DELETE FROM ai_rules_document",
+      "DELETE FROM categories",
+      "DELETE FROM cycles",
+      "DELETE FROM members",
+      "DELETE FROM households",
+      "DELETE FROM app_secrets",
+      "DELETE FROM feature_flags",
+      insereCodigo(false),
+    ].join("; "),
   );
 }
 
