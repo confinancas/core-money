@@ -11,6 +11,7 @@ import { healthRoute } from "./routes/health";
 import { householdRoutes } from "./routes/household";
 import { settingsRoutes } from "./routes/settings";
 import { setupRoutes } from "./routes/setup";
+import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
 
 export type AppOptions = {
@@ -68,6 +69,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/", settingsRoutes(validar));
   app.route("/household", householdRoutes(options.resolveSession ?? noSession, options.agora));
   app.route("/categories", categoriesRoutes(options.resolveSession ?? noSession, options.agora));
+  app.route("/rules", regrasRoutes(options.resolveSession ?? noSession, options.agora));
+  app.route("/transactions", transacoesRoutes(options.resolveSession ?? noSession, options.agora));
 
   app.notFound((c) => apiError(c, 404, "rota_inexistente", "Rota não encontrada."));
 

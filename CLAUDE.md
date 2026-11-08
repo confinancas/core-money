@@ -65,4 +65,9 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Modo configuração:** fora de `pronto`, o portão responde 503 a toda rota fora de `/api/setup/*` e `GET /api/health`. Teste que usa a API semeia `pronto` pelo auxiliar e chama `resetSetupCacheForTests()` antes, porque `pronto` fica em cache no módulo. O `wrangler dev` precisa do `.dev.vars` com `MASTER_KEY` (ver como-rodar).
 - **E2E com duas instâncias:** 8788 (instalação pronta, semeada pelos testes) e 8790 (configuração do zero), cada uma com a própria porta de inspeção. Teste que volta à configuração usa só a 8790.
 - **Medidor e Drizzle:** as leituras pelo `select` do Drizzle contam em `calls` e `statements`, mas não em `rowsRead`. Para medir linhas lidas, use `prepare().all()` direto.
+- **`json_each` como laço de fora:** `FROM json_each(?) AS j CROSS JOIN transactions AS t ON t.id = j.value`. Sem o `CROSS JOIN`, o planejador usa o índice do lar e lê o lar inteiro a cada consulta. Confira com `EXPLAIN QUERY PLAN` e com `rowsRead` num lar grande.
+- **Escrita de categoria:** só `src/worker/categorization/apply.ts` grava `category_id`. A chave de casamento sai do SQL (`t.establishment_key` e `COUNTERPARTY_KEY_SQL`), nunca do corpo da requisição.
+- **Parâmetros por comando:** `tests/integration/helpers/parametros.ts` conta os `?` de cada SQL no `prepare`, para provar o limite de 100.
+- **UPDATE com alias:** `UPDATE transactions AS t SET ...`; no `SET`, os nomes saem sem alias, e no `WHERE` com `t.`.
+- **E2E com outros agentes:** o Playwright reaproveita o servidor que já estiver na 8788. Com outro executor rodando, use uma porta própria, com config temporária fora do versionado.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
