@@ -79,11 +79,13 @@ export function setupGate(): MiddlewareHandler<AppEnv> {
     const metodo = c.req.method;
     const caminho = c.req.path;
 
-    let pronto = prontoNoCache;
+    // SETUP_SEM_CACHE (só instâncias de teste e de medição): sem cache, o modo sempre vem do banco.
+    const semCache = c.env.SETUP_SEM_CACHE === "1";
+    let pronto = !semCache && prontoNoCache;
     if (!pronto) {
       const estado = await getSetupState(c.var.db, getCookie(c, COOKIE_DA_CONFIGURACAO));
       pronto = estado.mode === "pronto";
-      if (pronto) prontoNoCache = true;
+      if (pronto && !semCache) prontoNoCache = true;
     }
 
     if (pronto) {

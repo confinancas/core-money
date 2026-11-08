@@ -33,6 +33,21 @@ export const memberNameSchema = z
   .min(1, MENSAGEM_NOME)
   .max(40, MENSAGEM_NOME);
 
+// E-mail do membro: opcional e só para identificação (o app não manda e-mail). Vazio, ausente ou nulo vira null.
+const MENSAGEM_EMAIL = "Confira o e-mail.";
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const memberEmailSchema = z.preprocess(
+  (valor) => (valor === undefined || valor === null ? "" : valor),
+  z
+    .string({ error: MENSAGEM_EMAIL })
+    .trim()
+    .toLowerCase()
+    .max(120, { error: MENSAGEM_EMAIL })
+    .refine((texto) => texto === "" || EMAIL.test(texto), { error: MENSAGEM_EMAIL })
+    .transform((texto) => (texto === "" ? null : texto)),
+);
+
 const percentualSchema = z
   .number({ error: MENSAGEM_PERCENTUAL })
   .int({ error: MENSAGEM_PERCENTUAL })
