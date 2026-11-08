@@ -227,9 +227,13 @@ test("tablet: o cartão fica ao lado da lista, no alto da área", async ({ page 
     .locator("label")
     .filter({ has: page.getByPlaceholder("Buscar categoria") })
     .boundingBox();
-  if (!cartao || !lista || !busca) throw new Error("cartão, lista ou busca fora da tela");
+  const nova = await page.getByRole("link", { name: "Nova categoria", exact: true }).boundingBox();
+  if (!cartao || !lista || !busca || !nova)
+    throw new Error("cartão, lista, busca ou nova categoria fora da tela");
   expect(cartao.x > lista.x + lista.width).toBe(true);
   expect(Math.abs(cartao.y - busca.y)).toBeLessThanOrEqual(1);
+  // A lista cola no link "Nova categoria" (vão de 20 px do gap): o grid não espalha a altura que sobra entre as linhas.
+  expect(lista.y - (nova.y + nova.height)).toBeLessThanOrEqual(24);
 });
 
 // Laço retomado pelo "Tentar de novo": o Salvar fica desabilitado até o laço acabar, e clicar nele não grava de novo.
