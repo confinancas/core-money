@@ -130,7 +130,7 @@ export function Login() {
           type="button"
           aria-expanded={perdeuAcesso}
           onClick={() => setPerdeuAcesso((aberto) => !aberto)}
-          className="text-[14px] font-semibold text-primary underline-offset-4 hover:underline"
+          className="inline-flex min-h-11 items-center px-3 text-[14px] font-semibold text-primary underline-offset-4 hover:underline"
         >
           Perdeu o acesso ao aparelho?
         </button>

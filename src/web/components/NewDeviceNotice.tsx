@@ -45,7 +45,7 @@ export function NewDeviceNotice() {
           type="button"
           disabled={enviando}
           onClick={() => void marcaVisto()}
-          className="disabled:opacity-50"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center px-1 disabled:opacity-50"
         >
           Foi eu
         </button>
@@ -53,7 +53,7 @@ export function NewDeviceNotice() {
           type="button"
           disabled={enviando}
           onClick={() => void marcaVisto("/configuracoes/casal")}
-          className="disabled:opacity-50"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center px-1 disabled:opacity-50"
         >
           Ver aparelhos
         </button>

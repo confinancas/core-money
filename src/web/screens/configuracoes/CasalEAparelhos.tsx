@@ -9,6 +9,7 @@ import { SkeletonCard } from "@/components/ui/skeleton";
 import { brand } from "../../../shared/brand";
 import type { AparelhoDaPessoa, ListaDeAparelhos, PessoaComAparelhos } from "../../../shared/devices";
 import type { LinkDeRecuperacao } from "../../../shared/recovery";
+import { dicaDaRecuperacao } from "../../access/convite-textos";
 import { createPasskey, mensagemDaPasskey } from "../../access/passkey-client";
 import { ShareLink } from "../../access/ShareLink";
 import { dataDoAparelho, horaDoLink } from "../../devices/datas";
@@ -144,7 +145,7 @@ export function CasalEAparelhos() {
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
       {cabecalho}
-      <main className="mx-auto flex w-full max-w-[720px] flex-col gap-5 px-4 pt-6 pb-8 tablet:px-6">
+      <main className="mx-auto flex w-full max-w-[720px] flex-col gap-5 px-4 pt-6 pb-8 tablet:max-w-[1040px] tablet:px-6">
         {erro && (
           <p role="alert" className="text-[13px] text-danger">
             {erro}
@@ -156,106 +157,113 @@ export function CasalEAparelhos() {
           </p>
         )}
 
-        {pessoas.map((pessoa) => {
-          const inicial = pessoa.name.trim().charAt(0).toUpperCase() || "?";
-          const aberto = painelAberto === pessoa.id;
-          const link = linkGerado?.pessoaId === pessoa.id ? linkGerado : null;
-          return (
-            <Card key={pessoa.id} className="flex flex-col gap-4">
-              <div className="flex items-center gap-3.5">
-                <span
-                  aria-hidden="true"
-                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-[18px] font-extrabold text-white"
-                >
-                  {inicial}
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <h2 className="truncate text-[17px] font-extrabold">{pessoa.name}</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {pessoa.isMe && <Selo>você</Selo>}
-                    <Selo>{pessoa.role === "titular" ? "Titular" : "Cônjuge"}</Selo>
+        <div className="grid gap-5 tablet:grid-cols-2 tablet:items-start">
+          {pessoas.map((pessoa) => {
+            const inicial = pessoa.name.trim().charAt(0).toUpperCase() || "?";
+            const aberto = painelAberto === pessoa.id;
+            const link = linkGerado?.pessoaId === pessoa.id ? linkGerado : null;
+            return (
+              <Card key={pessoa.id} className="flex flex-col gap-4">
+                <div className="flex items-center gap-3.5">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-[18px] font-extrabold text-white"
+                  >
+                    {inicial}
+                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <h2 className="truncate text-[17px] font-extrabold">{pessoa.name}</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {pessoa.isMe && <Selo>você</Selo>}
+                      <Selo>{pessoa.role === "titular" ? "Titular" : "Cônjuge"}</Selo>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <ul className="flex flex-col gap-3">
-                {pessoa.devices.length === 0 && (
-                  <li className="text-[13px] text-ink-2">Nenhum aparelho cadastrado.</li>
-                )}
-                {pessoa.devices.map((aparelho) => (
-                  <li key={aparelho.id} className="flex flex-col gap-1.5 rounded-card bg-field p-3.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-[15px] font-bold">
-                        {aparelho.deviceName || "Aparelho"}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void remover(pessoa, aparelho)}
-                        className="shrink-0 px-1 py-2 text-[14px] font-bold text-danger"
-                      >
-                        Remover
-                      </button>
-                    </div>
-                    {(aparelho.isCurrent || aparelho.addedVia === "recuperacao") && (
-                      <div className="flex flex-wrap gap-2">
-                        {aparelho.isCurrent && <Selo>este aparelho</Selo>}
-                        {aparelho.addedVia === "recuperacao" && <Selo>por recuperação</Selo>}
+                <ul className="flex flex-col gap-3">
+                  {pessoa.devices.length === 0 && (
+                    <li className="text-[13px] text-ink-2">Nenhum aparelho cadastrado.</li>
+                  )}
+                  {pessoa.devices.map((aparelho) => (
+                    <li key={aparelho.id} className="flex flex-col gap-1.5 rounded-card bg-field p-3.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate text-[15px] font-bold">
+                          {aparelho.deviceName || "Aparelho"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void remover(pessoa, aparelho)}
+                          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-2 text-[14px] font-bold text-danger"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                      {(aparelho.isCurrent || aparelho.addedVia === "recuperacao") && (
+                        <div className="flex flex-wrap gap-2">
+                          {aparelho.isCurrent && <Selo>este aparelho</Selo>}
+                          {aparelho.addedVia === "recuperacao" && <Selo>por recuperação</Selo>}
+                        </div>
+                      )}
+                      <span className="text-[12px] text-ink-2">{linhaDeDatas(aparelho)}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {pessoa.isMe ? (
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      variant="secondary"
+                      full
+                      loading={adicionando}
+                      onClick={() => void adicionarEsteAparelho()}
+                    >
+                      Adicionar este aparelho
+                    </Button>
+                    <p className="text-[13px] leading-normal text-ink-2">
+                      Cria uma passkey neste aparelho para entrar direto, sem o celular.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <Button
+                      variant="secondary"
+                      full
+                      onClick={() => setPainelAberto(aberto ? null : pessoa.id)}
+                    >
+                      Liberar acesso de {pessoa.name}
+                    </Button>
+                    <p className="text-[13px] leading-normal text-ink-2">
+                      Para quando {pessoa.name} perder o aparelho: gera um link de uso único, válido por 15
+                      minutos.
+                    </p>
+                    {aberto && (
+                      <div className="flex flex-col gap-3 rounded-card border border-field-border p-4">
+                        {link ? (
+                          <>
+                            <ShareLink
+                              link={link.link}
+                              shareTitle={`Recuperar o acesso ao ${brand.name}`}
+                              shareText={`${member.name} liberou um aparelho novo para ${link.nome} no ${brand.name}. Abra o link para criar a passkey (vale até ${horaDoLink(link.expiresAt)}):`}
+                              dica={dicaDaRecuperacao(link.nome)}
+                            />
+                            <p className="text-[13px] leading-normal text-ink-2">
+                              Vale até {horaDoLink(link.expiresAt)}. {pessoa.name} cria uma passkey nova, e os
+                              outros aparelhos de {pessoa.name} recebem um aviso.
+                            </p>
+                          </>
+                        ) : (
+                          <Button full loading={gerando} onClick={() => void geraLink(pessoa)}>
+                            Gerar link
+                          </Button>
+                        )}
                       </div>
                     )}
-                    <span className="text-[12px] text-ink-2">{linhaDeDatas(aparelho)}</span>
-                  </li>
-                ))}
-              </ul>
-
-              {pessoa.isMe ? (
-                <div className="flex flex-col gap-2">
-                  <Button
-                    variant="secondary"
-                    full
-                    loading={adicionando}
-                    onClick={() => void adicionarEsteAparelho()}
-                  >
-                    Adicionar este aparelho
-                  </Button>
-                  <p className="text-[13px] leading-normal text-ink-2">
-                    Cria uma passkey neste aparelho para entrar direto, sem o celular.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <Button variant="secondary" full onClick={() => setPainelAberto(aberto ? null : pessoa.id)}>
-                    Liberar acesso de {pessoa.name}
-                  </Button>
-                  <p className="text-[13px] leading-normal text-ink-2">
-                    Para quando {pessoa.name} perder o aparelho: gera um link de uso único, válido por 15
-                    minutos.
-                  </p>
-                  {aberto && (
-                    <div className="flex flex-col gap-3 rounded-card border border-field-border p-4">
-                      {link ? (
-                        <>
-                          <ShareLink
-                            link={link.link}
-                            shareTitle={`Recuperar o acesso ao ${brand.name}`}
-                            shareText={`${member.name} liberou um aparelho novo para ${link.nome} no ${brand.name}. Abra o link para criar a passkey (vale até ${horaDoLink(link.expiresAt)}):`}
-                          />
-                          <p className="text-[13px] leading-normal text-ink-2">
-                            Vale até {horaDoLink(link.expiresAt)}. {pessoa.name} cria uma passkey nova, e os
-                            outros aparelhos de {pessoa.name} recebem um aviso.
-                          </p>
-                        </>
-                      ) : (
-                        <Button full loading={gerando} onClick={() => void geraLink(pessoa)}>
-                          Gerar link
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
-          );
-        })}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
 
         {!temConjuge && (
           <Card className="flex flex-col gap-3">
