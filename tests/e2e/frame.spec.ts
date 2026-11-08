@@ -103,14 +103,14 @@ test.describe("menu", () => {
     }
 
     if (largura === "desktop") {
-      // Barra de 252 px com nomes, sem o cartão do Assistente (desligado), sem rodapé do lar (sem membros).
+      // Barra de 252 px com nomes, sem o cartão do Assistente (desligado). Com a sessão, o rodapé mostra as pessoas do lar.
       const barra = await caixa(page.locator("aside").first());
       expect(Math.round(barra.width)).toBe(252);
       for (const nome of ABAS_SEM_IA) {
         await expect(menu(page).getByText(nome.replace(" (despesas)", ""), { exact: true })).toBeVisible();
       }
       await expect(page.getByText("Pergunte sobre o dinheiro de vocês")).toHaveCount(0);
-      await expect(page.getByText("Conta do casal")).toHaveCount(0);
+      await expect(page.getByText("Conta do casal")).toHaveCount(1);
     }
   });
 

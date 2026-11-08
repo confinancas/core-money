@@ -26,8 +26,9 @@ test("rota de SPA devolve a página, não 404", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Página não encontrada" })).toBeVisible();
 });
 
-test("rota de API inexistente devolve 404 JSON", async ({ request }) => {
-  const resposta = await request.get("/api/nao-existe");
+// Com sessão (o cookie da página vale no page.request), a rota inexistente responde 404. Sem sessão, responde 401 antes.
+test("rota de API inexistente devolve 404 JSON", async ({ page }) => {
+  const resposta = await page.request.get("/api/nao-existe");
 
   expect(resposta.status()).toBe(404);
   expect(await resposta.json()).toEqual({ error: "rota_inexistente", message: "Rota não encontrada." });

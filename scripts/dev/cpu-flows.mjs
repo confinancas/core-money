@@ -162,18 +162,36 @@ async function rodaLogin(navegador, total) {
         signCount: 0,
       },
     });
+    // O tail do Cloudflare perde eventos em rajada (o medidor espaça as próprias requisições em 1 s): cada passo do
+    // login tem uma pausa, para que options, verify e logout cheguem um a um.
     for (let i = 1; i <= total; i++) {
       await pagina.goto(`${url}/entrar`, { timeout: 60000 });
+      await pagina.waitForTimeout(PAUSA_DO_LOGIN_MS);
       await pagina.getByRole("button", { name: "Entrar com passkey", exact: true }).click();
-      await pagina.waitForURL(/\/inicio$/, { timeout: 60000 });
+      try {
+        await pagina.waitForURL(/\/inicio$/, { timeout: 30000 });
+      } catch {
+        // Diagnóstico sem segredo: o caminho da tela (sem o host) e os avisos que ela mostra.
+        const avisos = await pagina
+          .getByRole("alert")
+          .allTextContents()
+          .catch(() => []);
+        throw new Error(
+          `login: a rodada ${i} não chegou a /inicio (caminho: ${new URL(pagina.url()).pathname}; avisos: ${avisos.join(" | ") || "nenhum"}).`,
+        );
+      }
+      await pagina.waitForTimeout(PAUSA_DO_LOGIN_MS);
       const saiu = await pagina.request.post(`${url}/api/auth/logout`, { data: {} });
       if (!saiu.ok()) throw new Error(`logout falhou (${saiu.status()}).`);
       console.log(`login: rodada ${i} de ${total} ok`);
+      await pagina.waitForTimeout(PAUSA_DO_LOGIN_MS);
     }
   } finally {
     await contexto.close();
   }
 }
+
+const PAUSA_DO_LOGIN_MS = 1500;
 
 const FLUXOS = { cadastro: rodaCadastro, login: rodaLogin };
 

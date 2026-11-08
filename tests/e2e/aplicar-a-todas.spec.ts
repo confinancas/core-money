@@ -108,9 +108,9 @@ async function simularApi(page: Page, restantesNasFatias: number[] = [0], atraso
 }
 
 // Contra o Worker de verdade (TASK-0104): a compra de teste e as compras do mesmo estabelecimento vêm do banco de
-// teste da instalação pronta. São 651 compras: a primeira fatia (500, o limite do servidor) deixa 150 para a tela
-// repetir, e a fatia seguinte zera.
-const COMPRAS_DO_ESTABELECIMENTO = 651;
+// teste da instalação pronta. São 2.151 compras: o PUT aplica até 4 fatias de 500 (2.000) e deixa 150 para a tela
+// repetir pela fatia seguinte, que zera.
+const COMPRAS_DO_ESTABELECIMENTO = 2151;
 const LAR = LAR_DA_INSTALACAO_PRONTA;
 
 // Compras, conta e conexão de teste; apaga as regras e as compras de rodadas anteriores do lar de teste.

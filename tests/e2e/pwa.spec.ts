@@ -55,11 +55,12 @@ test("o service worker registra e, offline, /inicio abre do cache com a moldura;
   await page.reload();
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
 
-  // Com a página já no cache, cada abertura sem rede vem do service worker.
+  // Com a página já no cache, cada abertura sem rede vem do service worker: a moldura abre do cache. O conteúdo é o
+  // erro de conexão, porque a sessão (que diz quem está logado) não pode ser lida sem rede.
   await context.setOffline(true);
   await page.goto("/inicio");
-  await expect(page.getByRole("heading", { name: "Início", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Navegação principal" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Não foi possível carregar" })).toBeVisible();
 
   // /api/* não é respondido pelo service worker: sem rede, a chamada falha em vez de receber resposta em cache.
   const resultadoDaApi = await page.evaluate(() =>
