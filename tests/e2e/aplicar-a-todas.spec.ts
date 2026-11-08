@@ -1,5 +1,10 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { CategoryDTO } from "../../src/shared/categories";
+import { semearInstalacaoPronta } from "./helpers/setup";
+
+test.beforeAll(() => {
+  semearInstalacaoPronta();
+});
 
 // Sem sessão real até a TASK-0104: a API (categorias, categorização da transação e regras) é simulada com page.route.
 // O simulador não repete a regra do servidor: devolve o que a tela precisa e guarda o que a tela manda. A regra de
@@ -44,7 +49,7 @@ type Estado = {
   puts: Array<{ categoryId: string; applyToAll: boolean }>;
 };
 
-async function simularApi(page: Page, restantesNasFatias: number[] = [0]): Promise<Estado> {
+async function simularApi(page: Page, restantesNasFatias: number[] = [0], atrasoMs = 600): Promise<Estado> {
   const estado: Estado = {
     restantesNasFatias: [...restantesNasFatias],
     falhasNaFatia: 0,
@@ -88,7 +93,7 @@ async function simularApi(page: Page, restantesNasFatias: number[] = [0]): Promi
       return rota.abort();
     }
     // Atraso curto: o progresso fica visível por um instante antes da próxima fatia.
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await new Promise((resolve) => setTimeout(resolve, atrasoMs));
     estado.fatias += 1;
     return rota.fulfill({ json: { applied: 300, remaining: estado.restantesNasFatias.shift() ?? 0 } });
   });
@@ -208,4 +213,51 @@ test("sem window.confirm e sem rolagem horizontal, com o cartão visível", asyn
     const cartaoCaixa = await cartao.boundingBox();
     expect((cartaoCaixa?.x ?? 0) > (lista?.x ?? 0) + (lista?.width ?? 0)).toBe(true);
   }
+});
+
+// Tablet: o cartão fica na coluna da direita, no alto da área, ao lado da lista (como o protótipo).
+test("tablet: o cartão fica ao lado da lista, no alto da área", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "tablet", "só a largura tablet põe o cartão ao lado da lista");
+  await simularApi(page, [0]);
+  await page.goto("/categorias/escolher?transacao=e2e-compra-1&voltar=/cartoes");
+
+  const cartao = await page.getByRole("region", { name: "Aplicar a todas" }).boundingBox();
+  const lista = await page.getByRole("radiogroup", { name: "Categorias" }).boundingBox();
+  const busca = await page
+    .locator("label")
+    .filter({ has: page.getByPlaceholder("Buscar categoria") })
+    .boundingBox();
+  const nova = await page.getByRole("link", { name: "Nova categoria", exact: true }).boundingBox();
+  if (!cartao || !lista || !busca || !nova)
+    throw new Error("cartão, lista, busca ou nova categoria fora da tela");
+  expect(cartao.x > lista.x + lista.width).toBe(true);
+  expect(Math.abs(cartao.y - busca.y)).toBeLessThanOrEqual(1);
+  // A lista cola no link "Nova categoria" (vão de 20 px do gap): o grid não espalha a altura que sobra entre as linhas.
+  expect(lista.y - (nova.y + nova.height)).toBeLessThanOrEqual(24);
+});
+
+// Laço retomado pelo "Tentar de novo": o Salvar fica desabilitado até o laço acabar, e clicar nele não grava de novo.
+test("laço retomado: Salvar categoria fica desabilitado e clicar nele não faz PUT", async ({ page }) => {
+  // O primeiro PUT deixa 300; a primeira chamada da fatia falha; o "Tentar de novo" zera numa fatia de 2 s.
+  const estado = await simularApi(page, [300, 0], 2000);
+  estado.falhasNaFatia = 1;
+  await page.goto("/categorias/escolher?transacao=e2e-compra-1&voltar=/cartoes");
+
+  const salvar = page.getByRole("button", { name: "Salvar categoria", exact: true });
+  await page.getByRole("radio", { name: /Serviços/ }).click();
+  await salvar.click();
+
+  await expect(page.getByRole("alert")).toContainText(
+    "Não deu para aplicar a todas as compras antigas agora.",
+  );
+  await expect(salvar).toBeEnabled();
+  await page.getByRole("button", { name: "Tentar de novo", exact: true }).click();
+
+  await expect(salvar).toBeDisabled();
+  await expect(page.getByRole("switch", { name: SWITCH, exact: true })).toBeDisabled();
+  await salvar.click({ force: true });
+
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
+  expect(estado.puts).toHaveLength(1);
+  expect(estado.fatias).toBe(1);
 });

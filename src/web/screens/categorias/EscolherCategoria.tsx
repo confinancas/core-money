@@ -165,27 +165,33 @@ export function EscolherCategoria() {
   }
 
   // Repete a fatia do retroativo até zerar. Falha no meio: fica o "Tentar de novo". Se outra regra assumiu o
-  // estabelecimento (409), esta termina e volta: a outra cuida do resto.
+  // estabelecimento (409), esta termina e volta: a outra cuida do resto. Durante o laço (também o retomado pelo
+  // "Tentar de novo") o "Salvar categoria" e o switch ficam desabilitados.
   async function continuarRetroativo(regraId: string, categoria: string): Promise<void> {
     setFalhaRetroativo(null);
-    for (let volta = 0; volta < MAXIMO_DE_VOLTAS; volta++) {
-      try {
-        const fatia = await applyRetroactive(regraId);
-        setProgresso(fatia.remaining);
-        if (fatia.remaining <= 0) {
-          concluir(categoria);
+    setSalvando(true);
+    try {
+      for (let volta = 0; volta < MAXIMO_DE_VOLTAS; volta++) {
+        try {
+          const fatia = await applyRetroactive(regraId);
+          setProgresso(fatia.remaining);
+          if (fatia.remaining <= 0) {
+            concluir(categoria);
+            return;
+          }
+        } catch (erro) {
+          if (erro instanceof ApiError && erro.code === "regra_inativa") {
+            concluir(categoria);
+            return;
+          }
+          setFalhaRetroativo(regraId);
           return;
         }
-      } catch (erro) {
-        if (erro instanceof ApiError && erro.code === "regra_inativa") {
-          concluir(categoria);
-          return;
-        }
-        setFalhaRetroativo(regraId);
-        return;
       }
+      setFalhaRetroativo(regraId);
+    } finally {
+      setSalvando(false);
     }
-    setFalhaRetroativo(regraId);
   }
 
   async function salvar() {
@@ -285,7 +291,7 @@ export function EscolherCategoria() {
     <div className="flex min-h-dvh flex-col bg-bg">
       <GreenTop variant="form" title="Categoria" close={{ to: destinoDeVoltar(aba), label: "Fechar" }} />
 
-      <div className="grid flex-1 gap-5 px-4 pt-4 pb-6 tablet:grid-cols-2 tablet:px-6 tablet:pt-5 desktop:grid-cols-3 desktop:px-8">
+      <div className="grid flex-1 content-start gap-5 px-4 pt-4 pb-6 tablet:grid-cols-2 tablet:px-6 tablet:pt-5 desktop:grid-cols-3 desktop:px-8">
         <div className="flex min-w-0 flex-col gap-3.5 tablet:col-start-1 tablet:row-start-1 desktop:col-start-1 desktop:row-start-1">
           <label className="flex min-h-[52px] items-center gap-2.5 rounded-[18px] bg-card px-4 shadow-card">
             <svg
@@ -338,7 +344,7 @@ export function EscolherCategoria() {
         </div>
 
         {transacao !== null && (
-          <div className="flex min-w-0 flex-col gap-3 tablet:col-start-1 tablet:row-start-3 desktop:col-start-3 desktop:row-start-1">
+          <div className="flex min-w-0 flex-col gap-3 tablet:col-start-2 tablet:row-start-1 desktop:col-start-3 desktop:row-start-1">
             {falhaCategorizacao && (
               <p role="alert" className="rounded-[18px] bg-card px-4 py-3 text-[14px] text-ink shadow-card">
                 Não deu para carregar esta compra.
