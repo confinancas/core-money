@@ -8,6 +8,10 @@ export const PUBLIC_API_ROUTES: readonly string[] = [
   "POST /api/auth/login/verify",
   "POST /api/auth/logout",
   "GET /api/auth/session",
+  // Convites (TASK-0105): o convite se consulta pelo token, e o aceite tem duas etapas (opções e verificação).
+  "POST /api/invites/inspect",
+  "POST /api/invites/accept/options",
+  "POST /api/invites/accept/verify",
 ];
 
 export function isPublicRoute(method: string, path: string): boolean {
