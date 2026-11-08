@@ -20,6 +20,7 @@ import {
   takeChallenge,
   type WebAuthnLoginVerifier,
 } from "../auth/webauthn";
+import { type AvisoDeAparelhoNovo, avisosDeAparelhoNovo } from "../devices/notices";
 import type { AppEnv } from "../env";
 import type { SessionIdentity, SessionResolver } from "../household/context";
 import { getHousehold } from "../household/repository";
@@ -42,6 +43,43 @@ type LinhaDaPasskey = {
 // A passkey e a pessoa dela numa consulta: sem linha, a passkey não existe mais (ou foi removida).
 const SQL_PASSKEY =
   "SELECT p.id, p.member_id, p.public_key, p.counter, p.transports, m.household_id, m.name, m.email, m.role FROM passkeys p JOIN members m ON m.id = p.member_id WHERE p.id = ?";
+
+// Os aparelhos que entraram por recuperação e a sessão desta requisição, numa consulta. Sem linha, não há aviso.
+const SQL_AVISOS_DA_SESSAO =
+  "SELECT s.member_id AS sessao_member, s.passkey_id AS sessao_passkey, s.created_at AS sessao_criada, s.notices_seen_at AS sessao_vista, p.id, p.member_id, p.added_via, p.device_name, p.created_at FROM sessions s JOIN passkeys p ON p.member_id = s.member_id WHERE s.token_hash = ? AND p.added_via = 'recuperacao'";
+
+type LinhaDeAviso = {
+  sessao_member: string;
+  sessao_passkey: string;
+  sessao_criada: string;
+  sessao_vista: string | null;
+  id: string;
+  member_id: string;
+  added_via: string;
+  device_name: string;
+  created_at: string;
+};
+
+async function avisosDaSessao(d1: D1Database, tokenHash: string): Promise<AvisoDeAparelhoNovo[]> {
+  const { results } = await d1.prepare(SQL_AVISOS_DA_SESSAO).bind(tokenHash).all<LinhaDeAviso>();
+  const primeira = results[0];
+  if (!primeira) return [];
+  return avisosDeAparelhoNovo(
+    results.map((linha) => ({
+      id: linha.id,
+      memberId: linha.member_id,
+      addedVia: linha.added_via,
+      deviceName: linha.device_name,
+      createdAt: linha.created_at,
+    })),
+    {
+      memberId: primeira.sessao_member,
+      passkeyId: primeira.sessao_passkey,
+      createdAt: primeira.sessao_criada,
+      noticesSeenAt: primeira.sessao_vista,
+    },
+  );
+}
 
 // Corpo como objeto JSON; null quando não é um.
 async function lerObjeto(c: Context<AppEnv>): Promise<Record<string, unknown> | null> {
@@ -146,7 +184,8 @@ export function authRoutes(webauthn: WebAuthnLoginVerifier, resolveSession: Sess
     return c.json({ ok: true }, 200);
   });
 
-  // Com sessão: quem sou, o lar e as pessoas dele (o pé do menu). Sem sessão: 401 e o cookie apagado.
+  // Com sessão: quem sou, o lar, as pessoas dele (o pé do menu) e os avisos de aparelho novo (TASK-0106).
+  // Sem sessão: 401 e o cookie apagado.
   rotas.get("/session", async (c) => {
     const sessao: SessionIdentity | null = await resolveSession(c);
     if (!sessao) return apiError(c, 401, "nao_autenticado", MENSAGEM_NAO_AUTENTICADO);
@@ -156,15 +195,28 @@ export function authRoutes(webauthn: WebAuthnLoginVerifier, resolveSession: Sess
       deleteCookie(c, COOKIE_DA_SESSAO, { path: "/" });
       return apiError(c, 401, "nao_autenticado", MENSAGEM_NAO_AUTENTICADO);
     }
+    const tokenHash = (sessao as { tokenHash?: string }).tokenHash;
+    const notices = tokenHash ? await avisosDaSessao(c.var.db.$client, tokenHash) : [];
     return c.json(
       {
         member: { id: eu.id, name: eu.name, email: eu.email, role: eu.role },
         household: { id: lar.household.id, brand: lar.household.brand },
         members: lar.members.map((pessoa) => ({ id: pessoa.id, name: pessoa.name, role: pessoa.role })),
-        notices: [],
+        notices,
       },
       200,
     );
+  });
+
+  // "Foi eu" (TASK-0106): marca os avisos de aparelho novo como vistos, só nesta sessão.
+  rotas.post("/notices/seen", async (c) => {
+    const tokenHash = c.var.session?.tokenHash;
+    if (!tokenHash) return apiError(c, 401, "nao_autenticado", MENSAGEM_NAO_AUTENTICADO);
+    await c.var.db.$client
+      .prepare("UPDATE sessions SET notices_seen_at = ? WHERE token_hash = ?")
+      .bind(new Date().toISOString(), tokenHash)
+      .run();
+    return c.json({ ok: true }, 200);
   });
 
   return rotas;

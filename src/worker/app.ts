@@ -12,9 +12,11 @@ import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
 import { type ValidacaoDaChave, validateClaudeKey } from "./providers/anthropic";
 import { authRoutes } from "./routes/auth";
+import { devicesRoutes } from "./routes/devices";
 import { healthRoute } from "./routes/health";
 import { householdRoutes } from "./routes/household";
 import { invitesRoutes } from "./routes/invites";
+import { recoveryRoutes } from "./routes/recovery";
 import { settingsRoutes } from "./routes/settings";
 import { setupRoutes } from "./routes/setup";
 import { setupHouseholdRoutes } from "./routes/setup-household";
@@ -98,6 +100,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/rules", regrasRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
+  app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));
+  app.route("/", recoveryRoutes(webauthn, resolverDaSessao, options.agora));
 
   app.notFound((c) => apiError(c, 404, "rota_inexistente", "Rota não encontrada."));
 

@@ -16,7 +16,14 @@ export type Env = {
   SETUP_SEM_CACHE?: string;
 };
 
+// A sessão real (TASK-0104) traz o hash do token e a passkey desta sessão; os resolvedores dos testes podem não trazer.
 export type AppEnv = {
   Bindings: Env;
-  Variables: { db: Db; meter: Meter; marca: BrandConfig; versao: string; session?: SessionIdentity };
+  Variables: {
+    db: Db;
+    meter: Meter;
+    marca: BrandConfig;
+    versao: string;
+    session?: SessionIdentity & { tokenHash?: string; passkeyId?: string };
+  };
 };
