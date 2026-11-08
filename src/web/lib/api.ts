@@ -44,13 +44,22 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly fields?: Record<string, string>;
+  // O corpo inteiro da resposta de erro (TASK-0105: o convite vencido traz quem convidou e o vencimento).
+  readonly corpo?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string, fields?: Record<string, string>) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    fields?: Record<string, string>,
+    corpo?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.corpo = corpo;
   }
 }
 
@@ -92,7 +101,13 @@ export async function apiFetch<T>(caminho: string, init: RequestInit = {}): Prom
       ) {
         levaParaEntrar();
       }
-      throw new ApiError(resposta.status, erro.error, erro.message ?? MENSAGEM_PADRAO, erro.fields);
+      throw new ApiError(
+        resposta.status,
+        erro.error,
+        erro.message ?? MENSAGEM_PADRAO,
+        erro.fields,
+        corpo as Record<string, unknown>,
+      );
     }
     throw new ApiError(resposta.status, "erro_http", MENSAGEM_PADRAO);
   }

@@ -8,7 +8,7 @@ import { brand } from "../../shared/brand";
 import { memberEmailSchema, memberNameSchema } from "../../shared/household";
 import type { SetupStatus } from "../../shared/setup";
 import { AccessLayout } from "../access/AccessLayout";
-import { type DadosDoCadastro, PasskeyStep } from "../access/PasskeyStep";
+import { PasskeyStep } from "../access/PasskeyStep";
 import { apiFetch } from "../lib/api";
 import { SpouseStep } from "./cadastro/SpouseStep";
 
@@ -24,7 +24,7 @@ export function Cadastro() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [erros, setErros] = useState<Record<string, string>>({});
-  const [dados, setDados] = useState<DadosDoCadastro | null>(null);
+  const [dados, setDados] = useState<{ name: string; email: string | null } | null>(null);
 
   const consultarStatus = useCallback(async () => {
     setSituacao("carregando");
@@ -120,14 +120,22 @@ export function Cadastro() {
   if (passo === 2 && dados) {
     return (
       <AccessLayout steps={{ current: 2, total: 3, label: "Sua passkey" }}>
-        <PasskeyStep dados={dados} aoCriar={() => setPasso(3)} aoVoltar={() => setPasso(1)} />
+        <PasskeyStep
+          entrada={{
+            optionsUrl: "/api/setup/household/options",
+            verifyUrl: "/api/setup/household/verify",
+            body: { name: dados.name, email: dados.email },
+          }}
+          aoCriar={() => setPasso(3)}
+          aoVoltar={() => setPasso(1)}
+        />
       </AccessLayout>
     );
   }
 
   return (
     <AccessLayout steps={{ current: 3, total: 3, label: "Seu cônjuge" }}>
-      <SpouseStep />
+      <SpouseStep nomeDoTitular={dados?.name ?? ""} />
     </AccessLayout>
   );
 }

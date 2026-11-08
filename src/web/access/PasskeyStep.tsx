@@ -4,22 +4,24 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   createPasskey,
+  type EntradaDaPasskey,
   mensagemDaPasskey,
   navegadorTemPasskey,
   PasskeyIndisponivelError,
 } from "./passkey-client";
 
-export type DadosDoCadastro = { name: string; email: string | null };
-
 const MENSAGEM_SEM_PASSKEY = mensagemDaPasskey(new PasskeyIndisponivelError()).mensagem;
 
-// Passo 2 do cadastro: "Crie sua passkey". Cada toque é uma cerimônia só (trava); o erro vira a mensagem da tabela.
+// Passo "Crie sua passkey" (TASK-0103 no cadastro; TASK-0105 no aceite do convite). A entrada (as duas rotas e o corpo)
+// é de quem usa a tela. Cada toque é uma cerimônia só (trava); o erro vira a mensagem da tabela.
 export function PasskeyStep({
-  dados,
+  entrada,
+  titulo = "Crie sua passkey",
   aoCriar,
   aoVoltar,
 }: {
-  dados: DadosDoCadastro;
+  entrada: EntradaDaPasskey;
+  titulo?: string;
   aoCriar: () => void;
   aoVoltar: () => void;
 }) {
@@ -35,11 +37,7 @@ export function PasskeyStep({
     setEnviando(true);
     setErro(null);
     try {
-      await createPasskey({
-        optionsUrl: "/api/setup/household/options",
-        verifyUrl: "/api/setup/household/verify",
-        body: { name: dados.name, email: dados.email },
-      });
+      await createPasskey(entrada);
       aoCriar();
     } catch (falha) {
       const tratado = mensagemDaPasskey(falha);
@@ -57,7 +55,7 @@ export function PasskeyStep({
   return (
     <Card className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-[32px] font-extrabold tracking-[-0.5px]">Crie sua passkey</h1>
+        <h1 className="text-[32px] font-extrabold tracking-[-0.5px]">{titulo}</h1>
         <p className="text-[14px] leading-normal text-ink-2">
           Em vez de senha, você entra com a digital, o rosto ou o PIN deste aparelho. Nada para decorar, nada
           para vazar.

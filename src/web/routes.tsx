@@ -6,6 +6,8 @@ import { Moldura } from "./app/Moldura";
 import { NotFound } from "./app/NotFound";
 import { PlaceholderScreen } from "./app/PlaceholderScreen";
 import { Catalogo } from "./dev/Catalog";
+import { AceitarConvite } from "./screens/AceitarConvite";
+import { AdicionarConjuge } from "./screens/AdicionarConjuge";
 import { Cadastro } from "./screens/Cadastro";
 import { ConfiguracaoInicial } from "./screens/ConfiguracaoInicial";
 import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
@@ -26,7 +28,7 @@ export const ROTAS: RotaDaTabela[] = [
   { path: "/", frame: "bare", title: "Abertura", element: <Abertura /> },
   { path: "/entrar", frame: "bare", title: "Entrar", element: <Login /> },
   { path: "/criar-conta", frame: "bare", title: "Criar conta", element: <Cadastro /> },
-  { path: "/convite/:token", frame: "bare", title: "Aceitar convite", element: provisoria },
+  { path: "/convite/:token", frame: "bare", title: "Aceitar convite", element: <AceitarConvite /> },
   { path: "/recuperar/:token", frame: "bare", title: "Recuperar acesso", element: provisoria },
   {
     path: "/configuracao-inicial",
@@ -161,7 +163,7 @@ export const ROTAS: RotaDaTabela[] = [
     frame: "full",
     tab: "configuracoes",
     title: "Adicionar cônjuge",
-    element: provisoria,
+    element: <AdicionarConjuge />,
   },
   {
     path: "/configuracoes/bancos/conectar",

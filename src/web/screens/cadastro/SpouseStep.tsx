@@ -1,18 +1,68 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { brand } from "../../../shared/brand";
+import type { ConviteCriado } from "../../../shared/invites";
+import {
+  diaEMes,
+  TITULO_DO_COMPARTILHAMENTO,
+  textoDoCompartilhamento,
+  VOCES_DOIS_VAO_PODER,
+} from "../../access/convite-textos";
+import { ShareLink } from "../../access/ShareLink";
+import { apiEnviar, mensagemDoErro } from "../../lib/api";
+import { type DadosDoConjuge, SpouseForm } from "./SpouseForm";
 
-// Passo 3 do cadastro (TASK-0103): só "Adicionar depois". O formulário do cônjuge entra na TASK-0105.
-const VOCES_DOIS_VAO_PODER = [
-  "Ver cartões, contas, renda e relatórios do casal",
-  "Conectar a própria conta Meu Pluggy",
-  "Categorizar, renomear e ocultar compras e Pix",
-  "Concluir o balanço do mês e mudar as configurações",
-];
-
-export function SpouseStep() {
+// Passo 3 do cadastro (TASK-0103 com o formulário de TASK-0105): adicionar o cônjuge agora, com o link para mandar,
+// ou depois, em Configurações › Casal. O convite nasce aqui; o link aparece uma vez.
+export function SpouseStep({ nomeDoTitular }: { nomeDoTitular: string }) {
   const navegar = useNavigate();
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [criado, setCriado] = useState<{ nome: string; resposta: ConviteCriado } | null>(null);
+
+  async function adicionar(dados: DadosDoConjuge) {
+    if (enviando) return;
+    setEnviando(true);
+    setErro(null);
+    try {
+      const resposta = await apiEnviar<ConviteCriado>("/api/invites/conjuge", "POST", dados);
+      setCriado({ nome: dados.name, resposta });
+    } catch (falha) {
+      setErro(mensagemDoErro(falha));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (criado) {
+    const { resposta, nome } = criado;
+    return (
+      <Card className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-[32px] font-extrabold tracking-[-0.5px]">Convite criado</h1>
+          <p className="text-[14px] leading-normal text-ink-2">
+            Envie o link para {nome}. Ele vale até {diaEMes(resposta.invite.expiresAt)} e serve uma vez só.
+          </p>
+        </div>
+
+        <ShareLink
+          link={resposta.link}
+          shareTitle={TITULO_DO_COMPARTILHAMENTO}
+          shareText={textoDoCompartilhamento(nomeDoTitular, resposta.invite.expiresAt)}
+        />
+
+        <span className="rounded-card border border-field-border bg-card px-4 py-3 text-[14px] text-ink">
+          {nome} · cônjuge · <span className="font-semibold text-primary">Aguardando entrar</span>
+        </span>
+
+        <Button full onClick={() => navegar("/inicio")}>
+          Entrar no {brand.name}
+        </Button>
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex flex-col gap-5">
@@ -46,11 +96,9 @@ export function SpouseStep() {
         ))}
       </section>
 
-      <p className="text-[13px] leading-normal text-ink-2">
-        Dá para fazer isso agora ou depois, em Configurações › Casal.
-      </p>
+      <SpouseForm enviando={enviando} erroGeral={erro} aoEnviar={adicionar} />
 
-      <Button full onClick={() => navegar("/inicio")}>
+      <Button variant="secondary" full onClick={() => navegar("/inicio")} disabled={enviando}>
         Adicionar depois
       </Button>
     </Card>
