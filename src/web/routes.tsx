@@ -11,6 +11,8 @@ import { ConfiguracaoInicial } from "./screens/ConfiguracaoInicial";
 import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
 import { NovaCategoria } from "./screens/categorias/NovaCategoria";
 import { ChaveDoClaude } from "./screens/configuracoes/ChaveDoClaude";
+import { Login } from "./screens/Login";
+import { RequireSession } from "./session/RequireSession";
 
 // Telas que um app põe no lugar das provisórias, pelo path da rota da tabela.
 export type TelasDoApp = Partial<Record<string, ReactNode>>;
@@ -22,7 +24,7 @@ const provisoria = <PlaceholderScreen />;
 // Tabela de rotas da convenção. Cada épico troca o PlaceholderScreen pela tela de verdade.
 export const ROTAS: RotaDaTabela[] = [
   { path: "/", frame: "bare", title: "Abertura", element: <Abertura /> },
-  { path: "/entrar", frame: "bare", title: "Entrar", element: provisoria },
+  { path: "/entrar", frame: "bare", title: "Entrar", element: <Login /> },
   { path: "/criar-conta", frame: "bare", title: "Criar conta", element: <Cadastro /> },
   { path: "/convite/:token", frame: "bare", title: "Aceitar convite", element: provisoria },
   { path: "/recuperar/:token", frame: "bare", title: "Recuperar acesso", element: provisoria },
@@ -196,11 +198,17 @@ export function criarRotas(telas: TelasDoApp = {}): RouteObject[] {
       element: <Moldura />,
       children: ROTAS.map((rota) => ({
         path: rota.path,
-        element: telas[rota.path] ?? rota.element,
+        element: envolveSessao(rota, telas[rota.path] ?? rota.element),
         handle: metaDaRota(rota),
       })),
     },
   ];
+}
+
+// As rotas da moldura (tab, detail e full) exigem sessão (TASK-0104). As telas de acesso e a Abertura não.
+function envolveSessao(rota: RotaDaTabela, elemento: ReactNode): ReactNode {
+  if (rota.frame === "bare") return elemento;
+  return <RequireSession>{elemento}</RequireSession>;
 }
 
 function metaDaRota(rota: RotaDaTabela): RotaMeta {

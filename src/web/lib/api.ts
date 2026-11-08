@@ -19,6 +19,26 @@ export function definirAcaoDaConfiguracaoPendente(acao: () => void): () => void 
   };
 }
 
+// Sessão vencida ou sem sessão (401 nao_autenticado) fora das telas de acesso: vai para /entrar (TASK-0104).
+// A sonda da sessão não redireciona: quem trata o 401 dela é a partida e o RequireSession.
+const TELAS_PUBLICAS = ["/", "/entrar", "/criar-conta", "/configuracao-inicial"];
+const CAMINHO_DA_SONDA_DA_SESSAO = "/api/auth/session";
+let levaParaEntrar = (): void => {
+  const caminho = window.location.pathname;
+  const publica =
+    TELAS_PUBLICAS.includes(caminho) || caminho.startsWith("/convite/") || caminho.startsWith("/recuperar/");
+  if (!publica) window.location.replace("/entrar");
+};
+
+// Devolve a ação anterior, para o teste restaurar.
+export function definirAcaoDeSessaoExpirada(acao: () => void): () => void {
+  const anterior = levaParaEntrar;
+  levaParaEntrar = acao;
+  return () => {
+    levaParaEntrar = anterior;
+  };
+}
+
 // Falha da API: status (0 quando não houve resposta), código da convenção e mensagem para a tela.
 export class ApiError extends Error {
   readonly status: number;
@@ -65,6 +85,13 @@ export async function apiFetch<T>(caminho: string, init: RequestInit = {}): Prom
     if (isApiErrorBody(corpo)) {
       const erro: ApiErrorBody = corpo;
       if (resposta.status === 503 && erro.error === "configuracao_pendente") levaParaConfiguracao();
+      if (
+        resposta.status === 401 &&
+        erro.error === "nao_autenticado" &&
+        caminho !== CAMINHO_DA_SONDA_DA_SESSAO
+      ) {
+        levaParaEntrar();
+      }
       throw new ApiError(resposta.status, erro.error, erro.message ?? MENSAGEM_PADRAO, erro.fields);
     }
     throw new ApiError(resposta.status, "erro_http", MENSAGEM_PADRAO);

@@ -21,6 +21,11 @@ for (const chave of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "MM_DEV_MA
   if (process.env[chave]) valoresSecretos.push(process.env[chave]);
 }
 if (process.env.MM_CPU_URL) valoresSecretos.push(process.env.MM_CPU_URL);
+// A chave privada da passkey de teste (TASK-0104) nunca sai na saída de erro.
+if (process.env.MM_CPU_PASSKEY) {
+  const passkeyDeTeste = JSON.parse(process.env.MM_CPU_PASSKEY);
+  if (passkeyDeTeste.privateKeyPkcs8Base64) valoresSecretos.push(passkeyDeTeste.privateKeyPkcs8Base64);
+}
 
 function mascara(texto) {
   let saida = String(texto).replace(/https?:\/\/[^\s"'<>]*/g, "<url-mascarada>");
@@ -124,14 +129,65 @@ async function rodaCadastro(navegador) {
   }
 }
 
-const FLUXOS = { cadastro: rodaCadastro };
+// Entrada com passkey (TASK-0104): a passkey de teste (criada pelo measure-cpu, no banco de medição, com a chave pública
+// no D1) entra no autenticador virtual. Cada rodada abre /entrar, toca em Entrar com passkey e chega a /inicio (login/
+// options e login/verify), e sai pela API (logout). Não zera o banco: o login usa a passkey do preparo.
+async function rodaLogin(navegador, total) {
+  const passkey = JSON.parse(process.env.MM_CPU_PASSKEY ?? "null");
+  if (!passkey)
+    throw new Error("Sem passkey de teste: o measure-cpu passa MM_CPU_PASSKEY para o fluxo login.");
+  const contexto = await navegador.newContext();
+  try {
+    const pagina = await contexto.newPage();
+    const cdp = await contexto.newCDPSession(pagina);
+    await cdp.send("WebAuthn.enable");
+    const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
+      options: {
+        protocol: "ctap2",
+        transport: "internal",
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    });
+    await cdp.send("WebAuthn.addCredential", {
+      authenticatorId,
+      credential: {
+        credentialId: passkey.credentialIdBase64,
+        isResidentCredential: true,
+        rpId: new URL(url).hostname,
+        privateKey: passkey.privateKeyPkcs8Base64,
+        userHandle: passkey.userHandleBase64,
+        signCount: 0,
+      },
+    });
+    for (let i = 1; i <= total; i++) {
+      await pagina.goto(`${url}/entrar`, { timeout: 60000 });
+      await pagina.getByRole("button", { name: "Entrar com passkey", exact: true }).click();
+      await pagina.waitForURL(/\/inicio$/, { timeout: 60000 });
+      const saiu = await pagina.request.post(`${url}/api/auth/logout`, { data: {} });
+      if (!saiu.ok()) throw new Error(`logout falhou (${saiu.status()}).`);
+      console.log(`login: rodada ${i} de ${total} ok`);
+    }
+  } finally {
+    await contexto.close();
+  }
+}
+
+const FLUXOS = { cadastro: rodaCadastro, login: rodaLogin };
 
 async function main() {
   const fluxo = FLUXOS[nomeDoFluxo];
   if (!fluxo) throw new Error(`Fluxo desconhecido: ${nomeDoFluxo}`);
-  const ordem = ordemDeEsvaziamento();
   const navegador = await chromium.launch();
   try {
+    if (nomeDoFluxo === "login") {
+      // O login roda em série num contexto só (a passkey fica no autenticador); o banco não é zerado.
+      await fluxo(navegador, rodadas);
+      return;
+    }
+    const ordem = ordemDeEsvaziamento();
     for (let i = 1; i <= rodadas; i++) {
       preparaInstalacao(ordem);
       await fluxo(navegador);

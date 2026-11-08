@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, isValidElement } from "react";
 import { describe, expect, it } from "vitest";
 import { type Aba, type Frame, type RotaMeta, resolveActiveTab } from "@/app/frame/aba";
 import { criarRotas, ROTAS } from "@/routes";
@@ -115,7 +115,10 @@ describe("criarRotas", () => {
     const filhos = layout?.children ?? [];
     const inicio = filhos.find((filho) => filho.path === "/inicio");
 
-    expect(inicio?.element).toBe(tela);
+    // A rota da moldura (tab) vem dentro do RequireSession (TASK-0104): a tela do app é o filho dele.
+    const envolvido = inicio?.element as { props: { children: unknown } } | undefined;
+    expect(isValidElement(envolvido)).toBe(true);
+    expect(envolvido?.props.children).toBe(tela);
     expect(inicio?.handle).toEqual({ frame: "tab", tab: "inicio", title: "Início" });
   });
 

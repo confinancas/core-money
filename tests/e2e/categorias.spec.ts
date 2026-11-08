@@ -1,7 +1,10 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { CategoryDTO } from "../../src/shared/categories";
+import { executaSql } from "./helpers/db";
+import { LAR_DA_INSTALACAO_PRONTA, signUpAndSignIn } from "./helpers/sessao";
 
-// Sem sessão real até a TASK-0104: a API de categorias é simulada com page.route. O simulador devolve a semente
+// A API de categorias é simulada com page.route nos cenários 9, 10 e 12. Os cenários 4 e 5 usam a API de verdade
+// (criam e leem a semente do lar de teste). O simulador devolve a semente
 // com os tipos do CategoryDTO e guarda o que for criado; não repete regra de validação (essa é da API e do teste de integração).
 const categoria = (
   id: string,
@@ -67,10 +70,19 @@ async function simularApi(page: Page) {
 }
 
 // Cenário 4: criar pelo seletor e voltar com a nova selecionada.
+// Sessão da instalação pronta: o cookie da sessão de teste em cada página (o lar foi semeado pelo global setup).
+test.beforeEach(async ({ page }) => {
+  await signUpAndSignIn(page);
+});
+
 test("cenário 4: criar '[TEST] Pet' com cor Rosa e voltar ao seletor com ela selecionada", async ({
   page,
 }) => {
-  await simularApi(page);
+  // Contra o Worker de verdade: a categoria de testes de uma execução anterior sai antes (o nome é único no lar).
+  executaSql(
+    "pronta",
+    `DELETE FROM categories WHERE household_id = '${LAR_DA_INSTALACAO_PRONTA}' AND name = '[TEST] Pet'`,
+  );
   await page.goto("/categorias/escolher");
   await expect(page.getByRole("radio", { name: "Mercado", exact: true })).toBeVisible();
 
@@ -91,12 +103,14 @@ test("cenário 4: criar '[TEST] Pet' com cor Rosa e voltar ao seletor com ela se
 test("cenário 5: 'Subcategoria em Saúde' abre o formulário com Dentro de = Saúde e a cor Rosa", async ({
   page,
 }) => {
-  await simularApi(page);
   await page.goto("/categorias/escolher");
 
   await page.getByRole("link", { name: "Subcategoria em Saúde", exact: true }).click();
 
-  await expect(page.getByLabel("Dentro de", { exact: true })).toHaveValue("e2e-saude");
+  // A semente real: o id da categoria Saúde do lar de teste.
+  await expect(page.getByLabel("Dentro de", { exact: true })).toHaveValue(
+    `seed:${LAR_DA_INSTALACAO_PRONTA}:saude`,
+  );
   await expect(page.getByRole("radio", { name: "Rosa", exact: true })).toBeChecked();
 });
 

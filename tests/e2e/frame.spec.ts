@@ -1,6 +1,12 @@
 import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
+import { signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta } from "./helpers/setup";
 import { marca } from "./marca";
+
+// Sessão da instalação pronta: o cookie da sessão de teste em cada página (o lar foi semeado pelo global setup).
+test.beforeEach(async ({ page }) => {
+  await signUpAndSignIn(page);
+});
 
 test.beforeAll(() => {
   semearInstalacaoPronta();

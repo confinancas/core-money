@@ -1,6 +1,13 @@
-// Cliente da passkey do cadastro (TASK-0103): opções do servidor, cerimônia do navegador, verificação do servidor.
-import { type PublicKeyCredentialCreationOptionsJSON, startRegistration } from "@simplewebauthn/browser";
+// Cliente da passkey (TASK-0103 no cadastro; TASK-0104 na entrada): opções do servidor, cerimônia do navegador,
+// verificação do servidor.
+import {
+  type PublicKeyCredentialCreationOptionsJSON,
+  type PublicKeyCredentialRequestOptionsJSON,
+  startAuthentication,
+  startRegistration,
+} from "@simplewebauthn/browser";
 import { brand } from "../../shared/brand";
+import type { LoginResponse } from "../../shared/session";
 import { ApiError, apiEnviar } from "../lib/api";
 
 export type EntradaDaPasskey = {
@@ -91,4 +98,41 @@ export function mensagemDaPasskey(erro: unknown): MensagemDaPasskey {
     return { mensagem: `Este aparelho já tem uma passkey sua neste ${brand.name}.`, acao: null };
   }
   return { mensagem: "Não deu para criar a passkey agora. Tente de novo.", acao: null };
+}
+
+// Entrada com passkey (TASK-0104): opções sem allowCredentials, a cerimônia de leitura e a verificação. O navegador
+// oferece as passkeys do aparelho ou o QR code do celular.
+export async function signInWithPasskey(): Promise<LoginResponse> {
+  if (!navegadorTemPasskey()) throw new PasskeyIndisponivelError();
+  const optionsJSON = await apiEnviar<PublicKeyCredentialRequestOptionsJSON>(
+    "/api/auth/login/options",
+    "POST",
+    {},
+  );
+  const response = await startAuthentication({ optionsJSON });
+  return apiEnviar<LoginResponse>("/api/auth/login/verify", "POST", { response });
+}
+
+// Tabela de mensagens da entrada (TASK-0104). Uma mensagem por situação.
+export function mensagemDoLogin(erro: unknown): string {
+  if (erro instanceof PasskeyIndisponivelError) {
+    return "Este navegador não usa passkeys. Use o Safari no iPhone, o Chrome no Android ou um navegador atualizado no computador.";
+  }
+  if (erro instanceof ApiError) {
+    switch (erro.code) {
+      case "passkey_desconhecida":
+        return "Essa passkey não vale mais: o aparelho foi removido. Entre com outro aparelho ou peça um link de recuperação.";
+      case "passkey_nao_confere":
+        return "A passkey não conferiu. Tente de novo.";
+      case "desafio_expirado":
+        return "Demorou demais. Toque em Entrar com passkey de novo.";
+      default:
+        return "Não deu para entrar agora. Tente de novo.";
+    }
+  }
+  const { nome, causa, codigo } = nomesDoErro(erro);
+  if (nome === "NotAllowedError" || causa === "NotAllowedError" || codigo === "ERROR_CEREMONY_ABORTED") {
+    return `A entrada foi cancelada, ou este aparelho não tem uma passkey do ${brand.name}. Tente de novo ou use o QR code com o celular.`;
+  }
+  return "Não deu para entrar agora. Tente de novo.";
 }

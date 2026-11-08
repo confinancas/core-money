@@ -7,6 +7,7 @@ import { newMeter } from "../../src/worker/db/metered-d1";
 import { ChaveDaIaError, type ValidacaoDaChave } from "../../src/worker/providers/anthropic";
 import { saveSecret, secretStatus } from "../../src/worker/security/secrets";
 import { callApi, semearPronto } from "./helpers/app";
+import { RESOLVEDOR_DE_TESTE } from "./helpers/sessao";
 
 const db = createDb(env.DB, newMeter());
 // Chave mestra diferente da do teste: as linhas gravadas com ela não abrem na instalação de teste.
@@ -26,7 +27,8 @@ const SEM_MESTRA = { ...env, MASTER_KEY: "" } as typeof env;
 const MENSAGEM_DE_CREDITO =
   "A conta da Anthropic está sem crédito. Adicione crédito em console.anthropic.com e tente de novo.";
 
-const criarApp = (validateClaudeKey: ValidacaoDaChave = CHAVE_VALIDA_OK) => createApp({ validateClaudeKey });
+const criarApp = (validateClaudeKey: ValidacaoDaChave = CHAVE_VALIDA_OK) =>
+  createApp({ validateClaudeKey, resolveSession: RESOLVEDOR_DE_TESTE });
 
 beforeEach(async () => {
   await semearPronto(env.DB);

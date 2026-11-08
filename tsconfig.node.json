@@ -12,5 +12,6 @@
     "playwright.config.ts",
     "scripts/**/*",
     "src/shared/household.ts"
-  ]
+  ],
+  "exclude": ["scripts/dev/cpu-worker.ts"]
 }

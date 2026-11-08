@@ -1,8 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { signUpAndSignIn } from "./helpers/sessao";
 import { gravaChaveQueNaoAbre, semearInstalacaoPronta, zeraChavesDaInstalacaoPronta } from "./helpers/setup";
 
 // Instalação pronta (porta 8788): as chaves são zeradas antes de cada teste; o primeiro acesso continua usado.
 const CAMPO_DA_CHAVE = "Chave da API da Anthropic";
+
+// Sessão da instalação pronta: o cookie da sessão de teste em cada página (o lar foi semeado pelo global setup).
+test.beforeEach(async ({ page }) => {
+  await signUpAndSignIn(page);
+});
 
 test.beforeAll(() => {
   semearInstalacaoPronta();

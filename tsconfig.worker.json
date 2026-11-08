@@ -5,5 +5,5 @@
     "types": ["@cloudflare/workers-types"],
     "resolveJsonModule": true
   },
-  "include": ["src/worker", "src/shared"]
+  "include": ["src/worker", "src/shared", "scripts/dev/cpu-worker.ts"]
 }

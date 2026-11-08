@@ -1,0 +1,166 @@
+{
+  "task": "TASK-0104",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES ('cpu-0104-primeiro-acesso', NULL, 'primeiro_acesso', 'cpu-0104-codigo-ja-usado', '2026-11-08T00:00:00.000Z', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-2', 'cpu-lar', '[TEST] Pessoa B', 'pessoa.b@example.com', 'conjuge', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO categories (id, household_id, name, color, parent_id, default_spend_type, ai_hint, sort, archived_at) VALUES ('cpu-cat-principal', 'cpu-lar', '[TEST] Principal CPU', '#22B8E0', NULL, NULL, NULL, 0, NULL)",
+    "INSERT INTO categories (id, household_id, name, color, parent_id, default_spend_type, ai_hint, sort, archived_at) VALUES ('cpu-cat-servicos', 'cpu-lar', '[TEST] Serviços CPU', '#1B84F2', NULL, NULL, NULL, 0, NULL)",
+    "INSERT INTO categories (id, household_id, name, color, parent_id, default_spend_type, ai_hint, sort, archived_at) VALUES ('cpu-cat-lazer', 'cpu-lar', '[TEST] Lazer CPU', '#13B5A6', NULL, NULL, NULL, 0, NULL)",
+    "INSERT INTO pluggy_connections (id, household_id, label, created_at) VALUES ('cpu-conexao', 'cpu-lar', '[TEST] Conexão CPU', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO bank_items (id, connection_id, institution_name, created_at) VALUES ('cpu-banco', 'cpu-conexao', '[TEST] Banco CPU', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO accounts (id, bank_item_id, kind, name, balance_cents, balance_at) VALUES ('cpu-conta', 'cpu-banco', 'corrente', '[TEST] Conta CPU', 0, '2026-11-08T00:00:00.000Z')",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000) INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, last_seen_at) SELECT 'cpu-tx-' || i, 'cpu-lar', 'cpu-ext-' || i, 'cpu-banco', 'cpu-conta', 'compra', '2026-11-05T12:00:00.000Z', '2026-11-05', -1000 - i, 'CPU-LOJA', 'CPU-LOJA', '2026-11-08T00:00:00.000Z' FROM n",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-1', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-1', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-2', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-2', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-3', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-3', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-4', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-4', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-5', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-5', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-6', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-6', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-7', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-7', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-8', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-8', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-9', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-9', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-10', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-10', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-11', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-11', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) VALUES ('cpu-regra-12', 'cpu-lar', 'estabelecimento', 'CPU-REGRA-12', NULL, 'cpu-cat-servicos', NULL, NULL, NULL, NULL, NULL, 'manual', NULL, '2026-11-08T00:00:00.000Z', NULL)"
+  ],
+  "flows": [{ "name": "login", "runs": 12 }],
+  "requests": [
+    {
+      "name": "GET /api/features",
+      "method": "GET",
+      "path": "/api/features",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "GET /api/settings/keys",
+      "method": "GET",
+      "path": "/api/settings/keys",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "PUT /api/settings/keys/claude (chave inválida)",
+      "method": "PUT",
+      "path": "/api/settings/keys/claude",
+      "headers": { "cookie": "{sessao}" },
+      "body": { "apiKey": "sk-ant-api03-TEST-invalida" }
+    },
+    {
+      "name": "PUT /api/features/assistente",
+      "method": "PUT",
+      "path": "/api/features/assistente",
+      "headers": { "cookie": "{sessao}" },
+      "body": { "enabled": true }
+    },
+    {
+      "name": "GET /api/household",
+      "method": "GET",
+      "path": "/api/household",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "PATCH /api/household (dia de início, 2.000 lançamentos)",
+      "method": "PATCH",
+      "path": "/api/household",
+      "headers": { "cookie": "{sessao}" },
+      "corpos": [{ "cycleStartDay": 5 }, { "cycleStartDay": 6 }]
+    },
+    {
+      "name": "GET /api/categories",
+      "method": "GET",
+      "path": "/api/categories",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "POST /api/categories",
+      "method": "POST",
+      "path": "/api/categories",
+      "headers": { "cookie": "{sessao}" },
+      "body": { "name": "[TEST] Categoria {i}", "color": "#22B8E0" }
+    },
+    {
+      "name": "PATCH /api/categories/:id (arquivar e reativar)",
+      "method": "PATCH",
+      "path": "/api/categories/cpu-cat-principal",
+      "headers": { "cookie": "{sessao}" },
+      "corpos": [{ "archived": true }, { "archived": false }]
+    },
+    {
+      "name": "GET /api/transactions/:id/categorization",
+      "method": "GET",
+      "path": "/api/transactions/cpu-tx-1/categorization",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "PUT /api/transactions/:id/category (sem Aplicar a todas)",
+      "method": "PUT",
+      "path": "/api/transactions/cpu-tx-1/category",
+      "headers": { "cookie": "{sessao}" },
+      "corpos": [
+        { "categoryId": "cpu-cat-servicos", "applyToAll": false },
+        { "categoryId": "cpu-cat-lazer", "applyToAll": false }
+      ]
+    },
+    {
+      "name": "PUT /api/transactions/:id/category (com Aplicar a todas)",
+      "method": "PUT",
+      "path": "/api/transactions/cpu-tx-2/category",
+      "headers": { "cookie": "{sessao}" },
+      "corpos": [
+        { "categoryId": "cpu-cat-servicos", "applyToAll": true },
+        { "categoryId": "cpu-cat-lazer", "applyToAll": true }
+      ]
+    },
+    {
+      "name": "POST /api/rules",
+      "method": "POST",
+      "path": "/api/rules",
+      "headers": { "cookie": "{sessao}" },
+      "body": {
+        "transactionId": "cpu-tx-3",
+        "set": { "categoryId": "cpu-cat-servicos" },
+        "createdFrom": "lembrar"
+      }
+    },
+    {
+      "name": "POST /api/rules/:id/apply-retroactive",
+      "method": "POST",
+      "path": "/api/rules/cpu-regra-1/apply-retroactive",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "DELETE /api/rules/:id",
+      "method": "DELETE",
+      "path": "/api/rules/cpu-regra-{i}",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "importação de 100 transações com o pipeline de regras",
+      "method": "POST",
+      "path": "/api/cpu/importa-100",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "GET /api/auth/session",
+      "method": "GET",
+      "path": "/api/auth/session",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "POST /api/auth/login/options",
+      "method": "POST",
+      "path": "/api/auth/login/options",
+      "via": "login"
+    },
+    {
+      "name": "POST /api/auth/login/verify",
+      "method": "POST",
+      "path": "/api/auth/login/verify",
+      "via": "login"
+    },
+    { "name": "POST /api/auth/logout", "method": "POST", "path": "/api/auth/logout", "via": "login" }
+  ]
+}

@@ -1,6 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { CategoryDTO } from "../../src/shared/categories";
+import { consultaSql, executaSql } from "./helpers/db";
+import { LAR_DA_INSTALACAO_PRONTA, signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta } from "./helpers/setup";
+
+// Sessão da instalação pronta: o cookie da sessão de teste em cada página (o lar foi semeado pelo global setup).
+test.beforeEach(async ({ page }) => {
+  await signUpAndSignIn(page);
+});
 
 test.beforeAll(() => {
   semearInstalacaoPronta();
@@ -100,36 +107,73 @@ async function simularApi(page: Page, restantesNasFatias: number[] = [0], atraso
   return estado;
 }
 
-// O switch liga por padrão numa compra; salvar com a categoria aplica a todas e volta com ela.
-test("switch ligado por padrão: salvar aplica a todas e volta para a tela de origem", async ({ page }) => {
-  const estado = await simularApi(page, [0]);
-  await page.goto("/categorias/escolher?transacao=e2e-compra-1&voltar=/cartoes");
+// Contra o Worker de verdade (TASK-0104): a compra de teste e as compras do mesmo estabelecimento vêm do banco de
+// teste da instalação pronta. São 651 compras: a primeira fatia (500, o limite do servidor) deixa 150 para a tela
+// repetir, e a fatia seguinte zera.
+const COMPRAS_DO_ESTABELECIMENTO = 651;
+const LAR = LAR_DA_INSTALACAO_PRONTA;
 
-  await expect(page.getByRole("switch", { name: SWITCH, exact: true })).toHaveAttribute(
-    "aria-checked",
-    "true",
+// Compras, conta e conexão de teste; apaga as regras e as compras de rodadas anteriores do lar de teste.
+function semeiaComprasDeTeste(total: number): void {
+  const agora = new Date().toISOString();
+  executaSql(
+    "pronta",
+    [
+      `DELETE FROM transactions WHERE household_id = '${LAR}'`,
+      `DELETE FROM rules WHERE household_id = '${LAR}'`,
+      `INSERT OR IGNORE INTO pluggy_connections (id, household_id, label, created_at) VALUES ('e2e-conexao', '${LAR}', '[TEST] Conexão', '${agora}')`,
+      `INSERT OR IGNORE INTO bank_items (id, connection_id, institution_name, created_at) VALUES ('e2e-banco', 'e2e-conexao', '[TEST] Banco', '${agora}')`,
+      `INSERT OR IGNORE INTO accounts (id, bank_item_id, kind, name, balance_cents, balance_at) VALUES ('e2e-conta', 'e2e-banco', 'corrente', '[TEST] Conta', 0, '${agora}')`,
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${total}) INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, last_seen_at) SELECT CASE WHEN i = 1 THEN 'e2e-compra-1' ELSE 'e2e-compra-' || i END, '${LAR}', 'e2e-ext-' || i, 'e2e-banco', 'e2e-conta', 'compra', '2026-11-05T12:00:00.000Z', '2026-11-05', -1000 - i, 'PAG*JOSEDASILVA', 'PAGJOSEDASILVA', '${agora}' FROM n`,
+    ].join("; "),
   );
-  await expect(page.getByText("Aplicar a todas de PAG*JOSEDASILVA", { exact: true })).toBeVisible();
-  await page.getByRole("radio", { name: /Serviços/ }).click();
-  await page.getByRole("button", { name: "Salvar categoria", exact: true }).click();
+}
 
-  await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
-  expect(estado.puts).toEqual([{ categoryId: "e2e-servicos", applyToAll: true }]);
-  expect(estado.fatias).toBe(0);
-});
+// Contra o Worker: a fatia do retroativo é chamada de verdade; o atraso só deixa o progresso visível na tela.
+async function atrasaAsFatias(page: Page): Promise<void> {
+  await page.route("**/api/rules/*/apply-retroactive", async (rota) => {
+    await new Promise((resolver) => setTimeout(resolver, 800));
+    await rota.continue();
+  });
+}
 
-// Sobram compras antigas: a tela repete a fatia até zerar, mostrando quantas faltam, e só então volta.
-test("progresso: mostra quantas faltam e só volta quando zera", async ({ page }) => {
-  // A primeira fatia (a da própria gravação) deixa 150; a fatia seguinte zera.
-  const estado = await simularApi(page, [150, 0]);
-  await page.goto("/categorias/escolher?transacao=e2e-compra-1&voltar=/cartoes");
+test.describe("contra o Worker de verdade", () => {
+  test.beforeEach(() => {
+    semeiaComprasDeTeste(COMPRAS_DO_ESTABELECIMENTO);
+  });
 
-  await page.getByRole("radio", { name: /Serviços/ }).click();
-  await page.getByRole("button", { name: "Salvar categoria", exact: true }).click();
+  // O switch liga por padrão numa compra; salvar com a categoria aplica a todas e volta com ela.
+  test("switch ligado por padrão: salvar aplica a todas e volta para a tela de origem", async ({ page }) => {
+    await page.goto("/categorias/escolher?transacao=e2e-compra-1&voltar=/cartoes");
 
-  await expect(page.getByRole("status")).toContainText("faltam 150");
-  await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
-  expect(estado.fatias).toBe(1);
+    await expect(page.getByRole("switch", { name: SWITCH, exact: true })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.getByText("Aplicar a todas de PAG*JOSEDASILVA", { exact: true })).toBeVisible();
+    await page.getByRole("radio", { name: /Serviços/ }).click();
+    await page.getByRole("button", { name: "Salvar categoria", exact: true }).click();
+
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
+    // As compras do estabelecimento ficaram na categoria Serviços da semente real, a escolhida inclusive.
+    const gravadas = consultaSql(
+      "pronta",
+      `SELECT COUNT(*) AS n FROM transactions WHERE household_id = '${LAR}' AND category_id = 'seed:${LAR}:servicos'`,
+    )[0]?.n;
+    expect(gravadas).toBe(COMPRAS_DO_ESTABELECIMENTO);
+  });
+
+  // Sobram compras antigas: a tela repete a fatia até zerar, mostrando quantas faltam, e só então volta.
+  test("progresso: mostra quantas faltam e só volta quando zera", async ({ page }) => {
+    await atrasaAsFatias(page);
+    await page.goto("/categorias/escolher?transacao=e2e-compra-1&voltar=/cartoes");
+
+    await page.getByRole("radio", { name: /Serviços/ }).click();
+    await page.getByRole("button", { name: "Salvar categoria", exact: true }).click();
+
+    await expect(page.getByRole("status")).toContainText("faltam 150");
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
+  });
 });
 
 // Falha no meio: "Tentar de novo" retoma a fatia e termina.

@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/worker/app";
 import { callApi, semearPronto } from "./helpers/app";
+import { RESOLVEDOR_DE_TESTE } from "./helpers/sessao";
 
 describe("erros da API", () => {
   beforeEach(async () => {
@@ -13,7 +14,11 @@ describe("erros da API", () => {
   });
 
   it("rota inexistente devolve 404 JSON, nunca a página", async () => {
-    const resposta = await callApi(createApp(), "GET", "/api/nao-existe");
+    const resposta = await callApi(
+      createApp({ resolveSession: RESOLVEDOR_DE_TESTE }),
+      "GET",
+      "/api/nao-existe",
+    );
 
     expect(resposta.status).toBe(404);
     expect(await resposta.json()).toEqual({ error: "rota_inexistente", message: "Rota não encontrada." });
@@ -22,6 +27,7 @@ describe("erros da API", () => {
   it("rota que lança devolve 500 genérico, sem a mensagem do erro", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const app = createApp({
+      resolveSession: RESOLVEDOR_DE_TESTE,
       rotasDoApp: (rotas) => {
         rotas.get("/erro-teste", () => {
           throw new Error("segredo-de-teste");
@@ -41,6 +47,7 @@ describe("erros da API", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const onMeter = vi.fn();
     const app = createApp({
+      resolveSession: RESOLVEDOR_DE_TESTE,
       onMeter,
       rotasDoApp: (rotas) => {
         rotas.get("/erro-teste", () => {

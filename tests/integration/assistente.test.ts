@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { FeaturesResponse } from "../../src/shared/setup";
 import { createApp } from "../../src/worker/app";
 import { callApi, semearPronto } from "./helpers/app";
+import { RESOLVEDOR_DE_TESTE } from "./helpers/sessao";
 
 // Com ASSISTANT_AVAILABLE falso (MVP), o assistente fica desligado mesmo com chave e com a flag gravada.
 // A regra com a disponibilidade ligada é testada como função pura (tests/unit/worker/assistente-regras.test.ts).
 const CHAVE = "sk-ant-api03-TEST-assistente-0123456789";
-const criarApp = () => createApp({ validateClaudeKey: async () => undefined });
+const criarApp = () =>
+  createApp({ validateClaudeKey: async () => undefined, resolveSession: RESOLVEDOR_DE_TESTE });
 
 beforeEach(async () => {
   await semearPronto(env.DB);

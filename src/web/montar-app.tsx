@@ -7,6 +7,7 @@ import { FeaturesProvider } from "./app/features";
 import { ConfirmProvider } from "./components/ui/confirm-dialog";
 import { HideValuesProvider } from "./components/ui/hide-values";
 import { criarRotas, type TelasDoApp } from "./routes";
+import { SessionProvider } from "./session/SessionProvider";
 
 export type OpcoesDoApp = { telas?: TelasDoApp };
 
@@ -24,7 +25,9 @@ export function montarApp({ telas = {} }: OpcoesDoApp = {}): void {
       <HideValuesProvider>
         <ConfirmProvider>
           <FeaturesProvider>
-            <RouterProvider router={roteador} />
+            <SessionProvider>
+              <RouterProvider router={roteador} />
+            </SessionProvider>
           </FeaturesProvider>
         </ConfirmProvider>
       </HideValuesProvider>

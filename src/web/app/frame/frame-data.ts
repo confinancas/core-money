@@ -1,6 +1,10 @@
-// Membros do lar da sessão, para o rodapé do desktop. Até a TASK-0104 (sessão), não há membros: o rodapé fica escondido.
-export type MembroDoLar = { name: string };
+// Membros do lar da sessão, para o rodapé do desktop (TASK-0104: vêm de GET /api/auth/session). Sem sessão, nulo e o
+// rodapé fica escondido.
+import type { SessionHouseholdMember } from "../../../shared/session";
+import { useSessionMembers } from "../../session/SessionProvider";
+
+export type MembroDoLar = SessionHouseholdMember;
 
 export function useFrameMembers(): MembroDoLar[] | null {
-  return null;
+  return useSessionMembers();
 }
