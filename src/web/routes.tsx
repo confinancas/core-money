@@ -14,6 +14,7 @@ import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
 import { NovaCategoria } from "./screens/categorias/NovaCategoria";
 import { CasalEAparelhos } from "./screens/configuracoes/CasalEAparelhos";
 import { ChaveDoClaude } from "./screens/configuracoes/ChaveDoClaude";
+import { Configuracoes } from "./screens/configuracoes/Configuracoes";
 import { Login } from "./screens/Login";
 import { Recuperar } from "./screens/Recuperar";
 import { RequireSession } from "./session/RequireSession";
@@ -44,7 +45,13 @@ export const ROTAS: RotaDaTabela[] = [
   { path: "/contas", frame: "tab", tab: "contas", title: "Contas do mês", element: provisoria },
   { path: "/renda", frame: "tab", tab: "renda", title: "Renda", element: provisoria },
   { path: "/relatorio/:cycleKey?", frame: "tab", tab: "relatorio", title: "Relatório", element: provisoria },
-  { path: "/configuracoes", frame: "tab", tab: "configuracoes", title: "Configurações", element: provisoria },
+  {
+    path: "/configuracoes",
+    frame: "tab",
+    tab: "configuracoes",
+    title: "Configurações",
+    element: <Configuracoes />,
+  },
 
   { path: "/notificacoes", frame: "detail", tab: "inicio", title: "Notificações", element: provisoria },
   {
