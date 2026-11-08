@@ -168,6 +168,8 @@ function geraConfigDeDev(env) {
       database_id: env.MM_DEV_D1_ID,
       migrations_dir: join(raiz, "migrations"),
     })),
+    // Worker só de medição: sem o cache de "pronto" do portão, para o fluxo do cadastro voltar a cadastro a cada rodada.
+    vars: { ...(base.vars ?? {}), SETUP_SEM_CACHE: "1" },
   };
   delete config.triggers;
   delete config.$schema;
@@ -226,6 +228,17 @@ async function main() {
   const pedido = JSON.parse(readFileSync(resolve(raiz, arquivo), "utf8"));
   if (typeof pedido.task !== "string" || !Array.isArray(pedido.requests) || pedido.requests.length === 0) {
     falha('Arquivo de medição inválido: precisa de "task" e de "requests".');
+  }
+  if (
+    pedido.flows !== undefined &&
+    !(
+      Array.isArray(pedido.flows) &&
+      pedido.flows.every(
+        (fluxo) => typeof fluxo?.name === "string" && Number.isInteger(fluxo.runs) && fluxo.runs > 0,
+      )
+    )
+  ) {
+    falha('Arquivo de medição inválido: "flows" é uma lista de { "name", "runs" }.');
   }
   if (
     pedido.setupSql !== undefined &&
@@ -297,6 +310,8 @@ async function main() {
     await esperar(ESPERA_ANTES_DAS_REQUISICOES_MS);
 
     for (const rota of pedido.requests) {
+      // Rota com "via" é medida pelo fluxo de navegador indicado (abaixo): não é enviada daqui.
+      if (rota.via !== undefined) continue;
       for (let i = 0; i < AQUECIMENTO + MEDIDAS; i++) {
         const corpo = rota.body === undefined ? undefined : JSON.stringify(rota.body);
         const cabecalhos = { ...(rota.headers ?? {}) };
@@ -314,6 +329,17 @@ async function main() {
         }
         await esperar(INTERVALO_ENTRE_REQUISICOES_MS);
       }
+    }
+
+    // Fluxos de navegador (TASK-0103, cadastro com passkey): rodam com o tail aberto. A URL e a configuração vão pelo
+    // ambiente do processo filho; a saída do fluxo nunca traz a URL (cpu-flows.mjs mascara).
+    for (const fluxo of pedido.flows ?? []) {
+      const rodada = await executa(
+        [join(raiz, "scripts", "dev", "cpu-flows.mjs"), fluxo.name, String(fluxo.runs)],
+        { ...ambienteDoWrangler(env), MM_CPU_URL: urlDoWorker, MM_CPU_CONFIG: cfg },
+      );
+      if (rodada.codigo !== 0) falha(`Fluxo ${fluxo.name} falhou.\n${mascara(rodada.saida)}`);
+      console.log(mascara(rodada.saida).trim());
     }
 
     await esperar(ESPERA_DEPOIS_DAS_REQUISICOES_MS);

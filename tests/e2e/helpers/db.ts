@@ -37,3 +37,31 @@ export function executaSql(instancia: Instancia, sql: string): void {
     throw new Error(`wrangler d1 execute falhou (${instancia}): ${resultado.stderr || resultado.stdout}`);
   }
 }
+
+// Lê linhas de uma instância do E2E (só para conferir o banco de teste nos testes). Saída JSON do wrangler.
+export function consultaSql(instancia: Instancia, sql: string): Record<string, unknown>[] {
+  const resultado = spawnSync(
+    process.execPath,
+    [
+      wranglerJs,
+      "d1",
+      "execute",
+      "matrimoney-db",
+      "--local",
+      "--persist-to",
+      ESTADO[instancia],
+      "--command",
+      sql,
+      "--json",
+    ],
+    { cwd: raiz, encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } },
+  );
+  if (resultado.status !== 0) {
+    throw new Error(`wrangler d1 execute falhou (${instancia}): ${resultado.stderr || resultado.stdout}`);
+  }
+  const texto = resultado.stdout;
+  const blocos = JSON.parse(texto.slice(texto.indexOf("["), texto.lastIndexOf("]") + 1)) as {
+    results: Record<string, unknown>[];
+  }[];
+  return blocos[0]?.results ?? [];
+}
