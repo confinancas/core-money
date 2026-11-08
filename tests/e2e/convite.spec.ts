@@ -88,6 +88,9 @@ test("cenários 1 e 3: o titular cria o convite e copia o link; a pessoa abre, c
   const { pagina, fecha } = await abreNoOutroAparelho(browser, link);
   try {
     await expect(pagina.getByRole("heading", { name: "Crie seu acesso" })).toBeVisible();
+    // A barra do navegador não mostra o token: a tela trocou a URL depois de ler o token (TASK-0106).
+    expect(pagina.url()).not.toContain("/convite/");
+    expect(pagina.url()).not.toContain(link.slice(link.indexOf("/convite/") + "/convite/".length));
     await expect(pagina.getByText(`${TITULAR} adicionou você como cônjuge`)).toBeVisible();
     await expect(pagina.getByLabel("E-mail")).toHaveValue(EMAIL_DO_CONJUGE);
     await pagina.getByLabel("Seu nome no app").fill(CONJUGE);
