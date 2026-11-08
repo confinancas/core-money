@@ -130,9 +130,11 @@ describe("autenticação do lar", () => {
     expect(medidas.map((m) => m.calls)).toEqual([0, 0]);
   });
 
-  it("com a sessão já posta por um middleware anterior, o resolvedor não é chamado", async () => {
+  it("com a sessão já posta por um middleware anterior, o requireHousehold não chama o resolvedor de novo", async () => {
+    // A TASK-0104 pôs o requireSession (global, antes das rotas) como o resolvedor da sessão: ele chama o resolvedor
+    // uma vez. O requireHousehold da rota encontra c.var.session e não chama de novo.
     const { householdId, memberId } = await criarLarDeUma();
-    const resolver = vi.fn(async () => null);
+    const resolver = vi.fn(async () => ({ memberId, householdId }));
     const app = createApp({
       resolveSession: resolver,
       rotasDoApp: (rotas) => {
@@ -146,7 +148,7 @@ describe("autenticação do lar", () => {
     const resposta = await callApi(app, "GET", "/api/household");
 
     expect(resposta.status).toBe(200);
-    expect(resolver).not.toHaveBeenCalled();
+    expect(resolver).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { signUpAndSignIn } from "./helpers/sessao";
 
 // Catálogo do design system, nos três projetos (celular 390, tablet 834, desktop 1440).
 // Valores fictícios; só existe no build de desenvolvimento e no --mode e2e.
@@ -19,6 +20,8 @@ async function todosComFiltro(page: Page, filtro: string) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // A leitura de /api/features exige sessão (TASK-0104): sem o cookie, o catálogo iria para /entrar.
+  await signUpAndSignIn(page);
   await page.goto("/dev/catalogo");
   await expect(page.getByRole("heading", { name: "Catálogo do design system" })).toBeVisible();
 });

@@ -5,6 +5,8 @@ import { defineConfig } from "@playwright/test";
 // estado do D1 local, e os dois projetos compartilham a instalação pronta.
 export default defineConfig({
   testDir: "tests/e2e",
+  // Semeia o lar, a passkey e a sessão da instalação pronta (TASK-0104), uma vez por execução.
+  globalSetup: "./tests/e2e/global-setup.ts",
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   fullyParallel: false,

@@ -1,6 +1,7 @@
 import type { HealthResponse } from "../../shared/api";
+import type { SessionResponse } from "../../shared/session";
 import type { SetupStatus } from "../../shared/setup";
-import { apiFetch, CAMINHO_DA_CONFIGURACAO } from "../lib/api";
+import { ApiError, apiFetch, CAMINHO_DA_CONFIGURACAO } from "../lib/api";
 
 // Uma verificação da partida: devolve a rota para onde ir, ou null para seguir. Lança se a verificação falhar.
 export type StartCheck = () => Promise<string | null>;
@@ -16,8 +17,18 @@ async function checkSetup(): Promise<string | null> {
   return estado.mode === "pronto" ? null : CAMINHO_DA_CONFIGURACAO;
 }
 
-// A TASK-0104 acrescenta a verificação de sessão depois da configuração.
-export const START_CHECKS: StartCheck[] = [checkApi, checkSetup];
+// Com a configuração pronta, a sessão: sem ela, a entrada (/entrar); com ela, o início.
+async function checkSession(): Promise<string | null> {
+  try {
+    await apiFetch<SessionResponse>("/api/auth/session");
+    return null;
+  } catch (erro) {
+    if (erro instanceof ApiError && erro.status === 401) return "/entrar";
+    throw erro;
+  }
+}
+
+export const START_CHECKS: StartCheck[] = [checkApi, checkSetup, checkSession];
 
 export async function resolveStartRoute(): Promise<string> {
   for (const verificar of START_CHECKS) {

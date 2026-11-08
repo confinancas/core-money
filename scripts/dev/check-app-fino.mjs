@@ -169,13 +169,25 @@ async function conferirRotasDoWorker(arquivo, versaoDoApp) {
   if (corpoSaude.versao !== versaoDoApp)
     falhar(`/api/health devolveu a versão ${corpoSaude.versao}, não a do app.`);
 
-  const nova = await worker.fetch(new Request("http://teste.local/api/fixture"), ambienteDoWorker, contexto);
+  // A rota nova do app fica atrás da sessão (TASK-0104): sem cookie, 401; com cookie, 200. O D1 falso responde qualquer
+  // consulta com uma linha, então o cookie vira uma sessão de teste (nenhum dado é lido de verdade).
+  const semSessao = await worker.fetch(
+    new Request("http://teste.local/api/fixture"),
+    ambienteDoWorker,
+    contexto,
+  );
+  if (semSessao.status !== 401) falhar("a rota nova do app deveria exigir sessão (401 sem cookie).");
+  const nova = await worker.fetch(
+    new Request("http://teste.local/api/fixture", { headers: { cookie: "mm_sess=checagem-do-app-fino" } }),
+    ambienteDoWorker,
+    contexto,
+  );
   const corpoNova = await nova.json();
   if (nova.status !== 200 || corpoNova.rota !== "/api/fixture")
     falhar("/api/fixture (rota nova do app) não respondeu.");
 
   const naoExiste = await worker.fetch(
-    new Request("http://teste.local/api/nao-existe"),
+    new Request("http://teste.local/api/nao-existe", { headers: { cookie: "mm_sess=checagem-do-app-fino" } }),
     ambienteDoWorker,
     contexto,
   );

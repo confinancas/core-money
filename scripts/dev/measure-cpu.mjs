@@ -2,7 +2,16 @@
 // Mede a CPU das rotas no Worker de dev compartilhado (matrimoney-dev), só para medir: sem cron e só dados [TEST].
 // Uso: npm run cpu -- tests/cpu/TASK-NNXX.json
 // A URL do Worker e os valores do .env nunca vão para arquivo nem para a saída: qualquer texto impresso passa por mascara().
+// A entrada do deploy é scripts/dev/cpu-worker.ts (o Worker do app mais as rotas de medição, TASK-0104).
+// Campos do arquivo de medição (além de task e requests):
+//   setupSql: comandos SQL, um por vez, depois do deploy. esvaziarBanco: esvazia todas as tabelas antes (filhos antes).
+//   sessao: cria uma sessão [TEST] com token aleatório; as rotas com "headers": { "cookie": "{sessao}" } a usam.
+//   passkeyDeLogin: o fluxo "login" usa uma passkey [TEST] gerada nesta execução (a chave nunca vai para arquivo).
+//   requests[].corpos: lista de corpos, usada um a um por rodada (ex.: alternar uma categoria para forçar a escrita).
+//   {i} na rota ou no corpo vira o número da rodada (1 a 12). Uma rota com {i} casa com qualquer número no lugar.
+//   requests[].via: rota só medida por um fluxo de navegador (flows), não por requisição direta.
 import { spawn } from "node:child_process";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +31,7 @@ const ESPERA_DEPOIS_DAS_REQUISICOES_MS = 10000;
 const INTERVALO_ENTRE_REQUISICOES_MS = 1000;
 const wranglerJs = join(raiz, "node_modules", "wrangler", "bin", "wrangler.js");
 const viteJs = join(raiz, "node_modules", "vite", "bin", "vite.js");
+const ENTRADA_DE_MEDICAO = join(raiz, "scripts", "dev", "cpu-worker.ts");
 
 const valoresSecretos = [];
 let travaCriada = false;
@@ -163,7 +173,7 @@ function geraConfigDeDev(env, pedido) {
   const config = {
     ...base,
     name: WORKER,
-    main: join(raiz, "src", "worker", "index.ts"),
+    main: ENTRADA_DE_MEDICAO,
     assets: { ...base.assets, directory: join(raiz, "dist", "client") },
     d1_databases: base.d1_databases.map((banco) => ({
       ...banco,
@@ -223,6 +233,103 @@ const mediana = (valores) => {
   const meio = Math.floor(ordenados.length / 2);
   return ordenados.length % 2 ? ordenados[meio] : (ordenados[meio - 1] + ordenados[meio]) / 2;
 };
+
+// {i} em textos, listas e objetos: a rodada entra no caminho, no corpo e nos cabeçalhos.
+const trocaI = (valor, i) => {
+  if (typeof valor === "string") return valor.split("{i}").join(String(i));
+  if (Array.isArray(valor)) return valor.map((item) => trocaI(item, i));
+  if (valor !== null && typeof valor === "object") {
+    return Object.fromEntries(Object.entries(valor).map(([chave, item]) => [chave, trocaI(item, i)]));
+  }
+  return valor;
+};
+
+// Caminho com {i} vira um padrão: /api/rules/cpu-regra-{i} casa com cpu-regra-1, cpu-regra-2... (qualquer número).
+function padraoDoCaminho(caminho) {
+  const escapado = caminho.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escapado.split("\\{i\\}").join("\\d+")}$`);
+}
+
+const base64Url = (bytes) => Buffer.from(bytes).toString("base64url");
+
+// Passkey de teste: um par de chaves P-256 gerado agora. A chave pública vai para o banco (COSE, ES256); a privada
+// só vai para o navegador do fluxo de login, pela variável de ambiente. Nada disso é impresso nem gravado em arquivo.
+function geraPasskeyDeTeste() {
+  const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const jwk = publicKey.export({ format: "jwk" });
+  const x = Buffer.from(jwk.x, "base64url");
+  const y = Buffer.from(jwk.y, "base64url");
+  // Mapa COSE de cinco pares (kty EC2, alg ES256, crv P-256, x, y), como o authenticator entrega.
+  const cose = Buffer.concat([
+    Buffer.from([0xa5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20]),
+    x,
+    Buffer.from([0x22, 0x58, 0x20]),
+    y,
+  ]);
+  const idDaCredencial = randomBytes(16);
+  const idDoUsuario = Buffer.from("cpu-membro-1", "utf8");
+  valoresSecretos.push(privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"));
+  return {
+    idDaPasskey: base64Url(idDaCredencial),
+    chavePublica: base64Url(cose),
+    credentialIdBase64: idDaCredencial.toString("base64"),
+    privateKeyPkcs8Base64: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
+    userHandleBase64: idDoUsuario.toString("base64"),
+  };
+}
+
+// Sessão de teste: o token é aleatório a cada execução (nunca vai para arquivo); o banco guarda o sha256 dele.
+function geraSessaoDeTeste() {
+  const token = base64Url(randomBytes(32));
+  valoresSecretos.push(token);
+  return { token, hash: createHash("sha256").update(token).digest("hex") };
+}
+
+// Esvazia todas as tabelas do banco de medição, filhos antes dos pais (só dados [TEST]; o banco é de teste).
+async function esvaziaBanco(env, cfg) {
+  const consulta = await executa(
+    [
+      wranglerJs,
+      "d1",
+      "execute",
+      BANCO,
+      "-c",
+      cfg,
+      "--remote",
+      "--json",
+      "--command",
+      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
+    ],
+    ambienteDoWrangler(env),
+  );
+  if (consulta.codigo !== 0) falha(`Leitura das tabelas falhou.\n${mascara(consulta.saida)}`);
+  const texto = consulta.saida;
+  const tabelas = JSON.parse(texto.slice(texto.indexOf("["), texto.lastIndexOf("]") + 1))[0]?.results ?? [];
+  const pais = new Map(tabelas.map((linha) => [linha.name, new Set()]));
+  for (const { name: filho, sql } of tabelas) {
+    for (const casa of String(sql ?? "").matchAll(/REFERENCES\s+[`"[]?(\w+)/gi)) {
+      const pai = casa[1];
+      if (pais.has(pai) && pai !== filho) pais.get(filho).add(pai);
+    }
+  }
+  const ordem = [];
+  while (pais.size > 0) {
+    const referenciadas = new Set([...pais.values()].flatMap((conjunto) => [...conjunto]));
+    const saem = [...pais.keys()].filter((nome) => !referenciadas.has(nome));
+    const lote = saem.length > 0 ? saem : [...pais.keys()];
+    for (const nome of lote) {
+      ordem.push(nome);
+      pais.delete(nome);
+    }
+  }
+  for (const nome of ordem) {
+    const apaga = await executa(
+      [wranglerJs, "d1", "execute", BANCO, "-c", cfg, "--remote", "--command", `DELETE FROM "${nome}"`],
+      ambienteDoWrangler(env),
+    );
+    if (apaga.codigo !== 0) falha(`Esvaziamento do banco de medição falhou.\n${mascara(apaga.saida)}`);
+  }
+}
 
 async function main() {
   const arquivo = process.argv[2];
@@ -290,8 +397,28 @@ async function main() {
     if (migracao.codigo !== 0) falha(`Migração remota falhou.\n${mascara(migracao.saida)}`);
     console.log("Migrações remotas ok.");
 
-    // Preparo opcional do estado do banco de teste (só dados [TEST]), antes do aquecimento.
-    for (const sql of pedido.setupSql ?? []) {
+    // Estado do banco de teste antes das rotas (só dados [TEST]): zera, depois o preparo da task, depois a sessão e a
+    // passkey de teste geradas nesta execução.
+    if (pedido.esvaziarBanco === true) await esvaziaBanco(env, cfg);
+    const comandos = [...(pedido.setupSql ?? [])];
+    const agora = new Date();
+    const expira = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const sessao = pedido.sessao === true ? geraSessaoDeTeste() : null;
+    const passkeyDeLogin = (pedido.flows ?? []).some((fluxo) => fluxo.name === "login")
+      ? geraPasskeyDeTeste()
+      : null;
+    if (passkeyDeLogin) {
+      comandos.push(
+        `INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('${passkeyDeLogin.idDaPasskey}', 'cpu-membro-1', '${passkeyDeLogin.chavePublica}', 0, NULL, 'CPU Chromium', 'cadastro', '${agora.toISOString()}', NULL)`,
+      );
+    }
+    if (sessao) {
+      comandos.push(
+        `INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-sessao', 'cpu-membro-1', 'CPU-SEM-LOGIN', 0, NULL, 'CPU Chromium', 'cadastro', '${agora.toISOString()}', NULL)`,
+        `INSERT INTO sessions (token_hash, member_id, passkey_id, created_at, last_seen_at, expires_at, notices_seen_at) VALUES ('${sessao.hash}', 'cpu-membro-1', 'cpu-passkey-sessao', '${agora.toISOString()}', '${agora.toISOString()}', '${expira}', NULL)`,
+      );
+    }
+    for (const sql of comandos) {
       const preparo = await executa(
         [wranglerJs, "d1", "execute", BANCO, "-c", cfg, "--remote", "--command", sql],
         ambienteDoWrangler(env),
@@ -314,13 +441,23 @@ async function main() {
     for (const rota of pedido.requests) {
       // Rota com "via" é medida pelo fluxo de navegador indicado (abaixo): não é enviada daqui.
       if (rota.via !== undefined) continue;
-      for (let i = 0; i < AQUECIMENTO + MEDIDAS; i++) {
-        const corpo = rota.body === undefined ? undefined : JSON.stringify(rota.body);
-        const cabecalhos = { ...(rota.headers ?? {}) };
+      for (let i = 1; i <= AQUECIMENTO + MEDIDAS; i++) {
+        const corpoDaRodada =
+          rota.corpos !== undefined ? rota.corpos[(i - 1) % rota.corpos.length] : rota.body;
+        const corpo = corpoDaRodada === undefined ? undefined : JSON.stringify(trocaI(corpoDaRodada, i));
+        const cabecalhos = {};
+        for (const [nome, valor] of Object.entries(rota.headers ?? {})) {
+          if (valor === "{sessao}") {
+            if (!sessao) falha(`A rota ${rota.name} pede sessão, mas o arquivo não tem "sessao": true.`);
+            cabecalhos[nome] = `mm_sess=${sessao.token}`;
+          } else {
+            cabecalhos[nome] = trocaI(valor, i);
+          }
+        }
         if (corpo !== undefined && !("content-type" in cabecalhos))
           cabecalhos["content-type"] = "application/json";
         try {
-          const resposta = await fetch(new URL(rota.path, urlDoWorker), {
+          const resposta = await fetch(new URL(trocaI(rota.path, i), urlDoWorker), {
             method: rota.method,
             headers: cabecalhos,
             body: corpo,
@@ -333,12 +470,20 @@ async function main() {
       }
     }
 
-    // Fluxos de navegador (TASK-0103, cadastro com passkey): rodam com o tail aberto. A URL e a configuração vão pelo
-    // ambiente do processo filho; a saída do fluxo nunca traz a URL (cpu-flows.mjs mascara).
+    // Fluxos de navegador (TASK-0103, cadastro com passkey; TASK-0104, entrada com passkey): rodam com o tail aberto. A
+    // URL e a configuração vão pelo ambiente do processo filho; a saída do fluxo nunca traz a URL (cpu-flows.mjs mascara).
     for (const fluxo of pedido.flows ?? []) {
+      const ambienteDoFluxo = { ...ambienteDoWrangler(env), MM_CPU_URL: urlDoWorker, MM_CPU_CONFIG: cfg };
+      if (fluxo.name === "login") {
+        ambienteDoFluxo.MM_CPU_PASSKEY = JSON.stringify({
+          credentialIdBase64: passkeyDeLogin.credentialIdBase64,
+          privateKeyPkcs8Base64: passkeyDeLogin.privateKeyPkcs8Base64,
+          userHandleBase64: passkeyDeLogin.userHandleBase64,
+        });
+      }
       const rodada = await executa(
         [join(raiz, "scripts", "dev", "cpu-flows.mjs"), fluxo.name, String(fluxo.runs)],
-        { ...ambienteDoWrangler(env), MM_CPU_URL: urlDoWorker, MM_CPU_CONFIG: cfg },
+        ambienteDoFluxo,
       );
       if (rodada.codigo !== 0) falha(`Fluxo ${fluxo.name} falhou.\n${mascara(rodada.saida)}`);
       console.log(mascara(rodada.saida).trim());
@@ -360,8 +505,15 @@ async function main() {
     const resultados = [];
     let faltou = false;
     for (const rota of pedido.requests) {
-      const chave = `${rota.method} ${rota.path}`;
-      const eventos = (porRota.get(chave) ?? []).sort((a, b) => a.ts - b.ts);
+      // Os eventos da rota: a mesma rota (com {i} casando qualquer número), em ordem de chegada.
+      const padrao = padraoDoCaminho(rota.path);
+      const eventos = [];
+      for (const [chave, lista] of porRota) {
+        const separador = chave.indexOf(" ");
+        if (chave.slice(0, separador) !== rota.method) continue;
+        if (padrao.test(chave.slice(separador + 1))) eventos.push(...lista);
+      }
+      eventos.sort((a, b) => a.ts - b.ts);
       const medidos = eventos.slice(AQUECIMENTO, AQUECIMENTO + MEDIDAS);
       if (medidos.length < MEDIDAS || medidos.some((evento) => typeof evento.cpu !== "number")) {
         faltou = true;

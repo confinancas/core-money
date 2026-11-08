@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta } from "./helpers/setup";
+
+// Sessão da instalação pronta: o cookie da sessão de teste em cada página (o lar foi semeado pelo global setup).
+test.beforeEach(async ({ page }) => {
+  await signUpAndSignIn(page);
+});
 
 test.beforeAll(() => {
   semearInstalacaoPronta();
@@ -20,8 +26,9 @@ test("rota de SPA devolve a página, não 404", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Página não encontrada" })).toBeVisible();
 });
 
-test("rota de API inexistente devolve 404 JSON", async ({ request }) => {
-  const resposta = await request.get("/api/nao-existe");
+// Com sessão (o cookie da página vale no page.request), a rota inexistente responde 404. Sem sessão, responde 401 antes.
+test("rota de API inexistente devolve 404 JSON", async ({ page }) => {
+  const resposta = await page.request.get("/api/nao-existe");
 
   expect(resposta.status()).toBe(404);
   expect(await resposta.json()).toEqual({ error: "rota_inexistente", message: "Rota não encontrada." });

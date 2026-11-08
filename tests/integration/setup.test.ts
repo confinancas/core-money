@@ -5,6 +5,7 @@ import { createApp } from "../../src/worker/app";
 import { ChaveDaIaError, type ValidacaoDaChave } from "../../src/worker/providers/anthropic";
 import { SETUP_OPEN_ROUTES } from "../../src/worker/setup/state";
 import { CODIGO_DE_TESTE, COOKIE_DE_TESTE, callApi, semearPrimeiroAcesso, semearPronto } from "./helpers/app";
+import { RESOLVEDOR_DE_TESTE } from "./helpers/sessao";
 
 // Chave falsa do teste: nenhum teste fala com a Anthropic. Os testes procuram este texto em respostas e logs.
 const CHAVE = "sk-ant-api03-TEST-valida-0123456789";
@@ -16,7 +17,8 @@ const recusa =
   };
 const SEM_MESTRA = { ...env, MASTER_KEY: "" } as typeof env;
 
-const criarApp = (validateClaudeKey: ValidacaoDaChave = CHAVE_VALIDA_OK) => createApp({ validateClaudeKey });
+const criarApp = (validateClaudeKey: ValidacaoDaChave = CHAVE_VALIDA_OK) =>
+  createApp({ validateClaudeKey, resolveSession: RESOLVEDOR_DE_TESTE });
 
 const contagem = async (sql: string): Promise<number> => {
   const linha = await env.DB.prepare(sql).first<{ n: number }>();
@@ -438,6 +440,7 @@ describe("SETUP_OPEN_ROUTES: o portão decide pela lista", () => {
     await semearPrimeiroAcesso(env.DB, false);
     const app = createApp({
       validateClaudeKey: CHAVE_VALIDA_OK,
+      resolveSession: RESOLVEDOR_DE_TESTE,
       rotasDoApp: (rotas) => {
         rotas.get("/teste-aberto", (c) => c.json({ aberta: true }));
       },
@@ -459,6 +462,7 @@ describe("SETUP_OPEN_ROUTES: o portão decide pela lista", () => {
     await semearPrimeiroAcesso(env.DB, false);
     const app = createApp({
       validateClaudeKey: CHAVE_VALIDA_OK,
+      resolveSession: RESOLVEDOR_DE_TESTE,
       rotasDoApp: (rotas) => {
         rotas.post("/teste-prefixo/itens", (c) => c.json({ ok: true }));
       },
