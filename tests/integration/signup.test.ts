@@ -450,6 +450,64 @@ describe("verificação do cadastro", () => {
     expect(await contagem("SELECT COUNT(*) AS n FROM invites WHERE used_at IS NOT NULL")).toBe(0);
   });
 
+  it("código trocado durante a verificação: nada fica gravado (sem lar órfão) e um código novo cria o lar", async () => {
+    await abreCadastro(criarApp());
+    // O verificador cancela o primeiro_acesso no meio da verificação, como faria um segundo instalador.
+    const cancelaNaVerificacao: WebAuthnVerifier = {
+      verifyRegistration: async () => {
+        await env.DB.prepare("UPDATE invites SET cancelled_at = ? WHERE kind = 'primeiro_acesso'")
+          .bind(new Date().toISOString())
+          .run();
+        return REGISTRO;
+      },
+    };
+    const app = criarApp(cancelaNaVerificacao);
+    const { desafio } = await pedeOpcoes(app);
+
+    const resposta = await callApi(
+      app,
+      "POST",
+      "/api/setup/household/verify",
+      { ...DADOS, response: RESPOSTA_DO_AUTENTICADOR },
+      { cookie: cookies(desafio) },
+    );
+
+    expect(resposta.status).toBe(409);
+    expect(await resposta.json()).toMatchObject({ error: "lar_ja_existe" });
+    expect(resposta.headers.getSetCookie().some((texto) => texto.startsWith("mm_sess="))).toBe(false);
+    expect(await contagem("SELECT COUNT(*) AS n FROM households")).toBe(0);
+    expect(await contagem("SELECT COUNT(*) AS n FROM members")).toBe(0);
+    expect(await contagem("SELECT COUNT(*) AS n FROM passkeys")).toBe(0);
+    expect(await contagem("SELECT COUNT(*) AS n FROM sessions")).toBe(0);
+    expect(await contagem("SELECT COUNT(*) AS n FROM invites WHERE used_at IS NOT NULL")).toBe(0);
+
+    // Com um código novo, a instalação não ficou travada: as opções e a verificação dão 201.
+    const novo = "NOVOCODIGOTEST";
+    await env.DB.prepare(
+      "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES (?, NULL, 'primeiro_acesso', ?, ?, NULL)",
+    )
+      .bind(crypto.randomUUID(), await sha256Hex(novo), new Date().toISOString())
+      .run();
+    const cookieNovo = `mm_setup=${novo}`;
+    const appNovo = criarApp(verificadorFalso().webauthn);
+    const opcoes = await callApi(appNovo, "POST", "/api/setup/household/options", DADOS, {
+      cookie: cookieNovo,
+    });
+    expect(opcoes.status).toBe(200);
+    const desafioNovo = valorDoCookie(opcoes, "mm_chal");
+    const verificacao = await callApi(
+      appNovo,
+      "POST",
+      "/api/setup/household/verify",
+      { ...DADOS, response: RESPOSTA_DO_AUTENTICADOR },
+      { cookie: `${cookieNovo}; mm_chal=${desafioNovo ?? ""}` },
+    );
+
+    expect(verificacao.status).toBe(201);
+    expect(await contagem("SELECT COUNT(*) AS n FROM households")).toBe(1);
+    expect(await contagem("SELECT COUNT(*) AS n FROM members WHERE role = 'titular'")).toBe(1);
+  });
+
   it("depois do cadastro: as rotas de configuração dão 409 configuracao_concluida e o status continua 200", async () => {
     await abreCadastro(criarApp());
     const app = criarApp(verificadorFalso().webauthn);
