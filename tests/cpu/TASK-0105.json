@@ -1,0 +1,56 @@
+{
+  "task": "TASK-0105",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES ('cpu-0105-primeiro-acesso', NULL, 'primeiro_acesso', 'cpu-0105-codigo-ja-usado', '2026-11-08T00:00:00.000Z', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO invites (id, household_id, kind, token_hash, invitee_name, invitee_email, created_by, created_at, expires_at) VALUES ('cpu-convite-aguardando', 'cpu-lar', 'conjuge', 'cpu-0105-hash-do-convite-aguardando', '[TEST] Pessoa B', 'pessoa.b@example.com', 'cpu-membro-1', '2026-11-08T00:00:00.000Z', '2099-01-01T00:00:00.000Z')"
+  ],
+  "flows": [{ "name": "convite", "runs": 12 }],
+  "requests": [
+    {
+      "name": "GET /api/invites",
+      "method": "GET",
+      "path": "/api/invites",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "POST /api/invites/conjuge (criar, pelo titular)",
+      "method": "POST",
+      "path": "/api/invites/conjuge",
+      "via": "convite"
+    },
+    {
+      "name": "POST /api/invites/:id/renew (gerar link novo)",
+      "method": "POST",
+      "path": "/api/invites/{id}/renew",
+      "via": "convite"
+    },
+    {
+      "name": "DELETE /api/invites/:id (cancelar)",
+      "method": "DELETE",
+      "path": "/api/invites/{id}",
+      "via": "convite"
+    },
+    {
+      "name": "POST /api/invites/inspect (a pessoa abre o link)",
+      "method": "POST",
+      "path": "/api/invites/inspect",
+      "via": "convite"
+    },
+    {
+      "name": "POST /api/invites/accept/options (aceite, 1 de 2)",
+      "method": "POST",
+      "path": "/api/invites/accept/options",
+      "via": "convite"
+    },
+    {
+      "name": "POST /api/invites/accept/verify (aceite, 2 de 2)",
+      "method": "POST",
+      "path": "/api/invites/accept/verify",
+      "via": "convite"
+    }
+  ]
+}
