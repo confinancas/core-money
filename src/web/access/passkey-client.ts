@@ -78,8 +78,9 @@ export function mensagemDaPasskey(erro: unknown): MensagemDaPasskey {
       case "codigo_necessario":
         return { mensagem: "Digite o código de primeiro acesso para continuar.", acao: "configuracao" };
       // Convite de cônjuge (TASK-0105): o aceite pode perder a corrida ou o convite pode ter vencido no meio.
+      // Mesmo texto da API (TASK-0107: a mensagem do servidor e a da tela ficam iguais; o servidor não leva o nome da marca).
       case "ja_conectado":
-        return { mensagem: `Você já está no ${brand.name} neste aparelho.`, acao: null };
+        return { mensagem: "Você já está entrado neste aparelho.", acao: null };
       case "conjuge_ja_existe":
         return { mensagem: "Este lar já tem um cônjuge.", acao: null };
       case "convite_usado":

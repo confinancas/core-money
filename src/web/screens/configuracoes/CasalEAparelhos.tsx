@@ -145,7 +145,7 @@ export function CasalEAparelhos() {
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
       {cabecalho}
-      <main className="mx-auto flex w-full max-w-[720px] flex-col gap-5 px-4 pt-6 pb-8 tablet:max-w-[1040px] tablet:px-6">
+      <section className="mx-auto flex w-full max-w-[720px] flex-col gap-5 px-4 pt-6 pb-8 tablet:max-w-[1040px] tablet:px-6">
         {erro && (
           <p role="alert" className="text-[13px] text-danger">
             {erro}
@@ -245,6 +245,7 @@ export function CasalEAparelhos() {
                               shareTitle={`Recuperar o acesso ao ${brand.name}`}
                               shareText={`${member.name} liberou um aparelho novo para ${link.nome} no ${brand.name}. Abra o link para criar a passkey (vale até ${horaDoLink(link.expiresAt)}):`}
                               dica={dicaDaRecuperacao(link.nome)}
+                              uso="recuperacao"
                             />
                             <p className="text-[13px] leading-normal text-ink-2">
                               Vale até {horaDoLink(link.expiresAt)}. {pessoa.name} cria uma passkey nova, e os
@@ -285,7 +286,7 @@ export function CasalEAparelhos() {
           Os dois entram com passkey. Se alguém perder o aparelho, o outro libera o acesso aqui. Se os dois
           perderem, quem instalou roda npm run recuperar-acesso no computador.
         </p>
-      </main>
+      </section>
     </div>
   );
 }

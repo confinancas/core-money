@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,12 +16,18 @@ import {
   VOCES_DOIS_VAO_PODER,
 } from "../access/convite-textos";
 import { ShareLink } from "../access/ShareLink";
+import { IconeCheck } from "../components/icons";
 import { ApiError, apiEnviar, apiFetch, mensagemDoErro } from "../lib/api";
 import { useSession } from "../session/SessionProvider";
 import { type DadosDoConjuge, SpouseForm } from "./cadastro/SpouseForm";
 
+// O formulário e o botão do rodapé se ligam pelo id (o botão fica fora do cartão, no rodapé fixo da tela).
+const FORMULARIO = "formulario-do-conjuge";
+
 // Adicionar cônjuge (/configuracoes/casal/adicionar-conjuge, TASK-0105): o formulário, o link uma vez, o convite
 // aguardando (com novo link e cancelar). Um cônjuge por lar: com ele, a tela só confirma que vocês já são dois.
+// TASK-0107: a <section> no lugar do <main> (a moldura já tem o seu), o ✓ nos itens, o ícone de sucesso e o botão
+// principal no rodapé fixo.
 export function AdicionarConjuge() {
   const navegar = useNavigate();
   const { member, members } = useSession();
@@ -31,6 +37,7 @@ export function AdicionarConjuge() {
   const [criado, setCriado] = useState<ConviteCriado | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [nomeDigitado, setNomeDigitado] = useState("");
   const [jaSaoDois, setJaSaoDois] = useState(members.some((pessoa) => pessoa.role === "conjuge"));
   const travado = useRef(false);
 
@@ -56,16 +63,18 @@ export function AdicionarConjuge() {
     return (
       <div className="flex min-h-dvh flex-col bg-bg">
         {cabecalho}
-        <main className="mx-auto flex w-full max-w-[520px] flex-col gap-5 px-4 pt-6 pb-8 tablet:px-0">
+        <section className="mx-auto flex w-full max-w-[520px] flex-1 flex-col gap-5 px-4 pt-6 pb-6 tablet:px-0">
           <Card className="flex flex-col gap-5">
             <h1 className="text-[26px] font-extrabold tracking-[-0.4px]">
               Vocês já são dois no {brand.name}.
             </h1>
-            <Button full onClick={() => navegar("/configuracoes")}>
-              Concluir
-            </Button>
           </Card>
-        </main>
+        </section>
+        <RodapeDaTela>
+          <Button full onClick={() => navegar("/configuracoes")}>
+            Concluir
+          </Button>
+        </RodapeDaTela>
       </div>
     );
   }
@@ -132,8 +141,9 @@ export function AdicionarConjuge() {
     return (
       <div className="flex min-h-dvh flex-col bg-bg">
         {cabecalho}
-        <main className="mx-auto flex w-full max-w-[520px] flex-col gap-5 px-4 pt-6 pb-8 tablet:px-0">
+        <section className="mx-auto flex w-full max-w-[520px] flex-1 flex-col gap-5 px-4 pt-6 pb-6 tablet:px-0">
           <Card className="flex flex-col gap-5">
+            <IconeDeSucesso />
             <div className="flex flex-col gap-1.5">
               <h1 className="text-[26px] font-extrabold tracking-[-0.4px]">Convite criado</h1>
               <p className="text-[14px] leading-normal text-ink-2">
@@ -148,11 +158,13 @@ export function AdicionarConjuge() {
               dica={DICA_DO_CONVITE}
             />
             <ConviteNaLista convite={invite} />
-            <Button full onClick={() => navegar("/configuracoes")}>
-              Concluir
-            </Button>
           </Card>
-        </main>
+        </section>
+        <RodapeDaTela>
+          <Button full onClick={() => navegar("/configuracoes")}>
+            Concluir
+          </Button>
+        </RodapeDaTela>
       </div>
     );
   }
@@ -176,7 +188,7 @@ export function AdicionarConjuge() {
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
       {cabecalho}
-      <main className="mx-auto flex w-full max-w-[520px] flex-col gap-5 px-4 pt-6 pb-8 tablet:px-0">
+      <section className="mx-auto flex w-full max-w-[520px] flex-1 flex-col gap-5 px-4 pt-6 pb-6 tablet:px-0">
         {aguardando ? (
           <Card className="flex flex-col gap-5">
             <div className="flex flex-col gap-1.5">
@@ -207,22 +219,68 @@ export function AdicionarConjuge() {
                   primeiro acesso.
                 </p>
               </div>
-              <SpouseForm enviando={enviando} erroGeral={erro} aoEnviar={adicionar} />
+              <SpouseForm
+                enviando={enviando}
+                erroGeral={erro}
+                aoEnviar={adicionar}
+                formId={FORMULARIO}
+                semBotao
+                aoMudarNome={setNomeDigitado}
+              />
             </Card>
             <Card className="flex flex-col gap-3">
               <span className="text-[16px] font-extrabold">Vocês dois vão poder</span>
-              {VOCES_DOIS_VAO_PODER.map((item) => (
-                <span key={item} className="text-[13px] leading-normal text-ink-2">
-                  {item}
-                </span>
-              ))}
+              <ul className="flex flex-col gap-2.5">
+                {VOCES_DOIS_VAO_PODER.map((item) => (
+                  <li key={item} className="flex items-start gap-2.5 text-[13px] leading-normal text-ink-2">
+                    <IconeCheck size={16} className="mt-0.5 shrink-0 text-primary" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </Card>
             <p className="px-1 text-[13px] leading-normal text-ink-2">
               Cada conta tem um cônjuge. O link vale por 7 dias e serve uma vez só.
             </p>
           </>
         )}
-      </main>
+      </section>
+      {!aguardando && (
+        <RodapeDaTela>
+          <Button
+            type="submit"
+            form={FORMULARIO}
+            full
+            loading={enviando}
+            disabled={enviando || nomeDigitado.trim() === ""}
+          >
+            Adicionar cônjuge
+          </Button>
+        </RodapeDaTela>
+      )}
+    </div>
+  );
+}
+
+// O rodapé da tela: fica colado embaixo quando a página é mais alta que a janela (o botão principal).
+function RodapeDaTela({ children }: { children: ReactNode }) {
+  return (
+    <div className="sticky bottom-0 z-10 border-t border-field-border bg-bg px-4 pt-3 pb-4 tablet:px-0">
+      <div className="mx-auto w-full max-w-[520px]">{children}</div>
+    </div>
+  );
+}
+
+// O círculo de sucesso do convite criado: o ✓ dentro de dois anéis claros, como no protótipo.
+function IconeDeSucesso() {
+  return (
+    <div className="flex justify-center">
+      <span
+        aria-hidden="true"
+        className="flex size-14 items-center justify-center rounded-full bg-success-bg text-success ring-[9px] ring-success-bg/60"
+      >
+        <IconeCheck size={28} strokeWidth={2.5} />
+      </span>
     </div>
   );
 }

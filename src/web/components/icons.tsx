@@ -182,3 +182,11 @@ export function IconeEscudo(props: Props) {
     </Svg>
   );
 }
+
+export function IconeCheck(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </Svg>
+  );
+}
