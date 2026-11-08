@@ -247,6 +247,7 @@ test("cenário 10: link vencido mostra a hora do vencimento, e link inválido di
   page,
   browser,
 }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: ORIGEM });
   await ligaAutenticadorVirtual(page);
   await cadastraTitular(page);
   const link = await criaConvite(page);
