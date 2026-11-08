@@ -120,9 +120,9 @@ export function setupHouseholdRoutes(webauthn: WebAuthnVerifier): Hono<AppEnv> {
         .bind(agoraIso, hashDoCodigo),
       d1
         .prepare(
-          "INSERT INTO households (id, brand, created_at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM households)",
+          "INSERT INTO households (id, brand, created_at) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM households) AND EXISTS (SELECT 1 FROM invites WHERE kind = 'primeiro_acesso' AND token_hash = ? AND used_at = ?)",
         )
-        .bind(householdId, c.var.marca.id, agoraIso),
+        .bind(householdId, c.var.marca.id, agoraIso, hashDoCodigo, agoraIso),
       d1
         .prepare(
           "INSERT INTO members (id, household_id, name, email, role, created_at) SELECT ?, ?, ?, ?, 'titular', ? WHERE NOT EXISTS (SELECT 1 FROM members) AND EXISTS (SELECT 1 FROM households WHERE id = ?) AND EXISTS (SELECT 1 FROM invites WHERE kind = 'primeiro_acesso' AND token_hash = ? AND used_at = ?)",
