@@ -296,24 +296,28 @@ describe("verificação real da passkey (sem falso)", () => {
   });
 
   it("uma resposta sem a flag de verificação do usuário é recusada pelo verificador real (401 passkey_nao_confere)", async () => {
-    const { passkey } = await larComPasskeyReal();
+    const { passkey, lar } = await larComPasskeyReal();
     const app = createApp();
     const opcoes = await callApi(app, "POST", "/api/auth/login/options", {});
     const desafio = valorDoCookie(opcoes, "mm_chal");
     const { challenge } = (await opcoes.json()) as { challenge: string };
 
+    // Contador acima do guardado (3 na semente): a resposta só pode ser recusada pela falta da flag, não pelo contador.
     const asercao = await assinaAsercao(passkey, {
       challenge,
       rpId: "matrimoney.test",
       origin: "http://matrimoney.test",
       verificacaoDoUsuario: false,
-      contador: 1,
+      contador: 4,
     });
     const resposta = await verifica(app, desafio, { response: asercao });
 
     expect(resposta.status).toBe(401);
     expect(await resposta.json()).toMatchObject({ error: "passkey_nao_confere" });
     expect(await contaSql("SELECT COUNT(*) AS n FROM sessions")).toBe(0);
+    expect(
+      await env.DB.prepare("SELECT counter FROM passkeys WHERE id = ?").bind(lar.passkeyId).first(),
+    ).toEqual({ counter: 3 });
   });
 });
 
