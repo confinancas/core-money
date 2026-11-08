@@ -155,8 +155,11 @@ function soltaTrava() {
   travaCriada = false;
 }
 
-function geraConfigDeDev(env) {
+function geraConfigDeDev(env, pedido) {
   const base = lerJsonc(readFileSync(join(raiz, "wrangler.jsonc"), "utf8"));
+  // Só o fluxo do cadastro volta a cadastro a cada rodada: só ele desliga o cache de "pronto" do portão.
+  // As outras medições rodam com o cache, como em produção.
+  const voltaAoCadastro = (pedido.flows ?? []).some((fluxo) => fluxo.name === "cadastro");
   const config = {
     ...base,
     name: WORKER,
@@ -168,8 +171,7 @@ function geraConfigDeDev(env) {
       database_id: env.MM_DEV_D1_ID,
       migrations_dir: join(raiz, "migrations"),
     })),
-    // Worker só de medição: sem o cache de "pronto" do portão, para o fluxo do cadastro voltar a cadastro a cada rodada.
-    vars: { ...(base.vars ?? {}), SETUP_SEM_CACHE: "1" },
+    ...(voltaAoCadastro ? { vars: { ...(base.vars ?? {}), SETUP_SEM_CACHE: "1" } } : {}),
   };
   delete config.triggers;
   delete config.$schema;
@@ -252,7 +254,7 @@ async function main() {
   pegaTrava(pedido.task);
 
   try {
-    const cfg = geraConfigDeDev(env);
+    const cfg = geraConfigDeDev(env, pedido);
     const build = await executa([viteJs, "build"], process.env);
     if (build.codigo !== 0) falha(`vite build falhou.\n${mascara(build.saida)}`);
 
