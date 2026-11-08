@@ -285,3 +285,17 @@ describe("caminhos de segurança", () => {
     expect(sessao?.passkey_id).toBe(PASSKEY_DO_TITULAR);
   });
 });
+
+// Rodada 1 (avaliação final): a lista de aparelhos só mostra o lar da sessão.
+describe("rodada 1: a lista só mostra o lar da sessão", () => {
+  it("cada lar vê só as próprias pessoas: o titular não vê o outro lar, e o outro lar vê só a própria pessoa", async () => {
+    await criaLarDeDuas();
+    const outro = await criaOutroLar();
+    const app = createApp({ webauthn: verificadorDeRegistro().webauthn });
+
+    const doTitular = await listaDoLar(app, COOKIE_DO_TITULAR);
+    expect(doTitular.map((pessoa) => pessoa.name)).toEqual(["[TEST] Pessoa A", "[TEST] Pessoa B"]);
+    const doOutro = await listaDoLar(app, `mm_sess=${outro.token}`);
+    expect(doOutro.map((pessoa) => pessoa.name)).toEqual(["[TEST] Pessoa C"]);
+  });
+});

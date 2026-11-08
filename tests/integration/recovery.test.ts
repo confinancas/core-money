@@ -12,7 +12,7 @@ import {
   verificadorDeRegistro,
 } from "./helpers/aparelhos";
 import { callApi, semearPronto } from "./helpers/app";
-import { valorDoCookie } from "./helpers/sessao";
+import { semearSessao, valorDoCookie } from "./helpers/sessao";
 
 // Recuperação de acesso (TASK-0106): nível 2 (o parceiro gera o link de 15 min) e a verificação das rotas públicas.
 // O nível 3 (npm run recuperar-acesso) grava o mesmo tipo de linha: o teste usa o SQL do próprio script, com o
@@ -480,5 +480,89 @@ describe("caminhos de segurança da recuperação", () => {
         lar.conjugeId,
       ),
     ).toBe(1);
+  });
+});
+
+// Rodada 1 (avaliação final): caminhos que as sondas da Fable pegaram e que o repositório não cobria.
+describe("rodada 1: sessão na verificação, aviso por aparelho e links de duas pessoas", () => {
+  it("(a) verificação com sessão neste navegador: 409 ja_conectado, nenhuma passkey gravada e o link continua aberto", async () => {
+    const lar = await criaLarDeDuas();
+    const app = createApp({ webauthn: verificadorDeRegistro().webauthn });
+    const { token } = await geraLinkDoConjuge(app, lar);
+    // As opções saem sem cookie; a verificação chega com a sessão do cônjuge já neste navegador.
+    const desafio = await pedeOpcoes(app, token);
+    const resposta = await callApi(
+      app,
+      "POST",
+      "/api/recovery/verify",
+      { token, response: respostaDeRegistro("cred-TEST-0106-com-sessao") },
+      { cookie: `mm_chal=${desafio}; ${COOKIE_DO_CONJUGE}` },
+    );
+    expect(resposta.status).toBe(409);
+    expect(await resposta.json()).toMatchObject({ error: "ja_conectado" });
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM passkeys WHERE id = ?", "cred-TEST-0106-com-sessao"),
+    ).toBe(0);
+    expect((await inspeciona(app, token)).status).toBe(200);
+  });
+
+  it("(c) 'Foi eu' num aparelho antigo não esconde o aviso do outro aparelho antigo da mesma pessoa", async () => {
+    const lar = await criaLarDeDuas();
+    const app = createApp({ webauthn: verificadorDeRegistro().webauthn });
+    // Um segundo aparelho antigo do cônjuge: outra passkey e outra sessão, abertas antes da recuperação.
+    const tokenSegundo = "TESTE-SESSAO-0106-conjuge-segundo-aparelho-000000";
+    await env.DB.prepare(
+      "INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES (?, ?, 'PUBLICA-TEST-0106-SEGUNDO', 0, NULL, 'Android · Chrome', 'convite', ?, NULL)",
+    )
+      .bind("cred-TEST-0106-conjuge-2", lar.conjugeId, new Date(Date.now() - 60_000).toISOString())
+      .run();
+    await semearSessao(env.DB, {
+      memberId: lar.conjugeId,
+      passkeyId: "cred-TEST-0106-conjuge-2",
+      token: tokenSegundo,
+    });
+
+    const { token } = await geraLinkDoConjuge(app, lar);
+    const desafio = await pedeOpcoes(app, token);
+    const entrou = await verifica(app, token, desafio, "cred-TEST-0106-aviso-dois");
+    expect(entrou.status).toBe(201);
+
+    const avisos = async (cookie: string) => {
+      const sessao = (await (
+        await callApi(app, "GET", "/api/auth/session", undefined, { cookie })
+      ).json()) as {
+        notices: unknown[];
+      };
+      return sessao.notices.length;
+    };
+    const cookieSegundo = `mm_sess=${tokenSegundo}`;
+    expect(await avisos(COOKIE_DO_CONJUGE)).toBe(1);
+    expect(await avisos(cookieSegundo)).toBe(1);
+
+    // "Foi eu" só no primeiro: o segundo aparelho antigo continua vendo a faixa.
+    const foiEu = await callApi(app, "POST", "/api/auth/notices/seen", {}, { cookie: COOKIE_DO_CONJUGE });
+    expect(foiEu.status).toBe(200);
+    expect(await avisos(COOKIE_DO_CONJUGE)).toBe(0);
+    expect(await avisos(cookieSegundo)).toBe(1);
+  });
+
+  it("(d) gerar o link de uma pessoa não cancela o link da outra: o do cônjuge e o do titular abrem", async () => {
+    const lar = await criaLarDeDuas();
+    const app = createApp({ webauthn: verificadorDeRegistro().webauthn });
+    const doConjuge = await geraLinkDoConjuge(app, lar);
+    // O cônjuge gera o link do titular: não pode cancelar o link que o titular gerou para o cônjuge.
+    const criado = await callApi(
+      app,
+      "POST",
+      "/api/recovery-invites",
+      { memberId: lar.titularId },
+      { cookie: COOKIE_DO_CONJUGE },
+    );
+    expect(criado.status).toBe(201);
+    const { link } = (await criado.json()) as { link: string };
+    const doTitular = link.slice(link.indexOf("/recuperar/") + "/recuperar/".length);
+
+    expect((await inspeciona(app, doConjuge.token)).status).toBe(200);
+    expect((await inspeciona(app, doTitular)).status).toBe(200);
   });
 });

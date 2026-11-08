@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, expect, type Locator, type Page, test } from "@playwright/test";
 import { consultaSql, executaSql, PORTA_DA_CONFIGURACAO } from "./helpers/db";
 import { CODIGO_DE_TESTE, esperaInstalacao, preparaConfiguracaoDoZero } from "./helpers/setup";
 import { type AutenticadorVirtual, ligaAutenticadorVirtual } from "./helpers/webauthn";
@@ -101,11 +101,36 @@ async function copiaLinkDeRecuperacao(page: Page, pessoa: string): Promise<strin
   await expect(page.getByRole("button", { name: "Copiar link", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Copiar link", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Link copiado.");
+  // A frase do pé diz quem entra: a pessoa que perdeu o acesso, e não "cônjuge".
+  await expect(page.getByText(`entra como ${pessoa}`)).toBeVisible();
+  await expect(page.getByText("entra como cônjuge")).toHaveCount(0);
   return page.evaluate(() => navigator.clipboard.readText());
 }
 
 // Número de aparelhos de cada pessoa na lista da tela (a lista de cada cartão está dentro da moldura principal).
 const listas = (page: Page) => page.getByRole("main").getByRole("list");
+
+// Área de toque de pelo menos 44 px de altura e de largura (manual: áreas de toque), medida pelo navegador.
+async function alvoDeToqueDeNoMinimo44(botao: Locator): Promise<void> {
+  await expect(botao).toBeVisible();
+  const caixa = await botao.boundingBox();
+  expect(caixa?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(caixa?.width ?? 0).toBeGreaterThanOrEqual(44);
+}
+
+// Os cartões das pessoas: no tablet e no desktop, lado a lado (o mesmo y do nome); no celular, um embaixo do outro.
+async function provaDasColunas(page: Page): Promise<void> {
+  const titular = page.getByRole("heading", { level: 2, name: TITULAR, exact: true });
+  const conjuge = page.getByRole("heading", { level: 2, name: CONJUGE, exact: true });
+  await expect(titular).toBeVisible();
+  await expect(conjuge).toBeVisible();
+  const diferenca = ((await conjuge.boundingBox())?.y ?? 0) - ((await titular.boundingBox())?.y ?? 0);
+  if (test.info().project.name === "celular") {
+    expect(diferenca).toBeGreaterThan(50);
+  } else {
+    expect(Math.abs(diferenca)).toBeLessThanOrEqual(1);
+  }
+}
 
 test("cenários 8 e 9: o titular libera o acesso; o cônjuge entra num aparelho novo; o aparelho antigo vê a faixa e 'Foi eu' a esconde; o titular não vê", async ({
   page,
@@ -122,6 +147,7 @@ test("cenários 8 e 9: o titular libera o acesso; o cônjuge entra num aparelho 
     // O titular libera o acesso ao cônjuge e copia o link de 15 minutos.
     await page.goto("/configuracoes/casal");
     await expect(page.getByRole("heading", { name: "Casal e aparelhos" })).toBeVisible();
+    await provaDasColunas(page);
     const linkDeRecuperacao = await copiaLinkDeRecuperacao(page, CONJUGE);
     expect(linkDeRecuperacao).toMatch(/\/recuperar\/[A-Za-z0-9_-]{43}$/);
     const token = linkDeRecuperacao.slice(linkDeRecuperacao.indexOf("/recuperar/") + "/recuperar/".length);
@@ -154,6 +180,7 @@ test("cenários 8 e 9: o titular libera o acesso; o cônjuge entra num aparelho 
       await expect(page.getByText(/Um aparelho novo/)).toHaveCount(0);
 
       // "Foi eu" esconde a faixa neste aparelho.
+      await alvoDeToqueDeNoMinimo44(antigo.pagina.getByRole("button", { name: "Foi eu", exact: true }));
       await antigo.pagina.getByRole("button", { name: "Foi eu", exact: true }).click();
       await expect(antigo.pagina.getByText(/Um aparelho novo/)).toHaveCount(0);
       await antigo.pagina.reload();
@@ -162,6 +189,9 @@ test("cenários 8 e 9: o titular libera o acesso; o cônjuge entra num aparelho 
       // O aparelho novo remove o aparelho antigo do cônjuge. O antigo, na próxima navegação, vai para entrar.
       await novo.goto("/configuracoes/casal");
       await expect(novo.getByRole("heading", { name: "Casal e aparelhos" })).toBeVisible();
+      await alvoDeToqueDeNoMinimo44(
+        listas(novo).nth(1).getByRole("button", { name: "Remover", exact: true }).first(),
+      );
       await listas(novo).nth(1).getByRole("button", { name: "Remover", exact: true }).first().click();
       await novo.getByRole("dialog").getByRole("button", { name: "Remover", exact: true }).click();
       await expect(novo.getByRole("status")).toContainText("Aparelho removido.");
@@ -290,10 +320,56 @@ test("cenário 15: o login mostra 'Perdeu o acesso ao aparelho?' e o painel expl
   const sem = await contexto.newPage();
   try {
     await sem.goto("/entrar");
+    await alvoDeToqueDeNoMinimo44(sem.getByRole("button", { name: "Perdeu o acesso ao aparelho?" }));
     await sem.getByRole("button", { name: "Perdeu o acesso ao aparelho?" }).click();
     await expect(sem.getByText(/Peça a quem divide o/)).toBeVisible();
     await expect(sem.getByText(/npm run recuperar-acesso/)).toBeVisible();
   } finally {
     await contexto.close();
+  }
+});
+
+test("cenário 9b: 'Ver aparelhos' marca o aviso como visto, abre Casal e aparelhos, e a faixa não volta no reload", async ({
+  page,
+  browser,
+}) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: ORIGEM });
+  await ligaAutenticadorVirtual(page);
+  await cadastraTitular(page);
+  const link = await criaConvite(page);
+  const antigo = await conjugeAceita(browser, link);
+  try {
+    await page.goto("/configuracoes/casal");
+    const linkDeRecuperacao = await copiaLinkDeRecuperacao(page, CONJUGE);
+    const contexto = await browser.newContext({ baseURL: ORIGEM });
+    const novo = await contexto.newPage();
+    try {
+      await ligaAutenticadorVirtual(novo);
+      await novo.goto(linkDeRecuperacao);
+      await expect(novo.getByRole("heading", { name: "Cadastre uma passkey neste aparelho" })).toBeVisible();
+      await novo.getByRole("button", { name: "Criar passkey", exact: true }).click();
+      await expect(novo).toHaveURL(/\/inicio$/);
+
+      // O aparelho antigo vê a faixa e aperta "Ver aparelhos": marca visto e abre a tela.
+      await antigo.pagina.goto("/inicio");
+      await expect(antigo.pagina.getByText(/Um aparelho novo \(/)).toBeVisible();
+      const verAparelhos = antigo.pagina.getByRole("button", { name: "Ver aparelhos", exact: true });
+      await alvoDeToqueDeNoMinimo44(verAparelhos);
+      await verAparelhos.click();
+      await expect(antigo.pagina).toHaveURL(/\/configuracoes\/casal$/);
+      await expect(antigo.pagina.getByRole("heading", { name: "Casal e aparelhos" })).toBeVisible();
+
+      // No reload, a faixa não volta: o aviso ficou marcado como visto nesta sessão.
+      await antigo.pagina.reload();
+      await expect(antigo.pagina.getByRole("heading", { name: "Casal e aparelhos" })).toBeVisible();
+      await expect(antigo.pagina.getByText(/Um aparelho novo/)).toHaveCount(0);
+      expect(
+        contagem("SELECT COUNT(*) AS n FROM sessions WHERE notices_seen_at IS NOT NULL"),
+      ).toBeGreaterThanOrEqual(1);
+    } finally {
+      await contexto.close();
+    }
+  } finally {
+    await antigo.fecha();
   }
 });
