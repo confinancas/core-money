@@ -80,5 +80,10 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Teste de finalidade do desafio:** use um desafio que tenha `member_id`. Um desafio de login já é recusado por ter `member_id` nulo e, sozinho, não prova a finalidade.
 - **Tipos do Worker no teste de unidade:** o tsconfig de unidade não tem `D1Database`. Funções puras ficam em módulo separado, como `src/worker/invites/status.ts`.
 - **Medição:** `{id}` no caminho do arquivo de medição casa com qualquer segmento. Fluxo que precisa de sessão leva `sessao: true` e recebe o token pelo ambiente (`MM_CPU_SESSAO`).
+- **Aparelhos:** remover um aparelho apaga as sessões dele antes da passkey, no mesmo lote; na ordem contrária, a chave estrangeira recusa com 500.
+- **Recuperação:** o consumo do link entra no lote da passkey, com o `INSERT` condicionado ao link aberto. Não tire essa guarda: sem ela, duas abas gravam duas passkeys.
+- **Mensagens da API:** os textos em `src/worker` não levam o nome da marca (o teste `brand-literals` confere). Use texto neutro, e a tela usa `brand.name`.
+- **E2E que copia um link:** precisa de `grantPermissions` para a área de transferência; sem isso, a tela mostra o caminho alternativo.
+- **Mutações:** rode a unidade e a integração em comandos separados. A integração ignora os arquivos de unidade, e a bateria junta dá falsa sobrevivência.
 - **D1 remoto e `pragma_*`:** o D1 remoto recusa `pragma_*` (SQLITE_AUTH). Para ler chaves estrangeiras, use o `CREATE TABLE` em `sqlite_master`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.

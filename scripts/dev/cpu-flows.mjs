@@ -285,17 +285,143 @@ async function rodaConvite(navegador, total) {
   }
 }
 
+// Aparelhos (TASK-0106): cada rodada adiciona este aparelho pela sessão do titular (o navegador cria a passkey num
+// autenticador vazio, e a API recebe as opções e a verificação) e remove o aparelho anterior pela API. A sessão passa a
+// depender do aparelho novo a cada rodada, então o que sai nunca é o da sessão: a sessão continua, rodada após rodada.
+const PAUSA_DO_APARELHO_MS = 1500;
+const PASSKEY_DA_SESSAO_DE_MEDICAO = "cpu-passkey-sessao";
+const pausaDoAparelho = () => new Promise((resolver) => setTimeout(resolver, PAUSA_DO_APARELHO_MS));
+
+// Um autenticador virtual vazio para a página (interno, com verificação do usuário), como o do E2E.
+async function ligaAutenticadorVazio(contexto, pagina) {
+  const cdp = await contexto.newCDPSession(pagina);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: {
+      protocol: "ctap2",
+      transport: "internal",
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+}
+
+async function rodaAparelho(navegador, total) {
+  const sessao = process.env.MM_CPU_SESSAO;
+  if (!sessao)
+    throw new Error("Sem sessão de teste: o measure-cpu passa MM_CPU_SESSAO para o fluxo aparelho.");
+  const titular = await navegador.newContext();
+  try {
+    await titular.addCookies([{ name: "mm_sess", value: sessao, url }]);
+    const api = titular.request;
+    let anterior = PASSKEY_DA_SESSAO_DE_MEDICAO;
+    for (let i = 1; i <= total; i++) {
+      const pagina = await titular.newPage();
+      try {
+        await ligaAutenticadorVazio(titular, pagina);
+        await pagina.goto(`${url}/configuracoes/casal`, { timeout: 60000 });
+        await pagina.getByRole("heading", { name: "Casal e aparelhos" }).waitFor({ timeout: 60000 });
+        await pausaDoAparelho();
+        await pagina.getByRole("button", { name: "Adicionar este aparelho", exact: true }).click();
+        await pagina.getByText("Este aparelho entrou na lista.").waitFor({ timeout: 60000 });
+      } finally {
+        await pagina.close();
+      }
+      const [novo] = d1(
+        "SELECT id FROM passkeys WHERE added_via = 'aparelho' ORDER BY created_at DESC LIMIT 1",
+        { json: true },
+      );
+      if (!novo) throw new Error("aparelho: o aparelho novo não apareceu no banco de medição.");
+      await pausaDoAparelho();
+      const removido = await api.delete(`${url}/api/devices/${anterior}`);
+      if (removido.status() !== 200) throw new Error(`aparelho: a remoção respondeu ${removido.status()}.`);
+      anterior = novo.id;
+      console.log(`aparelho: rodada ${i} de ${total} ok`);
+      await pausaDoAparelho();
+    }
+  } finally {
+    await titular.close();
+  }
+}
+
+// Recuperação (TASK-0106): cada rodada tira as recuperações e os aparelhos recuperados do cônjuge de medição, pede o
+// link pela sessão do titular (15 min) e abre o link num aparelho novo, que cria a passkey. Não zera o lar.
+const PAUSA_DA_RECUPERACAO_MS = 1500;
+const pausaDaRecuperacao = () => new Promise((resolver) => setTimeout(resolver, PAUSA_DA_RECUPERACAO_MS));
+
+function resetaRecuperacao() {
+  for (const sql of [
+    "DELETE FROM sessions WHERE member_id = 'cpu-membro-2'",
+    "DELETE FROM passkeys WHERE added_via = 'recuperacao'",
+    "DELETE FROM webauthn_challenges",
+    "DELETE FROM invites WHERE kind = 'recuperacao'",
+  ]) {
+    d1(sql);
+  }
+}
+
+async function recuperaNoOutroAparelho(navegador, link) {
+  const contexto = await navegador.newContext();
+  try {
+    const pagina = await contexto.newPage();
+    await ligaAutenticadorVazio(contexto, pagina);
+    await pagina.goto(link, { timeout: 60000 });
+    await pagina
+      .getByRole("heading", { name: "Cadastre uma passkey neste aparelho" })
+      .waitFor({ timeout: 60000 });
+    await pausaDaRecuperacao();
+    await pagina.getByRole("button", { name: "Criar passkey", exact: true }).click();
+    await pagina.waitForURL(/\/inicio$/, { timeout: 60000 });
+  } finally {
+    await contexto.close();
+  }
+}
+
+async function rodaRecuperacao(navegador, total) {
+  const sessao = process.env.MM_CPU_SESSAO;
+  if (!sessao)
+    throw new Error("Sem sessão de teste: o measure-cpu passa MM_CPU_SESSAO para o fluxo recuperacao.");
+  const titular = await navegador.newContext();
+  try {
+    await titular.addCookies([{ name: "mm_sess", value: sessao, url }]);
+    const api = titular.request;
+    for (let i = 1; i <= total; i++) {
+      resetaRecuperacao();
+      await pausaDaRecuperacao();
+      const criado = await api.post(`${url}/api/recovery-invites`, { data: { memberId: "cpu-membro-2" } });
+      if (criado.status() !== 201) throw new Error(`recuperacao: o link respondeu ${criado.status()}.`);
+      const { link } = await criado.json();
+      await pausaDaRecuperacao();
+      await recuperaNoOutroAparelho(navegador, link);
+      console.log(`recuperacao: rodada ${i} de ${total} ok`);
+      await pausaDaRecuperacao();
+    }
+  } finally {
+    await titular.close();
+  }
+}
+
 const PAUSA_DO_LOGIN_MS = 1500;
 
-const FLUXOS = { cadastro: rodaCadastro, login: rodaLogin, convite: rodaConvite };
+const FLUXOS = {
+  cadastro: rodaCadastro,
+  login: rodaLogin,
+  convite: rodaConvite,
+  aparelho: rodaAparelho,
+  recuperacao: rodaRecuperacao,
+};
+
+// Fluxos que rodam em série e não zeram o banco: cada um cuida só do que é dele.
+const FLUXOS_EM_SERIE = ["login", "convite", "aparelho", "recuperacao"];
 
 async function main() {
   const fluxo = FLUXOS[nomeDoFluxo];
   if (!fluxo) throw new Error(`Fluxo desconhecido: ${nomeDoFluxo}`);
   const navegador = await chromium.launch();
   try {
-    if (nomeDoFluxo === "login" || nomeDoFluxo === "convite") {
-      // Login e convite rodam em série e não zeram o banco: cada um cuida só do que é dele.
+    if (FLUXOS_EM_SERIE.includes(nomeDoFluxo)) {
       await fluxo(navegador, rodadas);
       return;
     }

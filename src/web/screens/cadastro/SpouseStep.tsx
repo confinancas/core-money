@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { brand } from "../../../shared/brand";
 import type { ConviteCriado } from "../../../shared/invites";
 import {
+  DICA_DO_CONVITE,
   diaEMes,
   TITULO_DO_COMPARTILHAMENTO,
   textoDoCompartilhamento,
@@ -51,6 +52,7 @@ export function SpouseStep({ nomeDoTitular }: { nomeDoTitular: string }) {
           link={resposta.link}
           shareTitle={TITULO_DO_COMPARTILHAMENTO}
           shareText={textoDoCompartilhamento(nomeDoTitular, resposta.invite.expiresAt)}
+          dica={DICA_DO_CONVITE}
         />
 
         <span className="rounded-card border border-field-border bg-card px-4 py-3 text-[14px] text-ink">

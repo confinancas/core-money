@@ -475,9 +475,9 @@ async function main() {
     // URL e a configuração vão pelo ambiente do processo filho; a saída do fluxo nunca traz a URL (cpu-flows.mjs mascara).
     for (const fluxo of pedido.flows ?? []) {
       const ambienteDoFluxo = { ...ambienteDoWrangler(env), MM_CPU_URL: urlDoWorker, MM_CPU_CONFIG: cfg };
-      if (fluxo.name === "convite") {
-        // O convite cria e aceita pela sessão de teste do arquivo (sessao: true): o token vai só pelo ambiente.
-        if (!sessao) falha('O fluxo convite pede "sessao": true no arquivo de medição.');
+      if (["convite", "aparelho", "recuperacao"].includes(fluxo.name)) {
+        // Convite, aparelho e recuperação agem pela sessão de teste do arquivo (sessao: true): o token vai só pelo ambiente.
+        if (!sessao) falha(`O fluxo ${fluxo.name} pede "sessao": true no arquivo de medição.`);
         ambienteDoFluxo.MM_CPU_SESSAO = sessao.token;
       }
       if (fluxo.name === "login") {

@@ -6,11 +6,13 @@ type Props = {
   link: string;
   shareTitle: string;
   shareText: string;
+  // Frase do pé: quem o link é para (o convite diz "como cônjuge"; a recuperação diz o nome da pessoa).
+  dica: string;
 };
 
 // Copiar, compartilhar pelo sistema (só quando o aparelho oferece) e o QR code do link (TASK-0105; reusado pela 0106).
 // O link não sai da tela por outro caminho: quem o gera é quem mostra.
-export function ShareLink({ link, shareTitle, shareText }: Props) {
+export function ShareLink({ link, shareTitle, shareText, dica }: Props) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [mostraQr, setMostraQr] = useState(false);
   const [copiaFalhou, setCopiaFalhou] = useState(false);
@@ -67,9 +69,7 @@ export function ShareLink({ link, shareTitle, shareText }: Props) {
       )}
       {mostraQr && <QrDoLink texto={link} />}
 
-      <p className="text-[12px] leading-normal text-ink-2">
-        Mande por um canal de confiança: quem abrir o link primeiro entra como cônjuge.
-      </p>
+      <p className="text-[12px] leading-normal text-ink-2">{dica}</p>
     </section>
   );
 }

@@ -34,8 +34,13 @@ const CODIGOS_DEFINITIVOS = [
 ];
 
 export function AceitarConvite() {
-  const { token = "" } = useParams();
+  const { token: tokenDaUrl = "" } = useParams();
+  // O token fica só na memória da tela. A barra do navegador sai de /convite/:token (TASK-0106, avaliação da TASK-0105).
+  const [token] = useState(tokenDaUrl);
   const navegar = useNavigate();
+  useEffect(() => {
+    window.history.replaceState(window.history.state, "", "/entrar");
+  }, []);
   const aposEntrar = useSessaoAposEntrar();
   const atualizarFeatures = useAtualizarFeatures();
   const [situacao, setSituacao] = useState<Situacao>({ tipo: "carregando" });

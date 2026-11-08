@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import {
   createPasskey,
   type EntradaDaPasskey,
+  type MensagemDaPasskey,
   mensagemDaPasskey,
   navegadorTemPasskey,
   PasskeyIndisponivelError,
@@ -12,18 +13,21 @@ import {
 
 const MENSAGEM_SEM_PASSKEY = mensagemDaPasskey(new PasskeyIndisponivelError()).mensagem;
 
-// Passo "Crie sua passkey" (TASK-0103 no cadastro; TASK-0105 no aceite do convite). A entrada (as duas rotas e o corpo)
-// é de quem usa a tela. Cada toque é uma cerimônia só (trava); o erro vira a mensagem da tabela.
+// Passo "Crie sua passkey" (TASK-0103 no cadastro; TASK-0105 no aceite do convite; TASK-0106 na recuperação e no
+// "adicionar este aparelho"). A entrada (as duas rotas e o corpo) é de quem usa a tela. Cada toque é uma cerimônia só
+// (trava); o erro vira a mensagem da tabela. traduzErro, quando a tela tem mensagens próprias, vem antes da tabela.
 export function PasskeyStep({
   entrada,
   titulo = "Crie sua passkey",
   aoCriar,
   aoVoltar,
+  traduzErro,
 }: {
   entrada: EntradaDaPasskey;
   titulo?: string;
   aoCriar: () => void;
   aoVoltar: () => void;
+  traduzErro?: (erro: unknown) => MensagemDaPasskey | null;
 }) {
   const navegar = useNavigate();
   const [enviando, setEnviando] = useState(false);
@@ -40,7 +44,7 @@ export function PasskeyStep({
       await createPasskey(entrada);
       aoCriar();
     } catch (falha) {
-      const tratado = mensagemDaPasskey(falha);
+      const tratado = traduzErro?.(falha) ?? mensagemDaPasskey(falha);
       if (tratado.acao === "configuracao") {
         navegar("/configuracao-inicial", { replace: true });
         return;

@@ -6,6 +6,15 @@ const FUSO = "America/Sao_Paulo";
 // Criado uma vez no módulo: instanciar Intl.DateTimeFormat a cada chamada é caro.
 const formatoDiaMes = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, day: "2-digit", month: "2-digit" });
 
+// Frase do pé do link no convite do cônjuge (ShareLink): quem abre primeiro entra como cônjuge.
+export const DICA_DO_CONVITE =
+  "Mande por um canal de confiança: quem abrir o link primeiro entra como cônjuge.";
+
+// Frase do pé do link de recuperação: quem abre primeiro entra como a pessoa que perdeu o acesso.
+export function dicaDaRecuperacao(nome: string): string {
+  return `Mande por um canal de confiança: quem abrir o link primeiro entra como ${nome}.`;
+}
+
 // DD/MM do vencimento, no dia de São Paulo.
 export function diaEMes(iso: string): string {
   return formatoDiaMes.format(new Date(iso));

@@ -9,6 +9,7 @@ import { SkeletonCard } from "@/components/ui/skeleton";
 import { brand } from "../../shared/brand";
 import type { ConviteCriado, ConviteDoLar } from "../../shared/invites";
 import {
+  DICA_DO_CONVITE,
   diaEMes,
   TITULO_DO_COMPARTILHAMENTO,
   textoDoCompartilhamento,
@@ -144,6 +145,7 @@ export function AdicionarConjuge() {
               link={link}
               shareTitle={TITULO_DO_COMPARTILHAMENTO}
               shareText={textoDoCompartilhamento(member.name, invite.expiresAt)}
+              dica={DICA_DO_CONVITE}
             />
             <ConviteNaLista convite={invite} />
             <Button full onClick={() => navegar("/configuracoes")}>

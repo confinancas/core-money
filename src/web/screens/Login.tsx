@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { brand } from "../../shared/brand";
 import type { SessionResponse } from "../../shared/session";
 import type { SetupStatus } from "../../shared/setup";
 import { AccessLayout } from "../access/AccessLayout";
+import { AddThisDevicePrompt } from "../access/AddThisDevicePrompt";
 import {
   mensagemDoLogin,
   navegadorTemPasskey,
@@ -24,6 +26,9 @@ export function Login() {
   const [verificando, setVerificando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [perdeuAcesso, setPerdeuAcesso] = useState(false);
+  // Entrou pelo QR code (o celular confirmou): antes de ir ao início, sugere a passkey deste computador (TASK-0106).
+  const [sugereAparelho, setSugereAparelho] = useState(false);
   const travado = useRef(false);
   const semPasskey = !navegadorTemPasskey();
 
@@ -57,7 +62,11 @@ export function Login() {
     setEnviando(true);
     setMensagem(null);
     try {
-      await signInWithPasskey();
+      const entrada = await signInWithPasskey();
+      if (entrada.crossDevice) {
+        setSugereAparelho(true);
+        return;
+      }
       atualizarFeatures();
       aposEntrar();
     } catch (falha) {
@@ -72,6 +81,19 @@ export function Login() {
     return (
       <AccessLayout>
         <div aria-hidden="true" className="mm-esqueleto h-40 rounded-card" />
+      </AccessLayout>
+    );
+  }
+
+  if (sugereAparelho) {
+    return (
+      <AccessLayout>
+        <AddThisDevicePrompt
+          aoConcluir={() => {
+            atualizarFeatures();
+            aposEntrar();
+          }}
+        />
       </AccessLayout>
     );
   }
@@ -102,6 +124,23 @@ export function Login() {
           nele. O Bluetooth do computador precisa estar ligado.
         </p>
       </Card>
+
+      <div className="mt-5 flex flex-col items-center gap-3">
+        <button
+          type="button"
+          aria-expanded={perdeuAcesso}
+          onClick={() => setPerdeuAcesso((aberto) => !aberto)}
+          className="inline-flex min-h-11 items-center px-3 text-[14px] font-semibold text-primary underline-offset-4 hover:underline"
+        >
+          Perdeu o acesso ao aparelho?
+        </button>
+        {perdeuAcesso && (
+          <p className="max-w-[460px] text-center text-[13px] leading-normal text-ink-2">
+            Peça a quem divide o {brand.name} com você um link de recuperação, em Configurações › Casal e
+            aparelhos. Se ninguém consegue entrar, quem instalou roda npm run recuperar-acesso no computador.
+          </p>
+        )}
+      </div>
     </AccessLayout>
   );
 }

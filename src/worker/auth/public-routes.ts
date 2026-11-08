@@ -12,6 +12,10 @@ export const PUBLIC_API_ROUTES: readonly string[] = [
   "POST /api/invites/inspect",
   "POST /api/invites/accept/options",
   "POST /api/invites/accept/verify",
+  // Recuperação (TASK-0106): a pessoa sem acesso consulta o link e cadastra a passkey nova (opções e verificação).
+  "POST /api/recovery/inspect",
+  "POST /api/recovery/options",
+  "POST /api/recovery/verify",
 ];
 
 export function isPublicRoute(method: string, path: string): boolean {

@@ -12,8 +12,10 @@ import { Cadastro } from "./screens/Cadastro";
 import { ConfiguracaoInicial } from "./screens/ConfiguracaoInicial";
 import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
 import { NovaCategoria } from "./screens/categorias/NovaCategoria";
+import { CasalEAparelhos } from "./screens/configuracoes/CasalEAparelhos";
 import { ChaveDoClaude } from "./screens/configuracoes/ChaveDoClaude";
 import { Login } from "./screens/Login";
+import { Recuperar } from "./screens/Recuperar";
 import { RequireSession } from "./session/RequireSession";
 
 // Telas que um app põe no lugar das provisórias, pelo path da rota da tabela.
@@ -29,7 +31,7 @@ export const ROTAS: RotaDaTabela[] = [
   { path: "/entrar", frame: "bare", title: "Entrar", element: <Login /> },
   { path: "/criar-conta", frame: "bare", title: "Criar conta", element: <Cadastro /> },
   { path: "/convite/:token", frame: "bare", title: "Aceitar convite", element: <AceitarConvite /> },
-  { path: "/recuperar/:token", frame: "bare", title: "Recuperar acesso", element: provisoria },
+  { path: "/recuperar/:token", frame: "bare", title: "Recuperar acesso", element: <Recuperar /> },
   {
     path: "/configuracao-inicial",
     frame: "bare",
@@ -80,6 +82,13 @@ export const ROTAS: RotaDaTabela[] = [
     tab: "configuracoes",
     title: "Banco conectado",
     element: provisoria,
+  },
+  {
+    path: "/configuracoes/casal",
+    frame: "detail",
+    tab: "configuracoes",
+    title: "Casal e aparelhos",
+    element: <CasalEAparelhos />,
   },
   {
     path: "/configuracoes/claude",

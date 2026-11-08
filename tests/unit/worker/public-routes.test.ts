@@ -14,6 +14,9 @@ describe("rotas públicas", () => {
       "POST /api/invites/inspect",
       "POST /api/invites/accept/options",
       "POST /api/invites/accept/verify",
+      "POST /api/recovery/inspect",
+      "POST /api/recovery/options",
+      "POST /api/recovery/verify",
     ]);
   });
 
@@ -30,6 +33,9 @@ describe("rotas públicas", () => {
     ["POST", "/api/invites/inspect"],
     ["POST", "/api/invites/accept/options"],
     ["POST", "/api/invites/accept/verify"],
+    ["POST", "/api/recovery/inspect"],
+    ["POST", "/api/recovery/options"],
+    ["POST", "/api/recovery/verify"],
   ])("%s %s é pública", (metodo, caminho) => {
     expect(isPublicRoute(metodo, caminho)).toBe(true);
   });
@@ -55,6 +61,14 @@ describe("rotas públicas", () => {
     ["GET", "/api/invites/inspect"],
     ["POST", "/api/invites/accept/options/extra"],
     ["POST", "/api/invites/accept"],
+    // Aparelhos e o link do parceiro exigem sessão; só a consulta e o cadastro da recuperação são públicos.
+    ["GET", "/api/devices"],
+    ["POST", "/api/devices/verify"],
+    ["DELETE", "/api/devices/abc"],
+    ["POST", "/api/recovery-invites"],
+    ["POST", "/api/recovery/inspect/extra"],
+    ["POST", "/api/recovery"],
+    ["POST", "/api/auth/notices/seen"],
   ])("%s %s exige sessão", (metodo, caminho) => {
     expect(isPublicRoute(metodo, caminho)).toBe(false);
   });

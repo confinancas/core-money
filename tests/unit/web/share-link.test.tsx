@@ -1,6 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { diaEMes, TITULO_DO_COMPARTILHAMENTO, textoDoCompartilhamento } from "@/access/convite-textos";
+import {
+  DICA_DO_CONVITE,
+  diaEMes,
+  TITULO_DO_COMPARTILHAMENTO,
+  textoDoCompartilhamento,
+} from "@/access/convite-textos";
 import { ShareLink } from "@/access/ShareLink";
 import { brand } from "../../../src/shared/brand";
 
@@ -46,7 +51,7 @@ describe("ShareLink", () => {
 
   it("sem navigator.share, não mostra o botão Compartilhar", () => {
     apagaNavegador(["share"]);
-    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} />);
+    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} dica={DICA_DO_CONVITE} />);
     expect(screen.getByRole("button", { name: "Copiar link" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Mostrar QR code" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Compartilhar" })).toBeNull();
@@ -55,7 +60,9 @@ describe("ShareLink", () => {
   it("com navigator.share, mostra Compartilhar e entrega título, texto e link à folha do sistema", async () => {
     const share = vi.fn(async () => undefined);
     defineNavegador({ share });
-    render(<ShareLink link={LINK} shareTitle="Convite para o app" shareText={texto} />);
+    render(
+      <ShareLink link={LINK} shareTitle="Convite para o app" shareText={texto} dica={DICA_DO_CONVITE} />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Compartilhar" }));
     await vi.waitFor(() => expect(share).toHaveBeenCalledTimes(1));
@@ -66,7 +73,7 @@ describe("ShareLink", () => {
     defineNavegador({
       share: vi.fn(async () => Promise.reject(new DOMException("cancelado", "AbortError"))),
     });
-    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} />);
+    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} dica={DICA_DO_CONVITE} />);
     fireEvent.click(screen.getByRole("button", { name: "Compartilhar" }));
     await Promise.resolve();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -75,7 +82,7 @@ describe("ShareLink", () => {
   it("Copiar link põe o link na área de transferência e avisa", async () => {
     const writeText = vi.fn(async () => undefined);
     defineNavegador({ clipboard: { writeText } });
-    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} />);
+    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} dica={DICA_DO_CONVITE} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Copiar link" }));
     await vi.waitFor(() => expect(screen.getByText("Link copiado.")).toBeTruthy());
@@ -84,7 +91,7 @@ describe("ShareLink", () => {
 
   it("se a cópia falhar, mostra o link num campo para selecionar", async () => {
     defineNavegador({ clipboard: { writeText: vi.fn(async () => Promise.reject(new Error("negado"))) } });
-    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} />);
+    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} dica={DICA_DO_CONVITE} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Copiar link" }));
     await vi.waitFor(() => expect(screen.getByRole("textbox", { name: "Link do convite" })).toBeTruthy());
@@ -92,7 +99,7 @@ describe("ShareLink", () => {
   });
 
   it("Mostrar QR code desenha o QR do link em SVG, e Ocultar o tira da tela", () => {
-    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} />);
+    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} dica={DICA_DO_CONVITE} />);
     expect(screen.queryByRole("img", { name: "QR code do link do convite" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Mostrar QR code" }));
@@ -105,7 +112,7 @@ describe("ShareLink", () => {
   });
 
   it("sempre traz o aviso de canal de confiança", () => {
-    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} />);
+    render(<ShareLink link={LINK} shareTitle="Convite" shareText={texto} dica={DICA_DO_CONVITE} />);
     expect(screen.getByText(/quem abrir o link primeiro entra como cônjuge/)).toBeTruthy();
   });
 });

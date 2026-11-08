@@ -3,6 +3,7 @@
 // para "saiu", e a tela manda para /entrar. Nos testes, `valores` põe a sessão direto, sem chamar a API.
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import type { AvisoDeAparelhoNovo } from "../../shared/devices";
 import type { SessionHouseholdMember, SessionMember, SessionResponse } from "../../shared/session";
 import { ApiError, apiEnviar, apiFetch } from "../lib/api";
 
@@ -17,6 +18,8 @@ type ControleDaSessao = {
   esquecer: () => void;
   // Chama o logout e manda para /entrar (pelo estado "saiu").
   sair: () => Promise<void>;
+  // Tira os avisos de aparelho novo da sessão (depois do "Foi eu" na API).
+  marcaAvisosVistos: () => void;
 };
 
 const SEM_CONTROLE: ControleDaSessao = {
@@ -25,6 +28,7 @@ const SEM_CONTROLE: ControleDaSessao = {
   garantir: () => undefined,
   esquecer: () => undefined,
   sair: async () => undefined,
+  marcaAvisosVistos: () => undefined,
 };
 
 const Contexto = createContext<ControleDaSessao>(SEM_CONTROLE);
@@ -71,9 +75,13 @@ export function SessionProvider({ valores, children }: { valores?: SessionRespon
     }
   }, [mudaEstado]);
 
+  const marcaAvisosVistos = useCallback(() => {
+    setDados((atual) => (atual ? { ...atual, notices: [] } : atual));
+  }, []);
+
   const controle = useMemo<ControleDaSessao>(
-    () => ({ estado, dados, garantir: carregar, esquecer, sair }),
-    [estado, dados, carregar, esquecer, sair],
+    () => ({ estado, dados, garantir: carregar, esquecer, sair, marcaAvisosVistos }),
+    [estado, dados, carregar, esquecer, sair, marcaAvisosVistos],
   );
 
   return <Contexto.Provider value={controle}>{children}</Contexto.Provider>;
@@ -108,6 +116,12 @@ export function useSession(): SessaoDoApp {
 // As pessoas do lar para o rodapé do desktop; nulo enquanto a sessão não chegou.
 export function useSessionMembers(): SessionHouseholdMember[] | null {
   return useContext(Contexto).dados?.members ?? null;
+}
+
+// Os avisos de aparelho novo (TASK-0106) e a marcação de "visto". Vazio enquanto a sessão não chegou.
+export function useSessionNotices(): { avisos: AvisoDeAparelhoNovo[]; marcaVistos: () => void } {
+  const { dados, marcaAvisosVistos } = useContext(Contexto);
+  return { avisos: dados?.notices ?? [], marcaVistos: marcaAvisosVistos };
 }
 
 // Para a tela de entrar: ao sair do estado, a próxima rota da moldura lê a sessão nova.

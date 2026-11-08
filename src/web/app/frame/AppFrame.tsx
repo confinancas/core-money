@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { NewDeviceNotice } from "../../components/NewDeviceNotice";
 import { useFeatures } from "../features";
 import { useBreakpoint } from "../useBreakpoint";
 import type { Aba, Frame } from "./aba";
@@ -17,11 +18,15 @@ export function AppFrame({ frame, aba, children }: { frame: Frame; aba: Aba | nu
 
   if (frame === "bare") return <>{children}</>;
 
+  // A faixa de aparelho novo (TASK-0106) fica no topo do conteúdo, nas três molduras com conteúdo do app.
   if (largura === "celular") {
     const comMenu = frame !== "full";
     return (
       <div className="min-h-dvh">
-        <main className={cn("min-h-dvh", comMenu && "pb-32")}>{children}</main>
+        <main className={cn("min-h-dvh", comMenu && "pb-32")}>
+          <NewDeviceNotice />
+          {children}
+        </main>
         {comMenu && <BottomNav aba={aba} assistente={assistente} />}
       </div>
     );
@@ -34,7 +39,10 @@ export function AppFrame({ frame, aba, children }: { frame: Frame; aba: Aba | nu
       ) : (
         <Sidebar aba={aba} assistente={assistente} membros={membros} />
       )}
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="min-w-0 flex-1">
+        <NewDeviceNotice />
+        {children}
+      </main>
     </div>
   );
 }
