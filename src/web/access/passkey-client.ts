@@ -77,6 +77,20 @@ export function mensagemDaPasskey(erro: unknown): MensagemDaPasskey {
         };
       case "codigo_necessario":
         return { mensagem: "Digite o código de primeiro acesso para continuar.", acao: "configuracao" };
+      // Convite de cônjuge (TASK-0105): o aceite pode perder a corrida ou o convite pode ter vencido no meio.
+      case "ja_conectado":
+        return { mensagem: `Você já está no ${brand.name} neste aparelho.`, acao: null };
+      case "conjuge_ja_existe":
+        return { mensagem: "Este lar já tem um cônjuge.", acao: null };
+      case "convite_usado":
+        return {
+          mensagem: "Este convite já foi usado. Se foi você, entre com sua passkey.",
+          acao: "entrar",
+        };
+      case "convite_vencido":
+      case "convite_cancelado":
+      case "convite_invalido":
+        return { mensagem: "Este convite não vale mais. Peça a quem convidou um link novo.", acao: null };
       default:
         return { mensagem: "Não deu para criar a passkey agora. Tente de novo.", acao: null };
     }

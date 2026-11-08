@@ -21,6 +21,8 @@ for (const chave of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "MM_DEV_MA
   if (process.env[chave]) valoresSecretos.push(process.env[chave]);
 }
 if (process.env.MM_CPU_URL) valoresSecretos.push(process.env.MM_CPU_URL);
+// O token da sessão de teste do fluxo convite também não sai na saída de erro.
+if (process.env.MM_CPU_SESSAO) valoresSecretos.push(process.env.MM_CPU_SESSAO);
 // A chave privada da passkey de teste (TASK-0104) nunca sai na saída de erro.
 if (process.env.MM_CPU_PASSKEY) {
   const passkeyDeTeste = JSON.parse(process.env.MM_CPU_PASSKEY);
@@ -191,17 +193,109 @@ async function rodaLogin(navegador, total) {
   }
 }
 
+// Convite (TASK-0105): cada rodada tira o cônjuge do lar de medição e refaz o convite pela sessão do titular (a
+// sessão do setupSql, em MM_CPU_SESSAO): cria, gera um link novo, cancela, cria de novo e aceita num segundo aparelho
+// (outro contexto do navegador, com o autenticador virtual). Os pedidos do titular saem pela API do contexto, com o
+// cookie da sessão; o aceite é o da pessoa convidada, pelo navegador. Não zera o lar: só o que é do convite.
+const PAUSA_DO_CONVITE_MS = 1500;
+const NOME_DO_CONJUGE_DE_TESTE = "[TEST] Pessoa B";
+const EMAIL_DO_CONJUGE_DE_TESTE = "pessoa.b@example.com";
+const pausaDoConvite = () => new Promise((resolver) => setTimeout(resolver, PAUSA_DO_CONVITE_MS));
+
+// Tira o cônjuge, as passkeys e as sessões dele, os convites e os desafios: o titular e a sessão dele ficam.
+function resetaConvite() {
+  for (const sql of [
+    "DELETE FROM sessions WHERE member_id <> 'cpu-membro-1'",
+    "DELETE FROM passkeys WHERE added_via = 'convite'",
+    "DELETE FROM webauthn_challenges",
+    "DELETE FROM invites WHERE kind = 'conjuge'",
+    "DELETE FROM members WHERE role = 'conjuge'",
+  ]) {
+    d1(sql);
+  }
+}
+
+async function criaConviteDoTitular(api, url) {
+  const resposta = await api.post(`${url}/api/invites/conjuge`, {
+    data: { name: NOME_DO_CONJUGE_DE_TESTE, email: EMAIL_DO_CONJUGE_DE_TESTE },
+  });
+  if (resposta.status() !== 201) throw new Error(`convite: a criação respondeu ${resposta.status()}.`);
+  return resposta.json();
+}
+
+// A pessoa convidada abre o link num aparelho novo, cria o nome e a passkey, e chega ao início.
+async function aceitaNoOutroAparelho(navegador, link) {
+  const contexto = await navegador.newContext();
+  try {
+    const pagina = await contexto.newPage();
+    const cdp = await contexto.newCDPSession(pagina);
+    await cdp.send("WebAuthn.enable");
+    await cdp.send("WebAuthn.addVirtualAuthenticator", {
+      options: {
+        protocol: "ctap2",
+        transport: "internal",
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    });
+    await pagina.goto(link, { timeout: 60000 });
+    await pagina.getByLabel("Seu nome no app").fill(NOME_DO_CONJUGE_DE_TESTE);
+    await pausaDoConvite();
+    await pagina.getByRole("button", { name: "Continuar", exact: true }).click();
+    await pagina.getByRole("heading", { name: "Crie sua passkey" }).waitFor({ timeout: 60000 });
+    await pausaDoConvite();
+    await pagina.getByRole("button", { name: "Criar passkey", exact: true }).click();
+    await pagina.waitForURL(/\/inicio$/, { timeout: 60000 });
+  } finally {
+    await contexto.close();
+  }
+}
+
+async function rodaConvite(navegador, total) {
+  const sessao = process.env.MM_CPU_SESSAO;
+  if (!sessao)
+    throw new Error("Sem sessão de teste: o measure-cpu passa MM_CPU_SESSAO para o fluxo convite.");
+  const titular = await navegador.newContext();
+  try {
+    await titular.addCookies([{ name: "mm_sess", value: sessao, url }]);
+    const api = titular.request;
+    for (let i = 1; i <= total; i++) {
+      resetaConvite();
+      await pausaDoConvite();
+      const primeiro = await criaConviteDoTitular(api, url);
+      await pausaDoConvite();
+      const renovado = await api.post(`${url}/api/invites/${primeiro.invite.id}/renew`, { data: {} });
+      if (renovado.status() !== 201) throw new Error(`convite: o link novo respondeu ${renovado.status()}.`);
+      const novoConvite = await renovado.json();
+      await pausaDoConvite();
+      const cancelado = await api.delete(`${url}/api/invites/${novoConvite.invite.id}`);
+      if (cancelado.status() !== 200)
+        throw new Error(`convite: o cancelamento respondeu ${cancelado.status()}.`);
+      await pausaDoConvite();
+      const convite = await criaConviteDoTitular(api, url);
+      await pausaDoConvite();
+      await aceitaNoOutroAparelho(navegador, convite.link);
+      console.log(`convite: rodada ${i} de ${total} ok`);
+      await pausaDoConvite();
+    }
+  } finally {
+    await titular.close();
+  }
+}
+
 const PAUSA_DO_LOGIN_MS = 1500;
 
-const FLUXOS = { cadastro: rodaCadastro, login: rodaLogin };
+const FLUXOS = { cadastro: rodaCadastro, login: rodaLogin, convite: rodaConvite };
 
 async function main() {
   const fluxo = FLUXOS[nomeDoFluxo];
   if (!fluxo) throw new Error(`Fluxo desconhecido: ${nomeDoFluxo}`);
   const navegador = await chromium.launch();
   try {
-    if (nomeDoFluxo === "login") {
-      // O login roda em série num contexto só (a passkey fica no autenticador); o banco não é zerado.
+    if (nomeDoFluxo === "login" || nomeDoFluxo === "convite") {
+      // Login e convite rodam em série e não zeram o banco: cada um cuida só do que é dele.
       await fluxo(navegador, rodadas);
       return;
     }

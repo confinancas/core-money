@@ -247,7 +247,8 @@ const trocaI = (valor, i) => {
 // Caminho com {i} vira um padrão: /api/rules/cpu-regra-{i} casa com cpu-regra-1, cpu-regra-2... (qualquer número).
 function padraoDoCaminho(caminho) {
   const escapado = caminho.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`^${escapado.split("\\{i\\}").join("\\d+")}$`);
+  // {id} casa com um segmento qualquer (o id do convite é um UUID gerado pelo Worker).
+  return new RegExp(`^${escapado.split("\\{i\\}").join("\\d+").split("\\{id\\}").join("[^/]+")}$`);
 }
 
 const base64Url = (bytes) => Buffer.from(bytes).toString("base64url");
@@ -474,6 +475,11 @@ async function main() {
     // URL e a configuração vão pelo ambiente do processo filho; a saída do fluxo nunca traz a URL (cpu-flows.mjs mascara).
     for (const fluxo of pedido.flows ?? []) {
       const ambienteDoFluxo = { ...ambienteDoWrangler(env), MM_CPU_URL: urlDoWorker, MM_CPU_CONFIG: cfg };
+      if (fluxo.name === "convite") {
+        // O convite cria e aceita pela sessão de teste do arquivo (sessao: true): o token vai só pelo ambiente.
+        if (!sessao) falha('O fluxo convite pede "sessao": true no arquivo de medição.');
+        ambienteDoFluxo.MM_CPU_SESSAO = sessao.token;
+      }
       if (fluxo.name === "login") {
         ambienteDoFluxo.MM_CPU_PASSKEY = JSON.stringify({
           credentialIdBase64: passkeyDeLogin.credentialIdBase64,

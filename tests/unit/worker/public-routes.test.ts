@@ -11,6 +11,9 @@ describe("rotas públicas", () => {
       "POST /api/auth/login/verify",
       "POST /api/auth/logout",
       "GET /api/auth/session",
+      "POST /api/invites/inspect",
+      "POST /api/invites/accept/options",
+      "POST /api/invites/accept/verify",
     ]);
   });
 
@@ -24,6 +27,9 @@ describe("rotas públicas", () => {
     ["POST", "/api/auth/login/verify"],
     ["POST", "/api/auth/logout"],
     ["GET", "/api/auth/session"],
+    ["POST", "/api/invites/inspect"],
+    ["POST", "/api/invites/accept/options"],
+    ["POST", "/api/invites/accept/verify"],
   ])("%s %s é pública", (metodo, caminho) => {
     expect(isPublicRoute(metodo, caminho)).toBe(true);
   });
@@ -41,6 +47,14 @@ describe("rotas públicas", () => {
     ["POST", "/api/auth/session"],
     ["GET", "/api/auth/login/options"],
     ["POST", "/api/auth/session"],
+    ["GET", "/api/invites"],
+    ["POST", "/api/invites/conjuge"],
+    ["POST", "/api/invites/abc/renew"],
+    ["DELETE", "/api/invites/abc"],
+    ["POST", "/api/invites/inspect/extra"],
+    ["GET", "/api/invites/inspect"],
+    ["POST", "/api/invites/accept/options/extra"],
+    ["POST", "/api/invites/accept"],
   ])("%s %s exige sessão", (metodo, caminho) => {
     expect(isPublicRoute(metodo, caminho)).toBe(false);
   });
