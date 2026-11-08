@@ -59,17 +59,18 @@ function d1(sql, { json = false } = {}) {
 
 // Esvazia todas as tabelas do banco de medição, filhos antes dos pais, e põe a instalação em "cadastro" com o
 // código de teste aberto (e uma linha de chave, para o modo não ser "configuração"). Só dados [TEST].
+// O D1 remoto recusa as funções de pragma (SQLITE_AUTH); as chaves estrangeiras saem do texto do CREATE TABLE.
 function ordemDeEsvaziamento() {
   const tabelas = d1(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
+    "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
     { json: true },
-  ).map((linha) => linha.name);
-  const pais = new Map(tabelas.map((nome) => [nome, new Set()]));
-  for (const { filho, pai } of d1(
-    "SELECT m.name AS filho, f.\"table\" AS pai FROM sqlite_master AS m JOIN pragma_foreign_key_list(m.name) AS f WHERE m.type = 'table'",
-    { json: true },
-  )) {
-    if (pais.has(filho) && filho !== pai) pais.get(filho).add(pai);
+  );
+  const pais = new Map(tabelas.map((linha) => [linha.name, new Set()]));
+  for (const { name: filho, sql } of tabelas) {
+    for (const casa of String(sql ?? "").matchAll(/REFERENCES\s+[`"[]?(\w+)/gi)) {
+      const pai = casa[1];
+      if (pais.has(pai) && pai !== filho) pais.get(filho).add(pai);
+    }
   }
   const ordem = [];
   while (pais.size > 0) {
