@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlannedPercentages } from "../../../src/shared/spend-types";
+import { type PlannedPercentages, sumPlanned } from "../../../src/shared/spend-types";
 import {
   AVISO_DE_SOMA,
   mudaPercentual,
@@ -47,6 +47,11 @@ describe("barra e total da distribuição", () => {
 
   it("fechando em 100%, o total não é vermelho", () => {
     expect(totalDaDistribuicao({ ...PADRAO, metas: 35 })).toEqual({ texto: "100%", passou: false });
+  });
+
+  it("com a soma dos seis em 75%, o total ainda é 100% (Investimentos é a sobra)", () => {
+    expect(sumPlanned(PADRAO)).toBe(75);
+    expect(totalDaDistribuicao(PADRAO)).toEqual({ texto: "100%", passou: false });
   });
 });
 

@@ -6,6 +6,7 @@ import {
   type PlannedSpendType,
   SPEND_TYPE_DEFS,
   type SpendType,
+  sumPlanned,
 } from "../../../../shared/spend-types";
 import type { CategoriaDeTipo, RegraAutomatica, TiposDeGastoResposta } from "../../../api/spend-types";
 
@@ -40,10 +41,11 @@ export function segmentosDaBarra(
   });
 }
 
-// O total: "100%" quando fecha, "N%" quando passa (vermelho acima de 100, na tela).
+// O total é sempre 100% quando os seis tipos cabem (Investimentos é a sobra e fecha a conta); acima de 100, mostra a
+// soma dos seis, em vermelho.
 export function totalDaDistribuicao(percentuais: PlannedPercentages): { texto: string; passou: boolean } {
-  const soma = 100 - investmentsPct(percentuais);
-  return { texto: `${soma}%`, passou: soma > 100 };
+  const soma = sumPlanned(percentuais);
+  return { texto: `${Math.max(100, soma)}%`, passou: soma > 100 };
 }
 
 export function textoDaBase(base: TiposDeGastoResposta["base"], formatar: (cents: number) => string): string {
