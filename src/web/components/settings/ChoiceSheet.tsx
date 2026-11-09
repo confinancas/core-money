@@ -3,17 +3,17 @@ import { ChoiceTile } from "@/components/ui/choice-tile";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-export type OpcaoDeEscolha = { valor: number; rotulo: string };
+export type OpcaoDeEscolha<T extends string | number = number> = { valor: T; rotulo: string };
 
-type Props = {
+type Props<T extends string | number> = {
   aberto: boolean;
   titulo: string;
   descricao: string;
   // Nome do grupo de opções, para a leitura de tela.
   nomeDoGrupo: string;
-  opcoes: OpcaoDeEscolha[];
-  escolhido: number;
-  onEscolher: (valor: number) => void;
+  opcoes: OpcaoDeEscolha<T>[];
+  escolhido: T;
+  onEscolher: (valor: T) => void;
   onSalvar: () => void;
   onCancelar: () => void;
   salvando: boolean;
@@ -22,7 +22,7 @@ type Props = {
 
 // Painel de escolha dentro da tela (nunca confirm() nem prompt()): folha de baixo no celular, cartão no centro a
 // partir do tablet. Radix Dialog, como o ConfirmDialog. O botão principal fica no rodapé (à direita no tablet).
-export function ChoiceSheet({
+export function ChoiceSheet<T extends string | number>({
   aberto,
   titulo,
   descricao,
@@ -34,7 +34,7 @@ export function ChoiceSheet({
   onCancelar,
   salvando,
   erro,
-}: Props) {
+}: Props<T>) {
   return (
     <Dialog open={aberto} onOpenChange={(proximo) => !proximo && onCancelar()}>
       <DialogContent

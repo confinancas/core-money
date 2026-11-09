@@ -24,6 +24,7 @@ import type { Largura } from "../../app/useBreakpoint";
 import { SectionCasal } from "./SectionCasal";
 import { SectionCiclo } from "./SectionCiclo";
 import { SectionDados } from "./SectionDados";
+import { SectionDistribuicaoRenda } from "./SectionDistribuicaoRenda";
 import { SectionSincronizacao } from "./SectionSincronizacao";
 
 export type SettingsSection = {
@@ -44,6 +45,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     tabletColumn: 1,
     desktopColumn: 2,
     Component: SectionCiclo,
+  },
+  {
+    id: "distribuicao-da-renda",
+    title: "Distribuição da renda",
+    order: 40,
+    tabletColumn: 1,
+    desktopColumn: 2,
+    Component: SectionDistribuicaoRenda,
   },
   {
     id: "sincronizacao",
