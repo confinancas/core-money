@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { SAVINGS_GROUP_LABEL, SPEND_TYPES } from "../../../src/shared/spend-types";
+import {
+  allowedSpendTypes,
+  investmentsPct,
+  limitPct,
+  SAVINGS_GROUP_LABEL,
+  SPEND_TYPE_DEFS,
+  SPEND_TYPES,
+  sumPlanned,
+} from "../../../src/shared/spend-types";
 
 describe("SPEND_TYPES", () => {
   it("tem os sete tipos na ordem do manual", () => {
@@ -48,5 +56,37 @@ describe("SPEND_TYPES", () => {
       "investimentos",
     ]);
     expect(SAVINGS_GROUP_LABEL).toBe("Dinheiro guardado");
+  });
+});
+
+describe("percentuais e tipos permitidos (TASK-0802)", () => {
+  const P = { fixos: 35, conforto: 10, educacao: 5, extras: 5, prazeres: 10, metas: 10 };
+
+  it("investmentsPct é a sobra de 100; limitPct soma os cinco que entram no limite", () => {
+    expect(investmentsPct(P)).toBe(25);
+    expect(limitPct(P)).toBe(65);
+    expect(sumPlanned(P)).toBe(75);
+  });
+
+  it("soma acima de 100 deixa Investimentos negativo (a tela avisa)", () => {
+    expect(investmentsPct({ ...P, metas: 40, fixos: 40 })).toBe(-10);
+  });
+
+  it("allowedSpendTypes tira Metas e Investimentos no cartão e mantém os outros cinco", () => {
+    expect(allowedSpendTypes({ isCard: true })).toEqual([
+      "fixos",
+      "conforto",
+      "educacao",
+      "extras",
+      "prazeres",
+    ]);
+    expect(allowedSpendTypes({ isCard: false })).toHaveLength(7);
+  });
+
+  it("cada tipo com percentual aponta para o campo do lar; Investimentos não tem campo", () => {
+    expect(SPEND_TYPE_DEFS.filter((tipo) => tipo.pctField === null).map((tipo) => tipo.id)).toEqual([
+      "investimentos",
+    ]);
+    expect(SPEND_TYPE_DEFS.find((tipo) => tipo.id === "fixos")?.pctField).toBe("pct_fixed");
   });
 });

@@ -10,6 +10,7 @@ import {
 import type { SpendType } from "../../shared/spend-types";
 import type { Db } from "../db/client";
 import { categories } from "../db/schema";
+import { rederiveCategorySpendTypesStmt } from "../spend-types/derive";
 import { ensureCategorySeed, seedRefs, seedStatements } from "./seed";
 
 type CategoryRow = typeof categories.$inferSelect;
@@ -156,6 +157,11 @@ export async function updateCategory(
         )
         .bind(agoraIso, householdId, id),
     );
+  }
+  // TASK-0802: o tipo padrão ou a mãe mudaram: as linhas da categoria (e das subcategorias que herdam) são rederivadas
+  // no mesmo lote, depois da gravação da categoria. O que o casal escolheu e o que uma regra gravou não muda.
+  if (patch.defaultSpendType !== undefined || patch.parentId !== undefined) {
+    comandos.push(rederiveCategorySpendTypesStmt(db, householdId, id));
   }
   await d1.batch(comandos);
 

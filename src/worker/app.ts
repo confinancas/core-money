@@ -23,6 +23,7 @@ import { setupRoutes } from "./routes/setup";
 import { setupHouseholdRoutes } from "./routes/setup-household";
 import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
+import { regrasAutomaticasRoutes, tiposDeGastoRoutes } from "./spend-types/routes";
 
 export type AppOptions = {
   onMeter?: (meter: Meter, c: Context<AppEnv>) => void;
@@ -101,6 +102,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/categories", categoriesRoutes(resolverDaSessao, options.agora));
   app.route("/rules", regrasRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
+  app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
+  app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/", recoveryRoutes(webauthn, resolverDaSessao, options.agora));

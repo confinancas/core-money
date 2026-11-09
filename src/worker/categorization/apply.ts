@@ -5,10 +5,13 @@ import {
   SCOPE_MOVEMENTS,
 } from "../../shared/rule-match";
 import type { Db } from "../db/client";
+import { setDoTipoDaCategoria, tipoDaCategoriaSql } from "../spend-types/resolve";
 
 // Único arquivo que grava category_id (TASK-0302). Toda escrita de categoria, nome, tipo ou movimento por regra ou
 // por escolha do casal sai daqui. As chaves de casamento vêm do servidor (ESTABLISHMENT_KEY_SQL e COUNTERPARTY_KEY_SQL,
 // com o alias t). Escrita nunca toca ai_category_id (a sugestão da IA fica como está).
+// TASK-0802: a mesma instrução que grava a categoria grava o tipo de gasto pela categoria (herança), exceto quando o
+// casal escolheu o tipo (escolhido) ou uma regra o gravou (regra). Ver src/worker/spend-types/resolve.ts.
 
 // Regra já pronta para gravar: a categoria aqui é a categoria ativa, ou null (categoria arquivada não grava).
 export type RegraParaAplicar = {
@@ -26,6 +29,13 @@ const LIMITE_DA_FATIA = 500;
 const FATIAS_POR_REQUISICAO = 4;
 
 const marcas = (quantidade: number): string => Array.from({ length: quantidade }, () => "?").join(", ");
+
+// SET do tipo pela categoria (TASK-0802) e os parâmetros dele: o id da categoria vai em cada "?" do SQL, na ordem.
+function tipoPelaCategoria(categoriaId: string): { sets: string[]; params: string[] } {
+  const sets = setDoTipoDaCategoria("?");
+  const vezes = (sets.join(" ").match(/\?/g) ?? []).length;
+  return { sets, params: Array.from({ length: vezes }, () => categoriaId) };
+}
 
 const chaveDoEscopo = (escopo: RuleScope): string =>
   escopo === "estabelecimento" ? ESTABLISHMENT_KEY_SQL : COUNTERPARTY_KEY_SQL;
@@ -57,7 +67,9 @@ function escritaDaRegra(
     params.push(regra.setCustomName);
   }
   if (tipo !== null && !tipoBloqueado) {
-    const bloqueio = "card_id IS NOT NULL AND ? IN ('metas', 'investimentos')";
+    // escolhido nunca muda por regra (precedência escolhido > regra).
+    const bloqueio =
+      "spend_type_source = 'escolhido' OR (card_id IS NOT NULL AND ? IN ('metas', 'investimentos'))";
     sets.push(`spend_type = CASE WHEN ${bloqueio} THEN spend_type ELSE ? END`);
     params.push(tipo, tipo);
     sets.push(`spend_type_source = CASE WHEN ${bloqueio} THEN spend_type_source ELSE 'regra' END`);
@@ -72,9 +84,15 @@ function escritaDaRegra(
     params.push(regra.setMovement);
     sets.push("movement_locked = 1");
   }
-  if (gravaCategoria) {
+  if (regra.setCategoryId !== null) {
     sets.push("category_id = ?");
     params.push(regra.setCategoryId);
+    // Sem tipo na regra, o tipo vem da categoria que ela grava (herança, na mesma instrução).
+    if (tipo === null) {
+      const herdado = tipoPelaCategoria(regra.setCategoryId);
+      sets.push(...herdado.sets);
+      params.push(...herdado.params);
+    }
   }
   if (marca) {
     sets.push("categorized_at = ?", "categorized_by = 'regra'", "rule_id = ?");
@@ -97,12 +115,13 @@ export function setTransactionCategoryStmt(
     now: string;
   },
 ): D1PreparedStatement {
+  const tipo = tipoPelaCategoria(entrada.categoryId);
+  const sets = ["category_id = ?", ...tipo.sets, "categorized_at = ?", "categorized_by = ?", "rule_id = ?"];
   return db.$client
-    .prepare(
-      "UPDATE transactions SET category_id = ?, categorized_at = ?, categorized_by = ?, rule_id = ? WHERE id = ? AND household_id = ?",
-    )
+    .prepare(`UPDATE transactions AS t SET ${sets.join(", ")} WHERE t.id = ? AND t.household_id = ?`)
     .bind(
       entrada.categoryId,
+      ...tipo.params,
       entrada.now,
       entrada.by,
       entrada.ruleId,
@@ -150,14 +169,24 @@ const CTE_DA_REGRA = `WITH regra AS (
 const MARCA_DA_REGRA =
   "((SELECT categoria FROM regra) IS NOT NULL OR (SELECT movimento FROM regra) IS NOT NULL)";
 
+// Tipo da fatia (TASK-0802): escolhido nunca muda; o tipo da regra vale quando não é Metas/Investimentos num cartão;
+// sem tipo na regra, a categoria que ela grava dá o tipo (herança), exceto nas linhas que já são regra. A alias da
+// tabela no UPDATE é u (ver o FROM da fatia).
+const TIPO_DA_REGRA_VALE = `(SELECT tipo FROM regra) IS NOT NULL
+      AND NOT (u.card_id IS NOT NULL AND (SELECT tipo FROM regra) IN ('metas', 'investimentos'))`;
+const CATEGORIA_DA_REGRA_VALE = `(SELECT categoria FROM regra) IS NOT NULL AND COALESCE(u.spend_type_source, '') <> 'regra'`;
+const HERDADO_DA_FATIA = tipoDaCategoriaSql("(SELECT categoria FROM regra)", "u");
+
 const SET_DA_FATIA = `custom_name = CASE WHEN (SELECT nome FROM regra) IS NOT NULL AND custom_name IS NULL
       THEN (SELECT nome FROM regra) ELSE custom_name END,
-    spend_type = CASE WHEN (SELECT tipo FROM regra) IS NOT NULL
-      AND NOT (card_id IS NOT NULL AND (SELECT tipo FROM regra) IN ('metas', 'investimentos'))
-      THEN (SELECT tipo FROM regra) ELSE spend_type END,
-    spend_type_source = CASE WHEN (SELECT tipo FROM regra) IS NOT NULL
-      AND NOT (card_id IS NOT NULL AND (SELECT tipo FROM regra) IN ('metas', 'investimentos'))
-      THEN 'regra' ELSE spend_type_source END,
+    spend_type = CASE WHEN u.spend_type_source = 'escolhido' THEN u.spend_type
+      WHEN ${TIPO_DA_REGRA_VALE} THEN (SELECT tipo FROM regra)
+      WHEN ${CATEGORIA_DA_REGRA_VALE} THEN ${HERDADO_DA_FATIA.tipo}
+      ELSE u.spend_type END,
+    spend_type_source = CASE WHEN u.spend_type_source = 'escolhido' THEN u.spend_type_source
+      WHEN ${TIPO_DA_REGRA_VALE} THEN 'regra'
+      WHEN ${CATEGORIA_DA_REGRA_VALE} THEN ${HERDADO_DA_FATIA.origem}
+      ELSE u.spend_type_source END,
     movement_original = CASE WHEN (SELECT movimento FROM regra) IS NOT NULL AND movement <> (SELECT movimento FROM regra)
       THEN COALESCE(movement_original, movement) ELSE movement_original END,
     movement = COALESCE((SELECT movimento FROM regra), movement),
