@@ -88,5 +88,8 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Configurações:** uma seção nova é um `Section<Nome>.tsx` e uma linha em `sections.ts`, com `tabletColumn` e `desktopColumn`; o layout não muda.
 - **E2E na instalação pronta (8788):** chame `semearInstalacaoPronta()` antes de `semeiaSessaoDaInstalacaoPronta()`, senão a tela cai na configuração inicial. Teste que muda o dia de início volta o `cycle_start_day` a 11 antes de cada teste, e teste que sai usa sessão própria, para não derrubar a dos outros.
 - **Varredura do ciclo:** a varredura exaustiva da transição (`tests/unit/shared/cycle.test.ts`) tem timeout de 30 s, porque passa de 5 s sob o gate.
+- **Tipo de gasto:** `spend_type` só é gravado em `src/worker/categorization/apply.ts` (a herança vai junto com a categoria), em `src/worker/spend-types/derive.ts` e na carga da migração `0008`. A SQL da herança é `tipoDaCategoriaSql` (`src/worker/spend-types/resolve.ts`), com o alias `t`; o espelho em TypeScript é `resolveSpendType`.
+- **A web não importa de `src/worker`:** constantes compartilhadas vão para `src/shared`.
+- **D1 e profundidade:** uma cadeia longa de `REPLACE` estoura "Expression tree is too large (maximum depth 100)". A normalização de acento da contraparte usa 13.
 - **D1 remoto e `pragma_*`:** o D1 remoto recusa `pragma_*` (SQLITE_AUTH). Para ler chaves estrangeiras, use o `CREATE TABLE` em `sqlite_master`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
