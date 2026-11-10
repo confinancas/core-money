@@ -1,14 +1,13 @@
 import { Link } from "react-router";
 import type { CartaoResumo } from "../../../shared/api/cards";
 import { formatDayMonth, monthNamePt } from "../../../shared/format/dates";
-import { formatMoney } from "../../../shared/money";
-import { IconeCartao } from "../../components/icons";
+import { IconeCartao, IconeCheck } from "../../components/icons";
 import { Money } from "../../components/ui/money";
 import { StatusPill } from "../../components/ui/status-pill";
 import { limiteUsadoPct, seloDePaga, seloDeVencimento } from "./view-model";
 
-// Um cartão na lista (TASK-0402): banco, final e ciclo; selo; a fatura do topo com datas e a barra do limite.
-// Toque leva ao detalhe do cartão.
+// Um cartão na lista (TASK-0402): banco, final e ciclo; selo; a fatura do topo com datas e a barra do limite. Os
+// valores passam por Money, então o olho os borra. Toque leva ao detalhe do cartão.
 export function CartaoNaLista({ cartao, hoje }: { cartao: CartaoResumo; hoje: string }) {
   const atual = cartao.current;
   const aberta = atual?.state === "aberta";
@@ -18,6 +17,7 @@ export function CartaoNaLista({ cartao, hoje }: { cartao: CartaoResumo; hoje: st
       : cartao.badge.kind === "vence"
         ? seloDeVencimento(cartao.badge.dueOn, hoje)
         : seloDePaga(cartao.badge.cycleKey);
+  const paga = cartao.badge?.kind === "paga";
   const temLimite = cartao.limitCents !== null && cartao.availableCents !== null && cartao.limitCents > 0;
   const usado = temLimite ? limiteUsadoPct(cartao.limitCents ?? 0, cartao.availableCents ?? 0) : 0;
 
@@ -41,7 +41,12 @@ export function CartaoNaLista({ cartao, hoje }: { cartao: CartaoResumo; hoje: st
             {atual ? ` · ciclo de ${monthNamePt(atual.cycleKey)}` : ""}
           </p>
         </div>
-        {selo !== null && <StatusPill tone={selo.tom}>{selo.texto}</StatusPill>}
+        {selo !== null && (
+          <StatusPill tone={selo.tom}>
+            {paga && <IconeCheck size={12} className="mr-1" />}
+            {selo.texto}
+          </StatusPill>
+        )}
       </div>
 
       {atual && (
@@ -77,13 +82,13 @@ export function CartaoNaLista({ cartao, hoje }: { cartao: CartaoResumo; hoje: st
           <p className="text-[13px] text-ink-2">
             {aberta || cartao.openTotalCents === null ? (
               <>
-                {formatMoney(cartao.availableCents ?? 0)} de limite disponível de{" "}
-                {formatMoney(cartao.limitCents ?? 0)}
+                <Money cents={cartao.availableCents ?? 0} /> de limite disponível de{" "}
+                <Money cents={cartao.limitCents ?? 0} />
               </>
             ) : (
               <>
-                Nova fatura aberta: {formatMoney(cartao.openTotalCents)} · limite disponível{" "}
-                {formatMoney(cartao.availableCents ?? 0)}
+                Nova fatura aberta: <Money cents={cartao.openTotalCents} /> · limite disponível{" "}
+                <Money cents={cartao.availableCents ?? 0} />
               </>
             )}
           </p>

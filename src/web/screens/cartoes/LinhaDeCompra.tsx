@@ -5,9 +5,10 @@ import { relativeDayPt } from "../../../shared/format/dates";
 import { HiddenItem } from "../../components/ui/hidden-item";
 import { Money } from "../../components/ui/money";
 
-// Uma compra ou estorno da fatura (TASK-0402): nome; contexto "Hoje · banco · categoria" (ou só a categoria, na
-// detalhe do cartão); valor. Estorno em verde, com "−" e "estorno" no lugar da categoria. Parcelada mostra
-// "parcela k de n". Sem categoria: "Revisar categoria" em laranja. Oculto vai para o item tracejado, riscado.
+// Uma compra ou estorno da fatura (TASK-0402): nome; contexto; valor. A compra sai sem sinal; só o estorno leva o "−",
+// em verde, com "estorno" no lugar da categoria. Parcelada mostra "parcela k de n" no lugar da categoria. Sem categoria
+// aparece "Revisar categoria" em laranja: na lista de compras é o contexto inteiro ("Revisar categoria"); no detalhe do
+// cartão vem depois da data ("DD/MM · Revisar categoria"). Oculto vai para o item tracejado, com o valor riscado.
 export function LinhaDeCompra({
   compra,
   hoje,
@@ -18,22 +19,28 @@ export function LinhaDeCompra({
   mostrarBanco: boolean;
 }) {
   const estorno = compra.movement === "estorno";
+  const parcelada = compra.installmentNumber !== null && compra.installmentTotal !== null;
   const data = relativeDayPt(compra.localDate, hoje);
   const banco = mostrarBanco ? compra.cardLabel : undefined;
+  const semCategoria = !estorno && !parcelada && compra.uncategorized;
+  const revisar = <span className="text-warn">Revisar categoria</span>;
 
   let categoria: ReactNode;
   if (estorno) categoria = "estorno";
-  else if (compra.installmentNumber !== null && compra.installmentTotal !== null) {
-    categoria = `parcela ${compra.installmentNumber} de ${compra.installmentTotal}`;
-  } else if (compra.uncategorized) categoria = <span className="text-warn">Revisar categoria</span>;
+  else if (parcelada) categoria = `parcela ${compra.installmentNumber} de ${compra.installmentTotal}`;
+  else if (semCategoria) categoria = revisar;
   else categoria = compra.categoryName ?? "";
 
-  const contexto = (
-    <>
-      {data}
-      {banco !== undefined && <> · {banco}</>} · {categoria}
-    </>
-  );
+  // Na lista, a compra sem categoria mostra só "Revisar categoria" (sem data nem banco).
+  const contexto =
+    mostrarBanco && semCategoria ? (
+      revisar
+    ) : (
+      <>
+        {data}
+        {banco !== undefined && <> · {banco}</>} · {categoria}
+      </>
+    );
 
   const conteudo = (
     <Link
@@ -47,7 +54,7 @@ export function LinhaDeCompra({
       {estorno ? (
         <Money cents={-Math.abs(compra.amountCents)} className="shrink-0 text-success-ink" />
       ) : (
-        <Money cents={compra.amountCents} className="shrink-0" struck={compra.hidden} />
+        <Money cents={Math.abs(compra.amountCents)} sign="none" className="shrink-0" struck={compra.hidden} />
       )}
     </Link>
   );

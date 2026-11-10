@@ -64,7 +64,7 @@ export function Cartoes() {
             </GlassBubble>
           </div>
 
-          <div className="mx-auto grid w-full max-w-[1120px] items-start gap-5 px-4 pt-6 pb-8 tablet:px-6 desktop:grid-cols-3">
+          <div className="mx-auto grid w-full max-w-[1120px] items-start gap-5 px-4 pt-6 pb-8 tablet:grid-cols-2 tablet:px-6 desktop:grid-cols-3">
             {dados.cards.length === 0 ? (
               <div className="desktop:col-span-3">
                 <EmptyState
@@ -79,7 +79,7 @@ export function Cartoes() {
               </div>
             ) : (
               <>
-                <div className="grid min-w-0 gap-4 tablet:grid-cols-2 desktop:col-span-2">
+                <div className="grid min-w-0 gap-4 desktop:col-span-2 desktop:grid-cols-2">
                   {dados.cards.map((cartao) => (
                     <CartaoNaLista key={cartao.id} cartao={cartao} hoje={hoje} />
                   ))}

@@ -5,10 +5,11 @@ import { IconeSeta } from "../../components/icons";
 import { Card } from "../../components/ui/card";
 import { Money } from "../../components/ui/money";
 import { StatusPill } from "../../components/ui/status-pill";
-import { pilulaDeVariacao, type TomDoSelo, textoDasParcelas } from "./view-model";
+import { pilulaDeVariacao, textoDasParcelas } from "./view-model";
 
-// Cartão "Faturas" do detalhe (TASK-0402): setas para a fatura anterior e a próxima, o rótulo, o valor, a pílula de
-// variação, o detalhe da fatura e o gráfico de cinco faturas. Tocar numa barra seleciona a fatura.
+// Cartão "Faturas" do detalhe (TASK-0402): título, setas para a fatura anterior e a próxima, o rótulo, o valor, a
+// pílula, o detalhe da fatura e o gráfico de cinco faturas. Tocar numa barra seleciona a fatura. As pílulas sem
+// variação são neutras, como no protótipo: parcial e futura só com contorno; sem mês anterior, em cinza claro.
 export function FaturasDoCartao({
   faturas,
   selecionada,
@@ -34,6 +35,8 @@ export function FaturasDoCartao({
 
   return (
     <Card className="flex flex-col gap-4">
+      <h2 className="text-[16px] font-extrabold text-ink">Faturas</h2>
+
       <div className="flex items-center justify-between gap-2">
         <SetaDaFatura
           direcao="anterior"
@@ -54,7 +57,17 @@ export function FaturasDoCartao({
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Money cents={fatura.totalCents} className="text-[28px] font-extrabold" />
-          {pilula !== null && <StatusPill tone={pilula.tom}>{pilula.texto}</StatusPill>}
+          {pilula.tipo === "variacao" && <StatusPill tone={pilula.tom}>{pilula.texto}</StatusPill>}
+          {pilula.tipo === "contorno" && (
+            <span className="inline-flex items-center rounded-full border border-[#98A39D] px-2.5 py-[3px] text-[12px] font-extrabold text-[#18221E]">
+              {pilula.texto}
+            </span>
+          )}
+          {pilula.tipo === "clara" && (
+            <span className="inline-flex items-center rounded-full bg-[#E1E7E4] px-2.5 py-[3px] text-[12px] font-extrabold text-[#66756E]">
+              {pilula.texto}
+            </span>
+          )}
         </div>
         {detalhe !== null && <p className="text-[13px] text-ink-2">{detalhe}</p>}
       </div>
@@ -78,16 +91,20 @@ export function FaturasDoCartao({
   );
 }
 
-// Pílula: aberta é "parcial · aberta"; futura é "futura"; a primeira da série é "sem mês anterior"; fechada compara
-// com a anterior (▲ em alta, ▼ em queda).
-function pilulaDoStatus(
-  atual: FaturaDaSerie,
-  anterior: FaturaDaSerie | undefined,
-): { texto: string; tom: TomDoSelo } | null {
-  if (atual.status === "aberta") return { texto: "parcial · aberta", tom: "sucesso" };
-  if (atual.status === "futura") return { texto: "futura", tom: "sucesso" };
-  if (anterior === undefined) return { texto: "sem mês anterior", tom: "sucesso" };
-  return pilulaDeVariacao(atual.totalCents, anterior.totalCents);
+type PilulaDaFatura =
+  | { tipo: "variacao"; texto: string; tom: "aviso" | "falta" | "sucesso" }
+  | { tipo: "contorno"; texto: string }
+  | { tipo: "clara"; texto: string }
+  | { tipo: "nenhuma" };
+
+// Pílula: aberta é "parcial · aberta" e futura é "futura" (só com contorno); a primeira da série é "sem mês anterior"
+// (cinza claro); fechada compara com a anterior (▲ em alta, ▼ em queda), e sem base não há pílula.
+function pilulaDoStatus(atual: FaturaDaSerie, anterior: FaturaDaSerie | undefined): PilulaDaFatura {
+  if (atual.status === "aberta") return { tipo: "contorno", texto: "parcial · aberta" };
+  if (atual.status === "futura") return { tipo: "contorno", texto: "futura" };
+  if (anterior === undefined) return { tipo: "clara", texto: "sem mês anterior" };
+  const variacao = pilulaDeVariacao(atual.totalCents, anterior.totalCents);
+  return variacao === null ? { tipo: "nenhuma" } : { tipo: "variacao", ...variacao };
 }
 
 // O texto da linha de detalhe, pelo status da fatura.
