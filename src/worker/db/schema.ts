@@ -485,3 +485,13 @@ export const webauthnChallenges = sqliteTable(
     ),
   ],
 );
+
+// Uso do dia do app, em UTC (TASK-0109, ADR-008): uma linha por dia. O D1 é um por instalação, então não há lar aqui.
+// requests, rows_read e rows_written somam o que o medidor conta; size_bytes é o último tamanho medido (não é diário).
+export const usageDaily = sqliteTable("usage_daily", {
+  day: text("day").primaryKey(),
+  requests: integer("requests").notNull().default(0),
+  rowsRead: integer("rows_read").notNull().default(0),
+  rowsWritten: integer("rows_written").notNull().default(0),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+});

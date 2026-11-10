@@ -1,5 +1,6 @@
 import { type Context, Hono } from "hono";
 import type { BrandConfig } from "../shared/brand/types";
+import { resetsAt } from "../shared/usage";
 import { isPublicRoute } from "./auth/public-routes";
 import { requireSession, sessaoDoCookie } from "./auth/sessions";
 import { verificadorReal, type WebAuthnLoginVerifier, type WebAuthnVerifier } from "./auth/webauthn";
@@ -21,9 +22,11 @@ import { recoveryRoutes } from "./routes/recovery";
 import { settingsRoutes } from "./routes/settings";
 import { setupRoutes } from "./routes/setup";
 import { setupHouseholdRoutes } from "./routes/setup-household";
+import { planoPagoRoutes, usageRoutes } from "./routes/usage";
 import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
 import { regrasAutomaticasRoutes, tiposDeGastoRoutes } from "./spend-types/routes";
+import { isD1DailyLimitError } from "./usage/d1-limit-errors";
 
 export type AppOptions = {
   onMeter?: (meter: Meter, c: Context<AppEnv>) => void;
@@ -104,6 +107,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
+  app.route("/usage", usageRoutes(resolverDaSessao, options.agora));
+  app.route("/settings/paid-plan", planoPagoRoutes(resolverDaSessao));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/", recoveryRoutes(webauthn, resolverDaSessao, options.agora));
@@ -111,6 +116,11 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.notFound((c) => apiError(c, 404, "rota_inexistente", "Rota não encontrada."));
 
   app.onError((err, c) => {
+    // Limite diário do D1 (TASK-0109): 429 com o horário da volta. Só o código vai para o log, sem a mensagem do D1.
+    if (isD1DailyLimitError(err)) {
+      console.error("limite_d1");
+      return c.json({ error: "limite_d1", resetsAt: resetsAt(options.agora?.() ?? new Date()) }, 429);
+    }
     console.error(`${c.req.method} ${c.req.path} ${err.name}: ${err.message}`);
     return apiError(c, 500, "erro_interno", "Algo deu errado. Tente de novo.");
   });
