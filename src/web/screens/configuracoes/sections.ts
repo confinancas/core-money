@@ -6,7 +6,7 @@
 // Tabela completa (as seções das outras tasks entram por elas, sem mexer no layout):
 //   id                     título                 order  tablet  desktop  quem entrega
 //   casal                  Casal                  10     1       1        esta task
-//   contas-meu-pluggy      Contas Meu Pluggy      20     1       1        TASK-0203
+//   contas-meu-pluggy      Contas Meu Pluggy      20     1       1        TASK-0203 (esta entrada)
 //   ciclo                  Ciclo e orçamento      30     1       2        esta task
 //   distribuicao-da-renda  Distribuição da renda  40     1       2        TASK-0802
 //   renda-fixa             Renda fixa             50     2       2        TASK-0901
@@ -23,6 +23,7 @@ import type { FC } from "react";
 import type { Largura } from "../../app/useBreakpoint";
 import { SectionCasal } from "./SectionCasal";
 import { SectionCiclo } from "./SectionCiclo";
+import { SectionContasMeuPluggy } from "./SectionContasMeuPluggy";
 import { SectionDados } from "./SectionDados";
 import { SectionDistribuicaoRenda } from "./SectionDistribuicaoRenda";
 import { SectionSincronizacao } from "./SectionSincronizacao";
@@ -38,6 +39,14 @@ export type SettingsSection = {
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "casal", title: "Casal", order: 10, tabletColumn: 1, desktopColumn: 1, Component: SectionCasal },
+  {
+    id: "contas-meu-pluggy",
+    title: "Contas Meu Pluggy",
+    order: 20,
+    tabletColumn: 1,
+    desktopColumn: 1,
+    Component: SectionContasMeuPluggy,
+  },
   {
     id: "ciclo",
     title: "Ciclo e orçamento",
