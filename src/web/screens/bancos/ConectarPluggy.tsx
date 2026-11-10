@@ -37,6 +37,11 @@ type Resultado = { rotulo: string; quantidade: number };
 const CHAVES_VAZIAS: ChavesDaTela = { clientId: "", clientSecret: "" };
 const AVISO_DAS_CHAVES_TROCADAS = "Chaves trocadas.";
 
+// Coluna dos passos (ConectarPluggy*.dc.html): o celular tem 16 px de cada lado; o tablet usa a área ao lado do menu
+// (96 px) com 24 px; o desktop é uma coluna de 720 px encostada à esquerda da área (252 px de menu, 32 px de margem).
+// No desktop, o máximo inclui as margens de 32 px: 784 px dão um cartão de 720 px (com a borda do box-sizing).
+const COLUNA = "w-full px-4 -mt-10 tablet:px-6 desktop:max-w-[784px] desktop:px-8";
+
 // Conectar Meu Pluggy (/configuracoes/bancos/conectar, TASK-0203): quatro passos com as chaves testadas antes de
 // gravar. Dois atalhos: ?conexao=<id> abre no passo 3 (outro banco desta conta); ?conexao=<id>&trocar=chaves abre
 // só o passo 2 (troca das chaves, e volta para Configurações com o aviso).
@@ -253,7 +258,7 @@ export function ConectarPluggy() {
 
   const cabecalho = (
     <header className="bg-(image:--gradient-top) rounded-b-[30px] px-4 pt-4 pb-14 text-white shadow-top tablet:px-10">
-      <div className="mx-auto flex w-full max-w-[520px] flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <div className="flex items-center gap-3">
           <TopIconButton
             label="Cancelar e voltar para Configurações"
@@ -279,7 +284,7 @@ export function ConectarPluggy() {
     return (
       <section className="flex min-h-dvh flex-col bg-bg">
         {cabecalho}
-        <div className="mx-auto w-full max-w-[520px] px-4 -mt-10 tablet:px-0">
+        <div className={COLUNA}>
           <SkeletonCard />
         </div>
       </section>
@@ -290,7 +295,7 @@ export function ConectarPluggy() {
     return (
       <section className="flex min-h-dvh flex-col bg-bg">
         {cabecalho}
-        <div className="mx-auto w-full max-w-[520px] px-4 -mt-10 tablet:px-0">
+        <div className={COLUNA}>
           <ErrorState
             title="Não deu para abrir esta conta."
             description="Tente de novo ou volte para Configurações."
@@ -307,7 +312,7 @@ export function ConectarPluggy() {
   return (
     <section className="flex min-h-dvh flex-col bg-bg">
       {cabecalho}
-      <div className="mx-auto w-full max-w-[520px] px-4 -mt-10 pb-8 tablet:px-0">
+      <div className={`${COLUNA} pb-8`}>
         <Card className="flex flex-col gap-5">
           {passo === 1 && (
             <StepNome

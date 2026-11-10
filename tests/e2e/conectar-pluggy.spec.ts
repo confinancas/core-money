@@ -28,6 +28,33 @@ async function alvoDeNoMinimo44(alvo: Locator): Promise<void> {
   expect(caixa?.width ?? 0).toBeGreaterThanOrEqual(44);
 }
 
+// Caixa do elemento (o boundingBox do navegador), com o alvo presente na tela.
+async function caixaDe(alvo: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+  await expect(alvo).toBeVisible();
+  const caixa = await alvo.boundingBox();
+  if (!caixa) throw new Error("O elemento não tem caixa na página.");
+  return caixa;
+}
+
+// Coluna do passo, pelo protótipo (ConectarPluggy*.dc.html): celular, 16 px de cada lado; tablet, a área ao lado do
+// menu de 96 px com 24 px (690 px de cartão); desktop, 720 px depois do menu de 252 px e 32 px de margem.
+async function provaDaColunaDoPasso(page: Page, titulo: string, largura: string): Promise<void> {
+  const cartao = page
+    .getByRole("heading", { name: titulo })
+    .locator("xpath=ancestor::div[contains(@class,'rounded-card')][1]");
+  const caixa = await caixaDe(cartao);
+  if (largura === "celular") {
+    expect(Math.abs(caixa.width - 358)).toBeLessThanOrEqual(2);
+    expect(Math.abs(caixa.x - 16)).toBeLessThanOrEqual(2);
+  } else if (largura === "tablet") {
+    expect(Math.abs(caixa.width - 690)).toBeLessThanOrEqual(3);
+    expect(Math.abs(caixa.x - 120)).toBeLessThanOrEqual(3);
+  } else {
+    expect(Math.abs(caixa.width - 720)).toBeLessThanOrEqual(2);
+    expect(Math.abs(caixa.x - 284)).toBeLessThanOrEqual(3);
+  }
+}
+
 // Nenhuma rolagem horizontal da página.
 async function semRolagemHorizontal(page: Page): Promise<void> {
   const sobra = await page.evaluate(
@@ -108,6 +135,7 @@ test("cenário 1: caminho feliz até o passo 4, nas três larguras, com a conta 
 
   // Passo 1: o nome. Os textos da spec, e o alvo do topo que volta para Configurações.
   await expect(page.getByRole("heading", { name: "De quem é esta conta?" })).toBeVisible();
+  await provaDaColunaDoPasso(page, "De quem é esta conta?", largura);
   await expect(
     page.getByText("Aparece assim para os dois, não importa quem estiver usando o app."),
   ).toBeVisible();
@@ -133,6 +161,7 @@ test("cenário 1: caminho feliz até o passo 4, nas três larguras, com a conta 
 
   // Passo 3: o id de cada banco. Itaú e Nubank.
   await expect(page.getByRole("heading", { name: "Cole o id de cada banco" })).toBeVisible();
+  await provaDaColunaDoPasso(page, "Cole o id de cada banco", largura);
   await page.getByLabel("Id do banco no Meu Pluggy").fill(ITEM_ITAU);
   await page.getByRole("button", { name: "Adicionar" }).click();
   await expect(page.getByRole("checkbox", { name: /Itaú/ })).toBeVisible();
@@ -180,6 +209,14 @@ test("cenário 1: caminho feliz até o passo 4, nas três larguras, com a conta 
   if (casal === null || contas === null) throw new Error("Sem caixa para as seções.");
   expect(Math.abs(contas.x - casal.x)).toBeLessThanOrEqual(1);
   expect(contas.y).toBeGreaterThan(casal.y);
+  if (largura === "tablet") {
+    // Tablet: Casal e Ciclo na primeira coluna (o protótipo tem as duas do mesmo lado).
+    const cicloTablet = await page
+      .getByRole("heading", { level: 2, name: "Ciclo e orçamento", exact: true })
+      .boundingBox();
+    expect(Math.abs((cicloTablet?.x ?? 0) - casal.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(contas.x - casal.x)).toBeLessThanOrEqual(1);
+  }
   if (largura === "desktop") {
     const ciclo = await page
       .getByRole("heading", { level: 2, name: "Ciclo e orçamento", exact: true })
