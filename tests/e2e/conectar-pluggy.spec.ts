@@ -302,7 +302,9 @@ test("outro banco da mesma conta abre no passo 3 com o título próprio", async 
   await page.goto("/configuracoes");
   const id = idDaConta();
   await linkDaConta(page, id, "").click();
-  await expect(page.getByText("Autorizar outro banco desta conta", { exact: true })).toBeVisible();
+  // Primeiro a tela nova (o título do passo 3 só existe nela): até ela aparecer, a página de Configurações ainda tem
+  // os dois cartões com o mesmo texto, e uma checagem de texto nesse meio-tempo acha dois elementos.
   await expect(page.getByRole("heading", { name: "Cole o id de cada banco" })).toBeVisible();
+  await expect(page.getByText("Autorizar outro banco desta conta", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Escolha um banco" })).toBeDisabled();
 });
