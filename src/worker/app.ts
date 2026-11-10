@@ -11,6 +11,7 @@ import type { SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
 import { membersRoutes } from "./members/routes";
+import { pluggyConnectionsRoutes } from "./pluggy/routes";
 import { type ValidacaoDaChave, validateClaudeKey } from "./providers/anthropic";
 import { authRoutes } from "./routes/auth";
 import { devicesRoutes } from "./routes/devices";
@@ -38,6 +39,8 @@ export type AppOptions = {
   // Padrão: a verificação real do @simplewebauthn/server. Os testes passam um falso do cadastro (TASK-0103); o login
   // (TASK-0104) usa o real, a menos que o falso traga os dois métodos de login.
   webauthn?: WebAuthnVerifier & Partial<WebAuthnLoginVerifier>;
+  // Fetch de saída das rotas do Meu Pluggy (TASK-0203). Padrão: o do Worker. Os testes passam um falso.
+  pluggyFetch?: typeof fetch;
   // Relógio das rotas que precisam de "hoje" (o dia de início muda a partir do ciclo de hoje). Padrão: o relógio real.
   agora?: () => Date;
 };
@@ -104,6 +107,10 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
+  app.route(
+    "/pluggy-connections",
+    pluggyConnectionsRoutes(resolverDaSessao, { agora: options.agora, fetch: options.pluggyFetch }),
+  );
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/", recoveryRoutes(webauthn, resolverDaSessao, options.agora));
