@@ -10,7 +10,14 @@ describe("registro de seções", () => {
   it("registra as seções das tasks 0107, 0802 e 0701, com ids únicos", () => {
     const registradas = SETTINGS_SECTIONS.map((secao) => secao.id);
 
-    expect(registradas).toEqual(["casal", "ciclo", "distribuicao-da-renda", "notificacoes", "sincronizacao", "dados"]);
+    expect(registradas).toEqual([
+      "casal",
+      "ciclo",
+      "distribuicao-da-renda",
+      "notificacoes",
+      "sincronizacao",
+      "dados",
+    ]);
     expect(new Set(registradas).size).toBe(registradas.length);
   });
 
@@ -32,7 +39,9 @@ describe("colunas por largura", () => {
   it("celular: uma coluna, na ordem da tabela", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "celular");
 
-    expect(colunas.map(ids)).toEqual([["casal", "ciclo", "distribuicao-da-renda", "notificacoes", "sincronizacao", "dados"]]);
+    expect(colunas.map(ids)).toEqual([
+      ["casal", "ciclo", "distribuicao-da-renda", "notificacoes", "sincronizacao", "dados"],
+    ]);
   });
 
   it("tablet: duas colunas; Casal, Ciclo e Distribuição na primeira, Sincronização e Dados na segunda", () => {

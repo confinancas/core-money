@@ -26,28 +26,94 @@ function semeiaNotificacoes(itens: Semente[]): void {
   const agora = Date.now();
   const sql = itens.map((item) => {
     const criada = new Date(agora - item.criadaHaHoras * HORA).toISOString();
-    const lida = item.lidaHaHoras === undefined ? "NULL" : `'${new Date(agora - item.lidaHaHoras * HORA).toISOString()}'`;
+    const lida =
+      item.lidaHaHoras === undefined
+        ? "NULL"
+        : `'${new Date(agora - item.lidaHaHoras * HORA).toISOString()}'`;
     return `INSERT INTO notifications (id, household_id, kind, title, body, link, dedupe_key, created_at, read_at) VALUES ('${item.id}', '${LAR}', '${item.kind}', '${item.titulo}', '${item.corpo}', '${item.link}', 'e2e-${item.id}', '${criada}', ${lida})`;
   });
   if (sql.length > 0) executaSql("pronta", sql.join("; "));
 }
 
 const CENARIO_UM: Semente[] = [
-  { id: "e2e-n1", kind: "pendencias", titulo: "[TEST] 4 itens para categorizar", corpo: "[TEST] 2 são Pix. A IA já sugeriu categoria para 2.", link: "/para-categorizar", criadaHaHoras: 1 },
-  { id: "e2e-n2", kind: "vencimento", titulo: "[TEST] Fatura de teste vence em 3 dias", corpo: "[TEST] 1.980,00 · vence 15/10 · ainda não foi paga", link: "/contas", criadaHaHoras: 2 },
-  { id: "e2e-n3", kind: "pix_recebido", titulo: "[TEST] Pix recebido de pessoa de teste", corpo: "+1.500,00 · toque para classificar", link: "/pix-recebido/e2e-pix", criadaHaHoras: 3 },
-  { id: "e2e-n4", kind: "insight", titulo: "[TEST] Insight do dia de teste", corpo: "[TEST] Resumo de teste, sem valores.", link: "/inicio", criadaHaHoras: 4 },
-  { id: "e2e-l1", kind: "balanco", titulo: "[TEST] Lembrete de balanço antigo", corpo: "Falta depositar 1.839,80 para cobrir as contas do ciclo.", link: "/contas", criadaHaHoras: 30, lidaHaHoras: 29 },
-  { id: "e2e-l2", kind: "fatura_paga", titulo: "[TEST] Fatura de teste paga", corpo: "2.870,40 · paga com Pix de terceiros", link: "/cartoes/e2e-cartao", criadaHaHoras: 50, lidaHaHoras: 49 },
-  { id: "e2e-l3", kind: "consentimento", titulo: "[TEST] Consentimento de teste vence", corpo: "Renove para o banco continuar atualizando.", link: "/configuracoes/bancos/e2e-banco", criadaHaHoras: 70, lidaHaHoras: 69 },
-  { id: "e2e-l4", kind: "renda_dolar", titulo: "[TEST] Salário em dólar de teste chegou", corpo: "[TEST] Renda de teste · 4.000,00 recebidos · cotação de referência 5,50", link: "/renda", criadaHaHoras: 90, lidaHaHoras: 89 },
+  {
+    id: "e2e-n1",
+    kind: "pendencias",
+    titulo: "[TEST] 4 itens para categorizar",
+    corpo: "[TEST] 2 são Pix. A IA já sugeriu categoria para 2.",
+    link: "/para-categorizar",
+    criadaHaHoras: 1,
+  },
+  {
+    id: "e2e-n2",
+    kind: "vencimento",
+    titulo: "[TEST] Fatura de teste vence em 3 dias",
+    corpo: "[TEST] 1.980,00 · vence 15/10 · ainda não foi paga",
+    link: "/contas",
+    criadaHaHoras: 2,
+  },
+  {
+    id: "e2e-n3",
+    kind: "pix_recebido",
+    titulo: "[TEST] Pix recebido de pessoa de teste",
+    corpo: "+1.500,00 · toque para classificar",
+    link: "/pix-recebido/e2e-pix",
+    criadaHaHoras: 3,
+  },
+  {
+    id: "e2e-n4",
+    kind: "insight",
+    titulo: "[TEST] Insight do dia de teste",
+    corpo: "[TEST] Resumo de teste, sem valores.",
+    link: "/inicio",
+    criadaHaHoras: 4,
+  },
+  {
+    id: "e2e-l1",
+    kind: "balanco",
+    titulo: "[TEST] Lembrete de balanço antigo",
+    corpo: "Falta depositar 1.839,80 para cobrir as contas do ciclo.",
+    link: "/contas",
+    criadaHaHoras: 30,
+    lidaHaHoras: 29,
+  },
+  {
+    id: "e2e-l2",
+    kind: "fatura_paga",
+    titulo: "[TEST] Fatura de teste paga",
+    corpo: "2.870,40 · paga com Pix de terceiros",
+    link: "/cartoes/e2e-cartao",
+    criadaHaHoras: 50,
+    lidaHaHoras: 49,
+  },
+  {
+    id: "e2e-l3",
+    kind: "consentimento",
+    titulo: "[TEST] Consentimento de teste vence",
+    corpo: "Renove para o banco continuar atualizando.",
+    link: "/configuracoes/bancos/e2e-banco",
+    criadaHaHoras: 70,
+    lidaHaHoras: 69,
+  },
+  {
+    id: "e2e-l4",
+    kind: "renda_dolar",
+    titulo: "[TEST] Salário em dólar de teste chegou",
+    corpo: "[TEST] Renda de teste · 4.000,00 recebidos · cotação de referência 5,50",
+    link: "/renda",
+    criadaHaHoras: 90,
+    lidaHaHoras: 89,
+  },
 ];
 
 // Os dados do lar de teste voltam ao estado da instalação pronta antes de cada teste.
 test.beforeEach(() => {
   semearInstalacaoPronta();
   semeiaSessaoDaInstalacaoPronta();
-  executaSql("pronta", `DELETE FROM notifications WHERE household_id = '${LAR}'; DELETE FROM notification_prefs WHERE household_id = '${LAR}'; UPDATE households SET cycle_start_day = 11`);
+  executaSql(
+    "pronta",
+    `DELETE FROM notifications WHERE household_id = '${LAR}'; DELETE FROM notification_prefs WHERE household_id = '${LAR}'; UPDATE households SET cycle_start_day = 11`,
+  );
 });
 
 // Alvo de toque: pelo menos 44 px de altura e de largura, medido pelo navegador.
@@ -68,7 +134,9 @@ async function caixaDe(alvo: Locator): Promise<{ x: number; y: number; width: nu
 
 // Nenhuma rolagem horizontal da página.
 async function semRolagemHorizontal(page: Page): Promise<void> {
-  const sobra = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  const sobra = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
   expect(sobra).toBeLessThanOrEqual(0);
 }
 
@@ -88,10 +156,17 @@ async function provaDasColunas(page: Page): Promise<void> {
 }
 
 const contaNaoLidas = () =>
-  Number(consultaSql("pronta", `SELECT COUNT(*) AS n FROM notifications WHERE household_id = '${LAR}' AND read_at IS NULL`)[0]?.n ?? -1);
+  Number(
+    consultaSql(
+      "pronta",
+      `SELECT COUNT(*) AS n FROM notifications WHERE household_id = '${LAR}' AND read_at IS NULL`,
+    )[0]?.n ?? -1,
+  );
 
 test.describe("Notificações", () => {
-  test("cenário 1: 4 não lidas em Novas com o ponto verde, e as lidas em Anteriores, mais novas primeiro", async ({ page }) => {
+  test("cenário 1: 4 não lidas em Novas com o ponto verde, e as lidas em Anteriores, mais novas primeiro", async ({
+    page,
+  }) => {
     semeiaNotificacoes(CENARIO_UM);
     await signUpAndSignIn(page);
     await page.goto("/notificacoes");
@@ -132,7 +207,12 @@ test.describe("Notificações", () => {
     await expect(page).toHaveURL(/\/contas$/);
     await expect
       .poll(() =>
-        Number(consultaSql("pronta", `SELECT COUNT(*) AS n FROM notifications WHERE id = 'e2e-n2' AND read_at IS NOT NULL`)[0]?.n ?? 0),
+        Number(
+          consultaSql(
+            "pronta",
+            `SELECT COUNT(*) AS n FROM notifications WHERE id = 'e2e-n2' AND read_at IS NOT NULL`,
+          )[0]?.n ?? 0,
+        ),
       )
       .toBe(1);
   });
@@ -160,11 +240,17 @@ test.describe("Notificações", () => {
     await expect(page.getByText("Tudo lido", { exact: true })).toBeVisible();
   });
 
-  test("cenário 9: falha ao carregar mostra a mensagem com 'Tentar de novo', e o botão recarrega", async ({ page }) => {
+  test("cenário 9: falha ao carregar mostra a mensagem com 'Tentar de novo', e o botão recarrega", async ({
+    page,
+  }) => {
     semeiaNotificacoes(CENARIO_UM);
     await signUpAndSignIn(page);
     await page.route("**/api/notifications", (rota) =>
-      rota.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "erro_interno" }) }),
+      rota.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "erro_interno" }),
+      }),
     );
     await page.goto("/notificacoes");
 
@@ -176,7 +262,14 @@ test.describe("Notificações", () => {
 
   test("cenário 10: o valor do corpo sai com centavos menores, sem quebra", async ({ page }) => {
     semeiaNotificacoes([
-      { id: "e2e-valor", kind: "vencimento", titulo: "[TEST] Fatura de valor", corpo: "1.980,00 · vence 15/10", link: "/contas", criadaHaHoras: 1 },
+      {
+        id: "e2e-valor",
+        kind: "vencimento",
+        titulo: "[TEST] Fatura de valor",
+        corpo: "1.980,00 · vence 15/10",
+        link: "/contas",
+        criadaHaHoras: 1,
+      },
     ]);
     await signUpAndSignIn(page);
     await page.goto("/notificacoes");
@@ -211,7 +304,9 @@ test.describe("Notificações", () => {
     await alvoDeToqueDeNoMinimo44(page.getByRole("link", { name: "Escolher o que avisar", exact: true }));
   });
 
-  test("'Escolher o que avisar' leva às preferências, e o switch grava na hora e continua depois de recarregar", async ({ page }) => {
+  test("'Escolher o que avisar' leva às preferências, e o switch grava na hora e continua depois de recarregar", async ({
+    page,
+  }) => {
     await signUpAndSignIn(page);
     await page.goto("/notificacoes");
     await page.getByRole("link", { name: "Escolher o que avisar", exact: true }).click();
@@ -227,13 +322,24 @@ test.describe("Notificações", () => {
     await expect(vencimentos).toHaveAttribute("aria-checked", "false");
     await expect
       .poll(() =>
-        Number(consultaSql("pronta", `SELECT COUNT(*) AS n FROM notification_prefs WHERE household_id = '${LAR}' AND kind = 'vencimento' AND enabled = 0`)[0]?.n ?? 0),
+        Number(
+          consultaSql(
+            "pronta",
+            `SELECT COUNT(*) AS n FROM notification_prefs WHERE household_id = '${LAR}' AND kind = 'vencimento' AND enabled = 0`,
+          )[0]?.n ?? 0,
+        ),
       )
       .toBe(1);
 
     await page.reload();
-    await expect(page.getByRole("switch", { name: "Vencimentos", exact: true })).toHaveAttribute("aria-checked", "false");
-    await expect(page.getByRole("switch", { name: "Insight do dia", exact: true })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("switch", { name: "Vencimentos", exact: true })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await expect(page.getByRole("switch", { name: "Insight do dia", exact: true })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   test("falha ao gravar a preferência: o switch volta e a mensagem aparece", async ({ page }) => {

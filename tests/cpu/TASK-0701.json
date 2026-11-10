@@ -45,10 +45,7 @@
       "method": "PUT",
       "path": "/api/notification-prefs",
       "headers": { "cookie": "{sessao}" },
-      "corpos": [
-        { "kinds": { "vencimento": false } },
-        { "kinds": { "vencimento": true } }
-      ]
+      "corpos": [{ "kinds": { "vencimento": false } }, { "kinds": { "vencimento": true } }]
     }
   ]
 }
