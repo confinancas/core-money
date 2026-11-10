@@ -65,6 +65,10 @@ async function semRolagemHorizontal(page: Page): Promise<void> {
 }
 
 test.describe("aviso de uso do plano gratuito", () => {
+  // Cada teste faz várias chamadas ao wrangler (semente, login, leitura); sob carga, 30 s não bastam, e o afterEach
+  // rodaria no meio do corpo, apagando o uso do dia antes de a página carregar.
+  test.setTimeout(90_000);
+
   test.beforeEach(() => {
     semearInstalacaoPronta();
     semeiaSessaoDaInstalacaoPronta();
@@ -81,14 +85,15 @@ test.describe("aviso de uso do plano gratuito", () => {
     semeiaLeiturasDeHoje(LEITURAS_72);
     await signUpAndSignIn(page);
     const usoDaApi = await abreConfiguracoes(page);
+    // O banco tem a semente mais as leituras das requisições desta página (poucas dezenas): a faixa é de intervalo.
     const estadoDoBanco = consultaSql(
       "pronta",
-      `SELECT h.paid_plan AS paid_plan, u.day AS dia, u.rows_read AS rows_read FROM households h LEFT JOIN usage_daily u ON u.day = '${hoje()}'`,
+      `SELECT h.paid_plan AS paid_plan, u.rows_read AS rows_read FROM households h LEFT JOIN usage_daily u ON u.day = '${hoje()}'`,
     );
-    // Primeiro o banco (valores exatos, para o diff mostrar o que está lá), depois a faixa que a API calculou.
-    expect(estadoDoBanco, "o banco no dia de hoje").toEqual([
-      expect.objectContaining({ paid_plan: 0, rows_read: LEITURAS_72 }),
-    ]);
+    expect(estadoDoBanco, "a linha do dia de hoje").toHaveLength(1);
+    expect(estadoDoBanco[0]).toMatchObject({ paid_plan: 0 });
+    expect(Number(estadoDoBanco[0].rows_read)).toBeGreaterThanOrEqual(LEITURAS_72);
+    expect(Number(estadoDoBanco[0].rows_read)).toBeLessThan(LEITURAS_72 + 10_000);
     expect(usoDaApi, "a API tem que dizer atenção com 72% de leituras").toMatchObject({ band: "atencao" });
 
     const faixa = page.getByRole("region", { name: "Aviso de uso do plano gratuito" });
