@@ -18,6 +18,9 @@ type Props<T extends string | number> = {
   onCancelar: () => void;
   salvando: boolean;
   erro: string | null;
+  // Rótulos de texto (tipos de gasto, "Investimentos" e "Usar o padrão"): duas colunas no celular, quatro no tablet.
+  // Sem a opção, os números (dias) ficam em quatro e sete colunas.
+  rotulos?: boolean;
 };
 
 // Painel de escolha dentro da tela (nunca confirm() nem prompt()): folha de baixo no celular, cartão no centro a
@@ -34,6 +37,7 @@ export function ChoiceSheet<T extends string | number>({
   onCancelar,
   salvando,
   erro,
+  rotulos = false,
 }: Props<T>) {
   return (
     <Dialog open={aberto} onOpenChange={(proximo) => !proximo && onCancelar()}>
@@ -49,7 +53,10 @@ export function ChoiceSheet<T extends string | number>({
         <div
           role="radiogroup"
           aria-label={nomeDoGrupo}
-          className="mt-5 grid grid-cols-4 gap-2.5 tablet:grid-cols-7"
+          className={cn(
+            "mt-5 grid gap-2.5",
+            rotulos ? "grid-cols-2 tablet:grid-cols-4" : "grid-cols-4 tablet:grid-cols-7",
+          )}
         >
           {opcoes.map((opcao) => (
             <ChoiceTile
