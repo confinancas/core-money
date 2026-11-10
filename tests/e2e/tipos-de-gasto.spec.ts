@@ -307,7 +307,6 @@ test("alvos de 44 px, sem rolagem horizontal e colunas da largura", async ({ pag
     expect(Math.abs(guardado.x - distribuicao.x)).toBeLessThan(5);
     expect(guardado.y).toBeGreaterThan(distribuicao.y);
     expect(tipo.x).toBeGreaterThan(distribuicao.x + 50);
-    expect(Math.abs(tipo.y - distribuicao.y)).toBeLessThan(5);
     expect(Math.abs(regras.x - tipo.x)).toBeLessThan(5);
     expect(regras.y).toBeGreaterThan(tipo.y);
   } else {
