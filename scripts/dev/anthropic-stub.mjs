@@ -2,8 +2,10 @@
 // Stub da Anthropic para o E2E (TASK-0102): responde POST /v1/messages com as respostas que a validação da chave trata.
 // Nenhuma chave real passa por aqui. Só as chaves de teste (sk-ant-api03-TEST-…) têm resposta; as outras levam 401.
 import http from "node:http";
+import { portasDoE2E } from "./e2e-portas.mjs";
 
-const porta = Number(process.env.MM_E2E_PORTA_DO_STUB ?? 8789);
+// Sem MM_E2E_PORTA_DO_STUB (o E2E sempre passa), a porta é a do stub no bloco de MM_E2E_PORTA_BASE.
+const porta = Number(process.env.MM_E2E_PORTA_DO_STUB ?? portasDoE2E(process.env.MM_E2E_PORTA_BASE).stub);
 
 const mensagemOk = {
   id: "msg_e2e",
