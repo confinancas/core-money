@@ -14,7 +14,9 @@ type Props = {
   close?: Rota;
   // Mais 70 px de respiro embaixo, para o cartão de baixo sobrepor a faixa.
   overlap?: boolean;
-  // Conteúdo que fica dentro do verde, embaixo do título (o topo do detalhe do cartão, TASK-0402).
+  // Linha de apoio logo abaixo do título (detail): alinhada como o título, centrada no celular.
+  subtitle?: string;
+  // Conteúdo dentro da faixa, abaixo do título (o cartão de vidro da Renda fixa, por exemplo).
   children?: ReactNode;
 };
 
@@ -28,6 +30,7 @@ export function GreenTop({
   back,
   close,
   overlap = false,
+  subtitle,
   children,
 }: Props) {
   const aba = variant === "tab";
@@ -67,7 +70,12 @@ export function GreenTop({
           )}
         </div>
       )}
-      {children}
+      {subtitle && (
+        <p className="mt-1 text-center text-[13px] font-semibold text-white/82 tablet:pl-14 tablet:text-left">
+          {subtitle}
+        </p>
+      )}
+      {children && <div className="mt-4">{children}</div>}
     </header>
   );
 }

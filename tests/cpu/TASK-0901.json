@@ -1,0 +1,63 @@
+{
+  "task": "TASK-0901",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-1', 'cpu-membro-1', 'CPU-SEM-LOGIN-0901', 0, NULL, 'CPU Chromium', 'cadastro', '2026-11-10T00:00:00.000Z', NULL)",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 12)\nINSERT INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text, kept_usd_is_investment, archived_at)\nSELECT 'cpu-renda-' || i, 'cpu-lar', '[TEST] CPU Renda ' || i, 'BRL', 500000 + i, 5, 'manual', NULL, 0, NULL FROM n"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/fixed-incomes (12 rendas ativas)",
+      "method": "GET",
+      "path": "/api/fixed-incomes",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    },
+    {
+      "name": "POST /api/fixed-incomes (renda nova, em dólar)",
+      "method": "POST",
+      "path": "/api/fixed-incomes",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "corpos": [
+        {
+          "name": "[TEST] CPU Nova {i}",
+          "currency": "USD",
+          "amountCents": 200000,
+          "usualDay": 10,
+          "arrival": "partes",
+          "keptUsdIsInvestment": true
+        }
+      ]
+    },
+    {
+      "name": "PATCH /api/fixed-incomes/:id (valor)",
+      "method": "PATCH",
+      "path": "/api/fixed-incomes/cpu-renda-12",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "corpos": [
+        {
+          "amountCents": 500001
+        },
+        {
+          "amountCents": 500002
+        }
+      ]
+    },
+    {
+      "name": "DELETE /api/fixed-incomes/:id (arquiva)",
+      "method": "DELETE",
+      "path": "/api/fixed-incomes/cpu-renda-{i}",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    }
+  ]
+}

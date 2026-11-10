@@ -20,6 +20,7 @@ import { Configuracoes } from "./screens/configuracoes/Configuracoes";
 import { TiposGasto } from "./screens/configuracoes/TiposGasto";
 import { Login } from "./screens/Login";
 import { Recuperar } from "./screens/Recuperar";
+import { RendaFixa } from "./screens/renda/RendaFixa";
 import { RequireSession } from "./session/RequireSession";
 
 // Telas que um app põe no lugar das provisórias, pelo path da rota da tabela.
@@ -76,7 +77,7 @@ export const ROTAS: RotaDaTabela[] = [
     title: "Pix recebido",
     element: provisoria,
   },
-  { path: "/renda/fixa", frame: "detail", tab: "renda", title: "Renda fixa", element: provisoria },
+  { path: "/renda/fixa", frame: "detail", tab: "renda", title: "Renda fixa", element: <RendaFixa /> },
 
   {
     path: "/pix-do-mes/:cycleKey?",

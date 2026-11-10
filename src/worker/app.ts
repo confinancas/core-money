@@ -10,6 +10,7 @@ import type { AppEnv } from "./env";
 import type { SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
+import { fixedIncomesRoutes } from "./income/fixed-incomes-routes";
 import { membersRoutes } from "./members/routes";
 import { type ValidacaoDaChave, validateClaudeKey } from "./providers/anthropic";
 import { authRoutes } from "./routes/auth";
@@ -105,6 +106,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
+  app.route("/fixed-incomes", fixedIncomesRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));

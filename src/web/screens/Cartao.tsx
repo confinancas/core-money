@@ -75,7 +75,7 @@ function Topo({ dados, hoje }: { dados: RespostaDeCartao; hoje: string }) {
         : seloDePaga(badge.cycleKey);
 
   return (
-    <div className="mt-6 flex flex-col gap-4 text-white">
+    <div className="mt-2 flex flex-col gap-4 text-white">
       {open !== null && (
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
