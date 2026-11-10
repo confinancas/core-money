@@ -32,8 +32,8 @@ const FATIAS_POR_REQUISICAO = 4;
 const marcas = (quantidade: number): string => Array.from({ length: quantidade }, () => "?").join(", ");
 
 // SET do tipo pela categoria (TASK-0802) e os parâmetros dele: o id da categoria vai em cada "?" do SQL, na ordem.
-function tipoPelaCategoria(categoriaId: string): { sets: string[]; params: string[] } {
-  const sets = setDoTipoDaCategoria("?");
+function tipoPelaCategoria(categoriaId: string, soSaidas = false): { sets: string[]; params: string[] } {
+  const sets = setDoTipoDaCategoria("?", "t", soSaidas);
   const vezes = (sets.join(" ").match(/\?/g) ?? []).length;
   return { sets, params: Array.from({ length: vezes }, () => categoriaId) };
 }
@@ -143,7 +143,7 @@ export function setTransactionCategoryStmt(
     now: string;
   },
 ): D1PreparedStatement {
-  const tipo = tipoPelaCategoria(entrada.categoryId);
+  const tipo = tipoPelaCategoria(entrada.categoryId, true);
   const sets = ["category_id = ?", ...tipo.sets, "categorized_at = ?", "categorized_by = ?", "rule_id = ?"];
   return db.$client
     .prepare(`UPDATE transactions AS t SET ${sets.join(", ")} WHERE t.id = ? AND t.household_id = ?`)

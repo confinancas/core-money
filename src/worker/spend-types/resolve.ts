@@ -64,9 +64,14 @@ export function tipoDaCategoriaSql(categoria: string, a = "t"): { tipo: string; 
 // As duas atribuições de uma instrução que grava o tipo pela categoria. O que o casal escolheu (escolhido) e o que uma
 // regra gravou (regra) não muda, e entrada, pagamento de fatura e transferência não recebem tipo. Cada "?" dentro delas
 // pede o id da categoria, na ordem em que aparece.
-export function setDoTipoDaCategoria(categoria: string, a = "t"): string[] {
+// soSaidas: a escolha manual do casal (PUT), que pode pegar entrada, pagamento de fatura ou transferência. A regra e a
+// importação só casam saída (o escopo remetente não é aceito em POST /api/rules), e a guarda extra custa leituras no
+// pipeline (medido: +2 linhas por transação), por isso fica de fora delas.
+export function setDoTipoDaCategoria(categoria: string, a = "t", soSaidas = false): string[] {
   const { tipo, origem } = tipoDaCategoriaSql(categoria, a);
-  const guarda = `(${a}.spend_type_source IN ('escolhido', 'regra') OR NOT ${movimentosComTipo(a)})`;
+  const guarda = soSaidas
+    ? `(${a}.spend_type_source IN ('escolhido', 'regra') OR NOT ${movimentosComTipo(a)})`
+    : `${a}.spend_type_source IN ('escolhido', 'regra')`;
   return [
     `spend_type = CASE WHEN ${guarda} THEN ${a}.spend_type ELSE ${tipo} END`,
     `spend_type_source = CASE WHEN ${guarda} THEN ${a}.spend_type_source ELSE ${origem} END`,
