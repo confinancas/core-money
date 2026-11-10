@@ -16,6 +16,10 @@ const ROTULO = "[TEST] Conta A";
 
 const ROTA = "/configuracoes/bancos/conectar";
 
+// Cada teste sobe a instalação pelo wrangler (cada comando leva alguns segundos) e percorre os quatro passos: o padrão
+// de 30 s não cabe. O tempo maior não afrouxa nenhum expect; só dá o espaço que a sequência precisa.
+test.setTimeout(120_000);
+
 // Alvo de toque: pelo menos 44 px de altura e de largura, medido pelo navegador.
 async function alvoDeNoMinimo44(alvo: Locator): Promise<void> {
   await expect(alvo).toBeVisible();
@@ -248,7 +252,8 @@ test("cenário 9: 'Trocar chaves' abre só o passo 2, e salvar volta a Configura
   await expect(page.getByRole("heading", { name: `${ROTULO} conectada` })).toBeVisible();
 
   await page.goto("/configuracoes");
-  await linkDaConta(page, idDaConta(), "&trocar=chaves").click();
+  const id = idDaConta();
+  await linkDaConta(page, id, "&trocar=chaves").click();
   await expect(page.getByRole("heading", { name: "Cole as chaves da API" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Salvar chaves" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continuar" })).toHaveCount(0);
@@ -295,7 +300,8 @@ test("outro banco da mesma conta abre no passo 3 com o título próprio", async 
   await expect(page.getByRole("heading", { name: `${ROTULO} conectada` })).toBeVisible();
 
   await page.goto("/configuracoes");
-  await linkDaConta(page, idDaConta(), "").click();
+  const id = idDaConta();
+  await linkDaConta(page, id, "").click();
   await expect(page.getByText("Autorizar outro banco desta conta", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Cole o id de cada banco" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Escolha um banco" })).toBeDisabled();
