@@ -1,14 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { portasDoE2E } from "../../../scripts/dev/e2e-portas.mjs";
 
 // Roda SQL no D1 local de uma das duas instâncias do E2E (scripts/dev/e2e-server.mjs), pelo wrangler, sem shell.
 // Só dados de teste: as tabelas de configuração e de chaves; nunca dado financeiro.
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const wranglerJs = join(raiz, "node_modules", "wrangler", "bin", "wrangler.js");
 
-export const PORTA_DA_INSTALACAO_PRONTA = 8788;
-export const PORTA_DA_CONFIGURACAO = 8790;
+// As portas vêm do bloco de MM_E2E_PORTA_BASE (scripts/dev/e2e-portas.mjs). Os nomes são os de sempre: as specs usam.
+const PORTAS = portasDoE2E(process.env.MM_E2E_PORTA_BASE);
+export const PORTA_DA_INSTALACAO_PRONTA = PORTAS.instalacaoPronta;
+export const PORTA_DA_CONFIGURACAO = PORTAS.configuracao;
 
 const ESTADO = {
   pronta: join(raiz, ".wrangler", "e2e-state"),
