@@ -17,6 +17,7 @@ import { ChaveDoClaude } from "./screens/configuracoes/ChaveDoClaude";
 import { Configuracoes } from "./screens/configuracoes/Configuracoes";
 import { TiposGasto } from "./screens/configuracoes/TiposGasto";
 import { Login } from "./screens/Login";
+import { NotificacoesPage } from "./screens/notificacoes/NotificacoesPage";
 import { Recuperar } from "./screens/Recuperar";
 import { RequireSession } from "./session/RequireSession";
 
@@ -54,7 +55,13 @@ export const ROTAS: RotaDaTabela[] = [
     element: <Configuracoes />,
   },
 
-  { path: "/notificacoes", frame: "detail", tab: "inicio", title: "Notificações", element: provisoria },
+  {
+    path: "/notificacoes",
+    frame: "detail",
+    tab: "inicio",
+    title: "Notificações",
+    element: <NotificacoesPage />,
+  },
   {
     path: "/para-categorizar",
     frame: "detail",

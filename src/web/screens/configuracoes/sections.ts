@@ -25,6 +25,7 @@ import { SectionCasal } from "./SectionCasal";
 import { SectionCiclo } from "./SectionCiclo";
 import { SectionDados } from "./SectionDados";
 import { SectionDistribuicaoRenda } from "./SectionDistribuicaoRenda";
+import { SectionNotificacoes } from "./SectionNotificacoes";
 import { SectionSincronizacao } from "./SectionSincronizacao";
 
 export type SettingsSection = {
@@ -53,6 +54,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     tabletColumn: 1,
     desktopColumn: 2,
     Component: SectionDistribuicaoRenda,
+  },
+  {
+    id: "notificacoes",
+    title: "Notificações",
+    order: 70,
+    tabletColumn: 2,
+    desktopColumn: 3,
+    Component: SectionNotificacoes,
   },
   {
     id: "sincronizacao",
