@@ -16,7 +16,8 @@ const BANCO = "e2e-tg-banco";
 const CONTA = "e2e-tg-conta";
 const CARTAO = "e2e-tg-cartao";
 const MERCADO = `seed:${LAR}:mercado`;
-const CONTRAPARTE = "[TEST] Corretora E2E";
+// Com acento minúsculo (rodada 2): a regra da corretora casa a contraparte normalizada no SQL, sem o acento.
+const CONTRAPARTE = "[TEST] Corretora Ágil Ações";
 const PESSOA = "e2e-pessoa-pronta";
 
 const q = (valor: string | number | null): string =>
@@ -136,6 +137,12 @@ test("abre com o limite do ciclo, a distribuição e a categoria com o tipo da s
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Mercado: Custos fixos. Trocar o tipo" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Academia: Custos fixos. Trocar o tipo" })).toBeVisible();
+  // Pílula do tipo como no protótipo: borda e fundo transparente (sem o fundo cheio na cor do tipo).
+  const pilula = page
+    .getByRole("button", { name: "Mercado: Custos fixos. Trocar o tipo" })
+    .locator('span[data-tipo="fixos"]');
+  await expect(pilula).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(pilula).toHaveCSS("border-top-style", "solid");
 });
 
 test("percentual: + grava sozinho (Salvo) e o limite mostra a prévia do próximo ciclo", async ({ page }) => {
@@ -211,6 +218,10 @@ test("tipo padrão de uma categoria: a compra que herdava recebe o novo tipo", a
 
   await page.getByRole("button", { name: "Mercado: Custos fixos. Trocar o tipo" }).click();
   const folha = page.getByRole("dialog");
+  // "Investimentos" cabe no botão da folha (o texto não estoura a opção), nas três larguras.
+  const investimentos = folha.getByRole("radio", { name: "Investimentos", exact: true });
+  await expect(investimentos).toBeVisible();
+  expect(await investimentos.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await folha.getByRole("radio", { name: "Conforto", exact: true }).click();
   const gravacao = page.waitForResponse(
     (r) => r.url().includes("/api/categories/") && r.request().method() === "PATCH",
@@ -240,6 +251,7 @@ test("regra automática: criar faz o Pix virar Investimentos; remover devolve ao
   await page.getByRole("button", { name: "Definir", exact: true }).first().click();
   const folha = page.getByRole("dialog");
   // O destino recente aparece na folha (o Pix de teste está na janela de 90 dias); tocar nele preenche o texto.
+  await alvoDeToqueDeNoMinimo44(folha.getByRole("button", { name: CONTRAPARTE, exact: true }));
   await folha.getByRole("button", { name: CONTRAPARTE, exact: true }).click();
   await expect(folha.getByRole("textbox", { name: "Texto do extrato ou nome de quem recebe" })).toHaveValue(
     CONTRAPARTE,
@@ -273,17 +285,66 @@ test("alvos de 44 px, sem rolagem horizontal e colunas da largura", async ({ pag
   const semRolagem = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
   expect(semRolagem).toBe(true);
 
-  const distribuicao = await page.getByRole("heading", { name: "Distribuição da renda" }).boundingBox();
-  const guardado = await page
-    .getByRole("heading", { name: "Dinheiro guardado · fica fora do limite" })
-    .boundingBox();
+  // Colunas como nos protótipos (rodada 2): celular em uma coluna; tablet com "Dinheiro guardado" embaixo da distribuição
+  // na esquerda e "Tipo padrão" no topo da direita; desktop com "Tipo padrão" na coluna do meio e "Regras automáticas"
+  // numa terceira coluna, no mesmo topo de "Dinheiro guardado".
+  const caixa = async (nome: string) => {
+    const box = await page.getByRole("heading", { name: nome, exact: true }).boundingBox();
+    if (box === null) throw new Error(`título "${nome}" sem caixa`);
+    return box;
+  };
+  const distribuicao = await caixa("Distribuição da renda");
+  const guardado = await caixa("Dinheiro guardado · fica fora do limite");
+  const gastos = await caixa("Gastos · entram no limite");
+  const tipo = await caixa("Tipo padrão por categoria");
+  const regras = await caixa("Regras automáticas");
   if (testInfo.project.name === "celular") {
-    // Uma coluna: a seção "Dinheiro guardado" vem depois da distribuição, na margem esquerda.
-    expect(guardado?.y ?? 0).toBeGreaterThan(distribuicao?.y ?? 0);
-    expect(guardado?.x ?? 0).toBeLessThan(60);
+    // Uma coluna, na ordem do protótipo.
+    expect(guardado.y).toBeGreaterThan(distribuicao.y);
+    expect(guardado.x).toBeLessThan(60);
+    expect(tipo.y).toBeGreaterThan(guardado.y);
+    expect(regras.y).toBeGreaterThan(tipo.y);
+  } else if (testInfo.project.name === "tablet") {
+    // "Gastos" e "Dinheiro guardado" são títulos da coluna da esquerda; "Tipo padrão" e "Regras", da direita. (O título
+    // da distribuição fica dentro do cartão, com o padding dele, por isso não serve de referência de coluna.)
+    expect(Math.abs(guardado.x - gastos.x)).toBeLessThan(5);
+    expect(guardado.y).toBeGreaterThan(distribuicao.y);
+    expect(tipo.x - gastos.x).toBeGreaterThan(200);
+    expect(Math.abs(regras.x - tipo.x)).toBeLessThan(5);
+    expect(regras.y).toBeGreaterThan(tipo.y);
   } else {
-    expect((guardado?.x ?? 0) > (distribuicao?.x ?? 0) + 50).toBe(true);
+    expect(guardado.x - distribuicao.x).toBeGreaterThan(200);
+    expect(Math.abs(tipo.x - guardado.x)).toBeLessThan(5);
+    expect(regras.x - guardado.x).toBeGreaterThan(200);
+    expect(Math.abs(regras.y - guardado.y)).toBeLessThan(5);
   }
+});
+
+test("um toque feito durante a gravação não se perde: a tela e o banco ficam com o último (37%)", async ({
+  page,
+}) => {
+  // O PATCH leva 500 ms: o segundo toque chega enquanto o primeiro ainda está sendo gravado.
+  await page.route("**/api/household", async (rota) => {
+    if (rota.request().method() === "PATCH") {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return rota.continue();
+  });
+  await page.goto("/configuracoes/tipos-de-gasto");
+  await expect(page.getByTestId("total-distribuicao")).toHaveText("100%");
+  await botaoDoTipo(page, "Aumentar", "Custos fixos").click();
+  await page.waitForTimeout(800);
+  await botaoDoTipo(page, "Aumentar", "Custos fixos").click();
+  await expect(page.getByRole("button", { name: "Diminuir Custos fixos", exact: true })).toBeVisible();
+  await expect(page.getByText("37%", { exact: true }).first()).toBeVisible();
+  // Duas gravações em sequência, com o PATCH de 500 ms e a máquina ocupada: o banco pode levar alguns segundos a chegar
+  // ao 37. Se o toque se perdesse, ficaria em 36 para sempre, e o poll acabaria em falha.
+  await expect
+    .poll(() => consultaSql("pronta", `SELECT pct_fixed FROM households WHERE id = ${q(LAR)}`), {
+      timeout: 20_000,
+    })
+    .toEqual([{ pct_fixed: 37 }]);
+  await expect(page.getByText("37%", { exact: true }).first()).toBeVisible();
 });
 
 test("configurações mostra a linha Distribuição da renda, com os números do lar, e leva à tela", async ({

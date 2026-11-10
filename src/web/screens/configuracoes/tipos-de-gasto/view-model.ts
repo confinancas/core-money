@@ -48,9 +48,13 @@ export function totalDaDistribuicao(percentuais: PlannedPercentages): { texto: s
   return { texto: `${Math.max(100, soma)}%`, passou: soma > 100 };
 }
 
+// A frase da base em duas partes, para a quantia entrar como componente (centavos menores, rodada 2): antes e depois.
+export const TEXTO_BASE_ANTES = (mes: string): string => `Base: renda de ${mes}, `;
+export const TEXTO_BASE_DEPOIS = ". Investimentos é o que sobra: ajusta sozinho para fechar 100%.";
+
 export function textoDaBase(base: TiposDeGastoResposta["base"], formatar: (cents: number) => string): string {
   if (base === null) return TEXTO_BASE_SEM_RENDA;
-  return `Base: renda de ${base.label}, ${formatar(base.prevIncomeCents)}. Investimentos é o que sobra: ajusta sozinho para fechar 100%.`;
+  return `${TEXTO_BASE_ANTES(base.label)}${formatar(base.prevIncomeCents)}${TEXTO_BASE_DEPOIS}`;
 }
 
 // Valor por ciclo de um tipo: a base × o percentual (sem base: nada).

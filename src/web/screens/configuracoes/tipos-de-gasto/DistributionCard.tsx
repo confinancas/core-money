@@ -1,9 +1,17 @@
 import { Card } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import type { PlannedPercentages } from "../../../../shared/spend-types";
 import type { TiposDeGastoResposta } from "../../../api/spend-types";
-import { segmentosDaBarra, textoDaBase, totalDaDistribuicao } from "./view-model";
+import {
+  segmentosDaBarra,
+  TEXTO_BASE_ANTES,
+  TEXTO_BASE_DEPOIS,
+  TEXTO_BASE_SEM_RENDA,
+  totalDaDistribuicao,
+} from "./view-model";
 
-// Distribuição da renda: o total (verde, ou vermelho acima de 100), a barra empilhada nas cores e a base.
+// Distribuição da renda: o total (verde, ou vermelho acima de 100), a barra empilhada nas cores e a base. Os centavos da
+// base saem menores, como no restante do app (o Money).
 export function DistributionCard({
   percentuais,
   base,
@@ -38,15 +46,17 @@ export function DistributionCard({
           />
         ))}
       </div>
-      <p className="text-[12px] leading-[1.45] text-ink-2">
-        {textoDaBase(base, (cents) => formatarSemSimbolo(cents))}
+      <p className="text-[12px] leading-[1.45] text-ink-2" data-testid="base-distribuicao">
+        {base === null ? (
+          TEXTO_BASE_SEM_RENDA
+        ) : (
+          <>
+            {TEXTO_BASE_ANTES(base.label)}
+            <Money cents={base.prevIncomeCents} sensitive={false} />
+            {TEXTO_BASE_DEPOIS}
+          </>
+        )}
       </p>
     </Card>
-  );
-}
-
-function formatarSemSimbolo(cents: number): string {
-  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-    cents / 100,
   );
 }

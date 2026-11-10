@@ -52,7 +52,7 @@ export function RuleSheet({
             <span className="text-[13px] font-bold text-ink-2">Destinos recentes</span>
             <div className="flex flex-wrap gap-2">
               {destinos.map((destino) => (
-                <Chip key={destino.name} onClick={() => onTexto(destino.name)}>
+                <Chip key={destino.name} className="h-11" onClick={() => onTexto(destino.name)}>
                   {destino.name}
                 </Chip>
               ))}
