@@ -157,6 +157,8 @@ test("lista: cartão com a fatura aberta, o limite usado e os balões do topo", 
   await expect(cartao.getByRole("img", { name: "631,00" })).toBeVisible();
   await expect(cartao).toContainText("3.660,00 de limite disponível de 6.000,00");
   await expect(cartao.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "39");
+  // Selo "paga" com o ✓ (o svg fica dentro da pílula).
+  await expect(cartao.getByText(/ paga$/).locator("svg")).toHaveCount(1);
 
   // Balões: faturas abertas (631,00) e parcelas futuras (1.132,20, com as parcelas da aberta).
   await expect(page.getByText("Faturas abertas")).toBeVisible();
@@ -178,13 +180,15 @@ test("lista: as compras recentes ficam ao lado dos cartões no desktop e embaixo
   await expect(cartao).toBeVisible();
   const titulo = page.getByRole("heading", { name: "Últimas compras" });
   await expect(titulo).toBeVisible();
-  await expect(page.getByRole("link", { name: /Mercado E2E/ })).toContainText("Hoje");
+  // Sem categoria, a compra mostra só "Revisar categoria" (sem data nem banco).
   await expect(page.getByRole("link", { name: /Mercado E2E/ })).toContainText("Revisar categoria");
+  await expect(page.getByRole("link", { name: /Mercado E2E/ })).not.toContainText("Hoje");
   await expect(page.getByRole("link", { name: /Estorno E2E/ })).toContainText("estorno");
 
   const caixaDoCartao = await cartao.boundingBox();
   const caixaDoTitulo = await titulo.boundingBox();
-  if (info.project.name === "desktop") {
+  // Tablet e desktop: as compras ficam ao lado dos cartões (duas colunas). Celular: embaixo.
+  if (info.project.name !== "celular") {
     expect(caixaDoTitulo?.x ?? 0).toBeGreaterThan((caixaDoCartao?.x ?? 0) + (caixaDoCartao?.width ?? 0));
   } else {
     expect(caixaDoTitulo?.y ?? 0).toBeGreaterThan((caixaDoCartao?.y ?? 0) + (caixaDoCartao?.height ?? 0));
@@ -195,7 +199,11 @@ test("lista: toque na compra leva a /compras/:id, e o item oculto aparece riscad
   await page.goto("/cartoes");
   await expect(page.getByRole("link", { name: /Terceiros E2E/ })).toBeVisible();
   await expect(page.getByText("Gasto de terceiros · fora dos cálculos").first()).toBeVisible();
-  await expect(page.getByRole("img", { name: "menos 312,50" }).first()).toHaveClass(/line-through/);
+  await expect(page.getByRole("img", { name: "312,50", exact: true }).first()).toHaveClass(/line-through/);
+  // A compra sai sem sinal; só o estorno leva o "−".
+  await expect(page.getByRole("img", { name: "74,90", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "menos 74,90" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "menos 50,00" }).first()).toBeVisible();
   await page.getByRole("link", { name: /Mercado E2E/ }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/compras/e2e-cr-compra-1");
 });
@@ -210,7 +218,9 @@ test("detalhe: cabeçalho, fatura aberta, balões e cinco faturas no gráfico", 
 
   const mesAberto = monthNamePt(ciclosDeTeste().atual.key);
   await expect(page.getByText(`Fatura aberta · ciclo de ${mesAberto}`)).toBeVisible();
-  await expect(page.getByText("Disponível 3.660,00 · Limite 6.000,00")).toBeVisible();
+  await expect(page.getByText(/^Disponível/).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "3.660,00" }).first()).toBeVisible();
+  await expect(page.getByRole("img", { name: "6.000,00" }).first()).toBeVisible();
   await expect(page.getByText("Média 2 meses")).toBeVisible();
   await expect(page.getByRole("img", { name: "2.995,20" })).toBeVisible();
 
@@ -226,7 +236,8 @@ test("detalhe: cabeçalho, fatura aberta, balões e cinco faturas no gráfico", 
   const grafico = await page.getByRole("figure", { name: "Faturas do cartão" }).boundingBox();
   const gastos = await page.getByRole("heading", { name: "Gastos da fatura aberta" }).boundingBox();
   expect(grafico).not.toBeNull();
-  if (info.project.name === "desktop") {
+  // Tablet e desktop: as faturas à esquerda e os gastos à direita. Celular: os gastos embaixo.
+  if (info.project.name !== "celular") {
     expect((grafico?.x ?? 0) + (grafico?.width ?? 0)).toBeLessThanOrEqual(gastos?.x ?? 0);
   } else {
     expect(gastos?.y ?? 0).toBeGreaterThan((grafico?.y ?? 0) + (grafico?.height ?? 0) - 1);
@@ -298,6 +309,71 @@ test("o olho esconde os valores dos cartões", async ({ page }) => {
   await expect(page.locator("html")).toHaveClass(/mm-oculto/);
   await page.getByRole("button", { name: "Mostrar valores" }).click();
   await expect(page.locator("html")).not.toHaveClass(/mm-oculto/);
+});
+
+// F1: o topo do detalhe inteiro fica dentro do verde, e o texto tem o gradiente atrás dele, nas três larguras.
+test("detalhe: o topo inteiro fica dentro do verde, com fundo em gradiente", async ({ page }) => {
+  await page.goto(`/cartoes/${CARTAO}`);
+  const topo = page.locator("header").first();
+  await expect(topo).toHaveCSS("background-image", /gradient/);
+  const alvos = [
+    page.getByText("Fecha", { exact: true }).first(),
+    page.getByText(/^Disponível/).first(),
+    page.getByText("Parcelas futuras", { exact: true }).first(),
+    page.getByText("Melhor dia", { exact: true }).first(),
+  ];
+  // Só mede o topo depois que o conteúdo chegou (o topo cresce quando os dados entram).
+  await expect(page.getByText("Fecha", { exact: true }).first()).toBeVisible();
+  const caixaDoTopo = await topo.boundingBox();
+  for (const alvo of alvos) {
+    await expect(alvo).toBeVisible();
+    const caixa = await alvo.boundingBox();
+    expect(caixa).not.toBeNull();
+    expect(caixa?.y ?? 0).toBeGreaterThanOrEqual(caixaDoTopo?.y ?? 0);
+    expect((caixa?.y ?? 0) + (caixa?.height ?? 0)).toBeLessThanOrEqual(
+      (caixaDoTopo?.y ?? 0) + (caixaDoTopo?.height ?? 0),
+    );
+    // O fundo computado do contêiner atrás do texto é o gradiente do verde.
+    const fundo = await alvo.evaluate((el) => {
+      for (let no: HTMLElement | null = el as HTMLElement; no; no = no.parentElement) {
+        const imagem = getComputedStyle(no).backgroundImage;
+        if (imagem && imagem !== "none") return imagem;
+      }
+      return "";
+    });
+    expect(fundo).toContain("gradient");
+  }
+});
+
+// F2: com o olho ligado, os valores do limite e do topo são borrados no próprio elemento (não só o título).
+test("olho: os valores do limite e do topo ficam borrados no próprio elemento", async ({ page }) => {
+  await page.goto("/cartoes");
+  await expect(cartaoNaLista(page)).toBeVisible();
+  await page.getByRole("button", { name: "Ocultar valores" }).click();
+  await expect(cartaoNaLista(page).getByRole("img", { name: "3.660,00" }).first()).toHaveCSS(
+    "filter",
+    /blur/,
+  );
+  // A escolha fica no aparelho: o detalhe, carregado de novo, abre com os valores borrados.
+  await page.goto(`/cartoes/${CARTAO}`);
+  await expect(page.getByRole("img", { name: "3.660,00" }).first()).toHaveCSS("filter", /blur/);
+  await expect(page.getByRole("img", { name: "631,00" }).first()).toHaveCSS("filter", /blur/);
+  await page.evaluate(() => window.localStorage.removeItem("mm:ocultar-valores"));
+});
+
+// F6 e F8: "Faturas" no título; as pílulas sem variação são neutras (contorno ou cinza claro).
+test("detalhe: as pílulas sem variação são neutras, e o título é Faturas", async ({ page }) => {
+  await page.goto(`/cartoes/${CARTAO}`);
+  await expect(page.getByRole("heading", { name: "Faturas", level: 2 })).toBeVisible();
+  const aberta = page.getByText("parcial · aberta", { exact: true });
+  await expect(aberta).toHaveCSS("border-top-width", "1px");
+  await expect(aberta).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const anterior = page.getByRole("button", { name: "Fatura anterior" });
+  await anterior.click();
+  await anterior.click();
+  const semMes = page.getByText("sem mês anterior", { exact: true });
+  await expect(semMes).toHaveCSS("background-color", "rgb(225, 231, 228)");
+  await expect(semMes).toHaveCSS("color", "rgb(102, 117, 110)");
 });
 
 // Confere que os dados de teste foram gravados (checagem do próprio teste, sem depender da tela).
