@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { colunasDasSecoes, SETTINGS_SECTIONS, type SettingsSection } from "@/screens/configuracoes/sections";
 
 // Registro das seções de Configurações (TASK-0107): ordem e colunas por largura (tabela da spec), ids únicos e o
-// encaixe de uma seção nova (cenário 11). A distribuição é a das telas de 390, 834 e 1440 px. A seção Contas Meu
-// Pluggy (TASK-0203) entra no registro com a posição da tabela (order 20, coluna 1 em tablet e desktop).
+// encaixe de uma seção nova (cenário 11). A distribuição é a das telas de 390, 834 e 1440 px. As seções Contas Meu
+// Pluggy (TASK-0203) e Renda fixa (TASK-0901) entram no registro com a posição da tabela.
 const ids = (coluna: SettingsSection[]) => coluna.map((secao) => secao.id);
 const SecaoDeTeste = () => null;
 
 describe("registro de seções", () => {
-  it("registra as seções das tasks 0107 e 0802, com ids únicos", () => {
+  it("registra as seções das tasks 0107, 0203, 0802 e 0901, com ids únicos", () => {
     const registradas = SETTINGS_SECTIONS.map((secao) => secao.id);
 
     expect(registradas).toEqual([
@@ -16,6 +16,7 @@ describe("registro de seções", () => {
       "contas-meu-pluggy",
       "ciclo",
       "distribuicao-da-renda",
+      "renda-fixa",
       "sincronizacao",
       "dados",
     ]);
@@ -30,6 +31,7 @@ describe("registro de seções", () => {
       ["contas-meu-pluggy", "Contas Meu Pluggy", 20],
       ["ciclo", "Ciclo e orçamento", 30],
       ["distribuicao-da-renda", "Distribuição da renda", 40],
+      ["renda-fixa", "Renda fixa", 50],
       ["sincronizacao", "Sincronização", 80],
       ["dados", "Dados", 90],
     ]);
@@ -41,25 +43,33 @@ describe("colunas por largura", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "celular");
 
     expect(colunas.map(ids)).toEqual([
-      ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda", "sincronizacao", "dados"],
+      [
+        "casal",
+        "contas-meu-pluggy",
+        "ciclo",
+        "distribuicao-da-renda",
+        "renda-fixa",
+        "sincronizacao",
+        "dados",
+      ],
     ]);
   });
 
-  it("tablet: duas colunas; Casal, Ciclo e Distribuição na primeira, Sincronização e Dados na segunda", () => {
+  it("tablet: duas colunas; Casal, Contas, Ciclo e Distribuição na primeira, Renda fixa, Sincronização e Dados na segunda", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "tablet");
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["sincronizacao", "dados"],
+      ["renda-fixa", "sincronizacao", "dados"],
     ]);
   });
 
-  it("desktop: três colunas, Casal e Contas à esquerda, Ciclo e Distribuição no meio, Sincronização e Dados à direita", () => {
+  it("desktop: três colunas, Casal e Contas à esquerda, Ciclo, Distribuição e Renda fixa no meio, Sincronização e Dados à direita", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "desktop");
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
-      ["ciclo", "distribuicao-da-renda"],
+      ["ciclo", "distribuicao-da-renda", "renda-fixa"],
       ["sincronizacao", "dados"],
     ]);
   });
@@ -83,17 +93,18 @@ describe("colunas por largura", () => {
         "falsa-de-teste",
         "ciclo",
         "distribuicao-da-renda",
+        "renda-fixa",
         "sincronizacao",
         "dados",
       ],
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["falsa-de-teste", "sincronizacao", "dados"],
+      ["falsa-de-teste", "renda-fixa", "sincronizacao", "dados"],
     ]);
     expect(colunasDasSecoes(registro, "desktop").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
-      ["falsa-de-teste", "ciclo", "distribuicao-da-renda"],
+      ["falsa-de-teste", "ciclo", "distribuicao-da-renda", "renda-fixa"],
       ["sincronizacao", "dados"],
     ]);
   });
