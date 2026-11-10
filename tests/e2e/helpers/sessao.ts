@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { executaSql } from "./db";
 
-// Sessão da instalação pronta (porta 8788), para os testes que passam pelas rotas da moldura (TASK-0104).
+// Sessão da instalação pronta, para os testes que passam pelas rotas da moldura (TASK-0104).
 // O lar, a pessoa, a passkey e a sessão [TEST] são semeados uma vez, pelo global setup; cada página põe o cookie.
-// O cadastro de verdade (com o autenticador virtual) roda na instância de configuração (8790), em login.spec.ts.
+// O cadastro de verdade (com o autenticador virtual) roda na instância de configuração do zero, em login.spec.ts.
 export const LAR_DA_INSTALACAO_PRONTA = "e2e-lar-pronto";
 export const TOKEN_DE_SESSAO_E2E = "E2E-SESSAO-0104-token-de-teste-0000000001";
 const HASH_DA_SESSAO_E2E = createHash("sha256").update(TOKEN_DE_SESSAO_E2E).digest("hex");
