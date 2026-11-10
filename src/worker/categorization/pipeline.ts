@@ -100,7 +100,6 @@ export async function processNewTransactions(
       householdId,
       transactionId: casamento.transaction_id,
       rule: regra,
-      cardId: casamento.card_id,
       now,
     });
     if (escrita === null) continue;

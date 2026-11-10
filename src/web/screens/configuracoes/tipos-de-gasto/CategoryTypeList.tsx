@@ -31,11 +31,16 @@ export function CategoryTypeList({
                   {rotulo.sem !== null && ` · ${rotulo.sem}`}
                 </span>
               </span>
+              {/* Pílula como no protótipo: borda, texto escuro e um ponto de 8 px na cor do tipo (sem fundo cheio). */}
               <span
-                className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-bold text-white"
-                style={{ backgroundColor: def?.color ?? "#8794A8" }}
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-divider px-2.5 py-1 text-[12px] font-semibold text-ink"
                 data-tipo={categoria.effectiveSpendType as SpendType}
               >
+                <span
+                  aria-hidden="true"
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: def?.color ?? "#8794A8" }}
+                />
                 {def?.label ?? categoria.effectiveSpendType}
               </span>
             </button>

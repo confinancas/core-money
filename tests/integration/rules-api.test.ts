@@ -486,6 +486,7 @@ describe("validação: 422 com o campo e a mensagem da spec", () => {
   it("cenário 5: compra no cartão nunca vira Metas nem Investimentos", async () => {
     const lar = await criarLar();
     const compra = await inserirTransacao(lar, {
+      na: "cartao",
       movement: "compra",
       amountCents: -100,
       descricao: "[TEST] LOJA CINCO",
@@ -501,6 +502,39 @@ describe("validação: 422 com o campo e a mensagem da spec", () => {
       fields: { spendType: "Compra no cartão nunca é Metas nem Investimentos." },
     });
     expect(await contar("SELECT COUNT(*) AS total FROM rules")).toBe(0);
+  });
+
+  it("boleto e débito na conta aceitam Investimentos e Metas (a trava é o cartão, não o escopo): 201", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const boleto = await inserirTransacao(lar, {
+      movement: "boleto",
+      amountCents: -5000,
+      descricao: "[TEST] BOLETO LUZ",
+    });
+    const debito = await inserirTransacao(lar, {
+      movement: "debito",
+      amountCents: -1500,
+      descricao: "[TEST] DEBITO FARMA",
+    });
+    const doBoleto = await chamar(app, "POST", "/api/rules", {
+      transactionId: boleto,
+      set: { spendType: "investimentos" },
+      createdFrom: "lembrar",
+    });
+    expect(doBoleto.status).toBe(201);
+    const doDebito = await chamar(app, "POST", "/api/rules", {
+      transactionId: debito,
+      set: { spendType: "metas" },
+      createdFrom: "lembrar",
+    });
+    expect(doDebito.status).toBe(201);
+    const tipos = await env.DB.prepare(
+      "SELECT set_spend_type AS tipo FROM rules WHERE household_id = ? ORDER BY set_spend_type",
+    )
+      .bind(lar.householdId)
+      .all<{ tipo: string }>();
+    expect(tipos.results.map((linha) => linha.tipo)).toEqual(["investimentos", "metas"]);
   });
 
   it("Pix sem nome nem documento não vira regra", async () => {

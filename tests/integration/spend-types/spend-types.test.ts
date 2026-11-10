@@ -72,6 +72,30 @@ async function categorizar(app: Hono<AppEnv>, transacaoId: string, categoriaId: 
   });
 }
 
+// Um lar extra, com conta e cartão, direto no banco: criarLar só monta um lar por teste (createHousehold).
+async function criarLarExtra(): Promise<Lar> {
+  const { householdId, memberId } = await criarOutroLar();
+  const connectionId = crypto.randomUUID();
+  const bankItemId = crypto.randomUUID();
+  const accountId = crypto.randomUUID();
+  const cardId = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO pluggy_connections (id, household_id, label, created_at) VALUES (?, ?, '[TEST] Conexão', ?)",
+    ).bind(connectionId, householdId, AGORA),
+    env.DB.prepare(
+      "INSERT INTO bank_items (id, connection_id, institution_name, created_at) VALUES (?, ?, '[TEST] Banco', ?)",
+    ).bind(bankItemId, connectionId, AGORA),
+    env.DB.prepare(
+      "INSERT INTO accounts (id, bank_item_id, kind, name, balance_cents, overdraft_used_cents, balance_at) VALUES (?, ?, 'corrente', '[TEST] Conta', 0, 0, ?)",
+    ).bind(accountId, bankItemId, AGORA),
+    env.DB.prepare(
+      "INSERT INTO cards (id, bank_item_id, last4, name) VALUES (?, ?, '1234', '[TEST] Cartão')",
+    ).bind(cardId, bankItemId),
+  ]);
+  return { householdId, memberId, bankItemId, accountId, cardId };
+}
+
 // Repete o passo 4 da importação para uma linha (zera o tipo antes, como a gravação nova).
 async function aplicarDeNovoNaImportacao(lar: Lar, id: string): Promise<void> {
   await env.DB.prepare("UPDATE transactions SET spend_type = NULL, spend_type_source = NULL WHERE id = ?")
@@ -440,6 +464,329 @@ describe("regras automáticas (corretora e caixinha)", () => {
     });
   });
 
+  it("'Lembrar' com tipo Investimentos num boleto: a compra de cartão com a mesma chave vai para a categoria e herda o tipo dela", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const boleto = await inserirTransacao(lar, {
+      movement: "boleto",
+      amountCents: -5000,
+      descricao: "[TEST] ACME",
+    });
+    const compraCartao = await inserirTransacao(lar, {
+      na: "cartao",
+      movement: "compra",
+      amountCents: -3000,
+      descricao: "[TEST] ACME",
+      categoryId: categoriaDoLar(lar, "mercado"),
+      categorizedBy: "ia",
+      spendType: "fixos",
+      spendTypeSource: "categoria",
+    });
+    const r = await chamar(app, "POST", "/api/rules", {
+      transactionId: boleto,
+      set: { categoryId: categoriaDoLar(lar, "lazer"), spendType: "investimentos" },
+      createdFrom: "lembrar",
+    });
+    expect(r.status).toBe(201);
+    expect(r.corpo.alsoResolved).toEqual([compraCartao]);
+    expect(await lerTransacao(compraCartao)).toMatchObject({
+      category_id: categoriaDoLar(lar, "lazer"),
+      spend_type: "prazeres",
+      spend_type_source: "categoria",
+    });
+  });
+
+  it("apagar a regra automática não desfaz o tipo que uma regra do casal deu ('Lembrar' com tipo, com rule_id)", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const origem = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -3000,
+      descricao: "[TEST] Pix Zeta Origem",
+      contraparte: "CORRETORA ZETA",
+      spendType: "prazeres",
+      spendTypeSource: "padrao",
+    });
+    const igual = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -2000,
+      descricao: "[TEST] Pix Zeta Igual",
+      contraparte: "CORRETORA ZETA",
+      spendType: "prazeres",
+      spendTypeSource: "padrao",
+    });
+    // "Lembrar" com categoria e tipo: os iguais pendentes recebem os dois (uma regra só de tipo não alcança os iguais).
+    const lembrar = await chamar(app, "POST", "/api/rules", {
+      transactionId: origem,
+      set: { categoryId: categoriaDoLar(lar, "lazer"), spendType: "investimentos" },
+      createdFrom: "lembrar",
+    });
+    expect(lembrar.status).toBe(201);
+    expect(await lerTransacao(igual)).toMatchObject({
+      spend_type: "investimentos",
+      spend_type_source: "regra",
+    });
+
+    const criada = await chamar(app, "POST", "/api/automatic-rules", {
+      kind: "corretora",
+      matchValue: "corretora zeta",
+    });
+    expect(criada.corpo.applied).toBe(1);
+    const apagada = await chamar(
+      app,
+      "DELETE",
+      `/api/automatic-rules/${(criada.corpo.rule as { id: string }).id}`,
+    );
+    expect(apagada.corpo.reverted).toBe(1);
+    expect(await lerTransacao(igual)).toMatchObject({
+      spend_type: "investimentos",
+      spend_type_source: "regra",
+    });
+    expect(await lerTransacao(origem)).toMatchObject({ spend_type: "prazeres", spend_type_source: "padrao" });
+  });
+
+  it("regra automática casa a contraparte com acento minúsculo (POST): 'Corretora Ação S.A.', 'João Árvore Investimentos' e 'joão investe'", async () => {
+    const casos = [
+      { contraparte: "Corretora Ação S.A.", texto: "corretora acao" },
+      { contraparte: "João Árvore Investimentos", texto: "joao arvore" },
+      { contraparte: "joão investe", texto: "joão investe" },
+    ];
+    for (const [i, caso] of casos.entries()) {
+      const lar = await criarLarExtra();
+      const pix = await inserirTransacao(lar, {
+        movement: "pix_enviado",
+        amountCents: -1000 - i,
+        descricao: `[TEST] Pix investimento ${i}`,
+        contraparte: caso.contraparte,
+      });
+      const r = await chamar(appDoLar(lar), "POST", "/api/automatic-rules", {
+        kind: "corretora",
+        matchValue: caso.texto,
+      });
+      expect(r.status, caso.contraparte).toBe(201);
+      expect(r.corpo.applied, caso.contraparte).toBe(1);
+      expect(await lerTransacao(pix), caso.contraparte).toMatchObject({
+        spend_type: "investimentos",
+        spend_type_source: "regra",
+      });
+    }
+  });
+
+  it("passo 4 (por ids): as mesmas três contrapartes com acento minúsculo viram investimentos/regra", async () => {
+    const lar = await criarLar();
+    for (const texto of ["CORRETORA ACAO", "JOAO ARVORE", "JOAO INVESTE"]) {
+      await env.DB.prepare(
+        "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES (?, ?, 'corretora', ?, ?, ?)",
+      )
+        .bind(crypto.randomUUID(), lar.householdId, texto, lar.memberId, AGORA)
+        .run();
+    }
+    const ids: string[] = [];
+    for (const [i, contraparte] of [
+      "Corretora Ação S.A.",
+      "João Árvore Investimentos",
+      "joão investe",
+    ].entries()) {
+      ids.push(
+        await inserirTransacao(lar, {
+          movement: "pix_enviado",
+          amountCents: -2000 - i,
+          descricao: `[TEST] Pix passo ${i}`,
+          contraparte,
+        }),
+      );
+    }
+    await applySpendTypesOnImport(createDb(env.DB, newMeter()), lar.householdId, ids);
+    for (const id of ids) {
+      expect(await lerTransacao(id)).toMatchObject({
+        spend_type: "investimentos",
+        spend_type_source: "regra",
+      });
+    }
+  });
+
+  it("entrada e pagamento de fatura não ganham tipo: PUT de categoria e rederivação do PATCH deixam spend_type nulo", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const mercado = categoriaDoLar(lar, "mercado");
+    const entrada = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 9000,
+      descricao: "[TEST] Entrada Categoria",
+    });
+    const fatura = await inserirTransacao(lar, {
+      movement: "pagamento_fatura",
+      amountCents: -8000,
+      descricao: "[TEST] Fatura Categoria",
+    });
+    expect((await categorizar(app, entrada, mercado)).status).toBe(200);
+    expect((await categorizar(app, fatura, mercado)).status).toBe(200);
+    expect(await lerTransacao(entrada)).toMatchObject({
+      category_id: mercado,
+      spend_type: null,
+      spend_type_source: null,
+    });
+    expect(await lerTransacao(fatura)).toMatchObject({ spend_type: null, spend_type_source: null });
+
+    const entradaRederivada = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 500,
+      descricao: "[TEST] Entrada Rederiva",
+      categoryId: mercado,
+      categorizedBy: "member",
+    });
+    const patch = await chamar(app, "PATCH", `/api/categories/${mercado}`, { defaultSpendType: "extras" });
+    expect(patch.status).toBe(200);
+    expect(await lerTransacao(entradaRederivada)).toMatchObject({
+      spend_type: null,
+      spend_type_source: null,
+    });
+  });
+
+  it("passo 4: uma entrada que chega (pix_recebido) não ganha tipo, nem o padrão", async () => {
+    const lar = await criarLar();
+    const entrada = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 9000,
+      descricao: "[TEST] Entrada Passo 4",
+      contraparte: "[TEST] Pessoa Entrada",
+    });
+    await aplicarDeNovoNaImportacao(lar, entrada);
+    expect(await lerTransacao(entrada)).toMatchObject({ spend_type: null, spend_type_source: null });
+  });
+
+  it("a regra automática de um lar não toca a linha de outro lar com o mesmo texto (criar: POST)", async () => {
+    const a = await criarLar();
+    const b = await criarLarExtra();
+    const pixA = await inserirTransacao(a, {
+      movement: "pix_enviado",
+      amountCents: -1000,
+      descricao: "[TEST] Pix Beta A",
+      contraparte: "CORRETORA BETA",
+    });
+    const doB = await chamar(appDoLar(b), "POST", "/api/automatic-rules", {
+      kind: "corretora",
+      matchValue: "corretora beta",
+    });
+    expect(doB.corpo.applied).toBe(0);
+    const doA = await chamar(appDoLar(a), "POST", "/api/automatic-rules", {
+      kind: "corretora",
+      matchValue: "outro texto",
+    });
+    expect(doA.corpo.applied).toBe(0);
+    expect(await lerTransacao(pixA)).toMatchObject({ spend_type: null, spend_type_source: null });
+  });
+
+  it("passo 4 chamado com o lar A e um id do lar B não toca a linha do lar B, mesmo com regra igual nele", async () => {
+    const a = await criarLar();
+    const b = await criarLarExtra();
+    await env.DB.prepare(
+      "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES (?, ?, 'corretora', 'CORRETORA GAMA', ?, ?)",
+    )
+      .bind(crypto.randomUUID(), b.householdId, b.memberId, AGORA)
+      .run();
+    const pixB = await inserirTransacao(b, {
+      movement: "pix_enviado",
+      amountCents: -1000,
+      descricao: "[TEST] Pix Gama B",
+      contraparte: "CORRETORA GAMA",
+    });
+    await applySpendTypesOnImport(createDb(env.DB, newMeter()), a.householdId, [pixB]);
+    expect(await lerTransacao(pixB)).toMatchObject({ spend_type: null, spend_type_source: null });
+  });
+
+  it("apagar a regra do lar A não reverte a linha de regra do lar B com o mesmo texto", async () => {
+    const a = await criarLar();
+    const b = await criarLarExtra();
+    const pixB = await inserirTransacao(b, {
+      movement: "pix_enviado",
+      amountCents: -500,
+      descricao: "[TEST] Pix Epsilon B",
+      contraparte: "CORRETORA EPSILON",
+      spendType: "investimentos",
+      spendTypeSource: "regra",
+    });
+    const app = appDoLar(a);
+    const criada = await chamar(app, "POST", "/api/automatic-rules", {
+      kind: "corretora",
+      matchValue: "corretora epsilon",
+    });
+    expect(criada.corpo.applied).toBe(0);
+    const apagada = await chamar(
+      app,
+      "DELETE",
+      `/api/automatic-rules/${(criada.corpo.rule as { id: string }).id}`,
+    );
+    expect(apagada.status).toBe(200);
+    expect(apagada.corpo.reverted).toBe(0);
+    expect(await lerTransacao(pixB)).toMatchObject({
+      spend_type: "investimentos",
+      spend_type_source: "regra",
+    });
+  });
+
+  it("'Lembrar' com tipo não sobrescreve o igual que a pessoa escolheu (escolhido)", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const origem = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -3000,
+      descricao: "[TEST] Lembrar Escolhido Origem",
+      contraparte: "[TEST] Ana Escolhida",
+      spendType: "prazeres",
+      spendTypeSource: "padrao",
+    });
+    const escolhido = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -2000,
+      descricao: "[TEST] Lembrar Escolhido Igual",
+      contraparte: "[TEST] Ana Escolhida",
+      spendType: "conforto",
+      spendTypeSource: "escolhido",
+    });
+    // Com categoria, o igual pendente entra na regra (uma regra só de tipo não alcança os iguais pendentes). O tipo é
+    // livre no cartão (extras), para cair no ramo que grava o tipo da regra.
+    const r = await chamar(app, "POST", "/api/rules", {
+      transactionId: origem,
+      set: { categoryId: categoriaDoLar(lar, "lazer"), spendType: "extras" },
+      createdFrom: "lembrar",
+    });
+    expect(r.status).toBe(201);
+    expect(r.corpo.alsoResolved).toEqual([escolhido]);
+    expect(await lerTransacao(escolhido)).toMatchObject({
+      spend_type: "conforto",
+      spend_type_source: "escolhido",
+    });
+  });
+
+  it("apagar a regra automática não reverte o Pix que a pessoa escolheu como Investimentos (mesmo texto)", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const escolhido = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -4000,
+      descricao: "[TEST] Escolhido Omega",
+      contraparte: "CORRETORA OMEGA",
+      spendType: "investimentos",
+      spendTypeSource: "escolhido",
+    });
+    const criada = await chamar(app, "POST", "/api/automatic-rules", {
+      kind: "corretora",
+      matchValue: "corretora omega",
+    });
+    expect(criada.corpo.applied).toBe(0);
+    const apagada = await chamar(
+      app,
+      "DELETE",
+      `/api/automatic-rules/${(criada.corpo.rule as { id: string }).id}`,
+    );
+    expect(apagada.corpo.reverted).toBe(0);
+    expect(await lerTransacao(escolhido)).toMatchObject({
+      spend_type: "investimentos",
+      spend_type_source: "escolhido",
+    });
+  });
+
   it("a regra automática não sobrescreve escolhido", async () => {
     const lar = await criarLar();
     const app = appDoLar(lar);
@@ -751,6 +1098,79 @@ describe("carga inicial da migração 0008 (UPDATE em SQL)", () => {
     });
     expect((await lerTransacao(entrada)).spend_type).toBeNull();
     expect((await lerTransacao(fatura)).spend_type).toBeNull();
+  });
+});
+
+// Roda a carga da migração 0008 (a última consulta do arquivo) no banco de teste.
+async function rodarCargaDaMigracao(): Promise<void> {
+  const migracao = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0008_"));
+  const carga = migracao?.queries.at(-1) ?? "";
+  expect(carga).toContain("UPDATE transactions AS t SET spend_type");
+  await env.DB.prepare(carga).run();
+}
+
+describe("carga da migração 0008: a trava e a linha que já tem tipo", () => {
+  it("cartão em subcategoria sem tipo próprio cuja mãe é Metas cai para prazeres/padrao (a trava vale na mãe)", async () => {
+    const lar = await criarLar();
+    const mae = await criarCategoria(lar, {
+      id: `[TEST]-mig-mae-${lar.householdId}`,
+      nome: "[TEST] Mãe Metas mig",
+      tipo: "metas",
+    });
+    const sub = await criarCategoria(lar, {
+      id: `[TEST]-mig-sub-m-${lar.householdId}`,
+      nome: "[TEST] Sub Metas mig",
+      parentId: mae,
+    });
+    const cartao = await inserirTransacao(lar, {
+      na: "cartao",
+      movement: "compra",
+      amountCents: -700,
+      descricao: "[TEST] Cartao Sub Metas",
+      categoryId: sub,
+      categorizedBy: "member",
+    });
+    const pix = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -800,
+      descricao: "[TEST] Pix Sub Metas",
+      contraparte: "[TEST] Pix Sub Metas",
+      categoryId: sub,
+      categorizedBy: "member",
+    });
+    for (const id of [cartao, pix]) {
+      await env.DB.prepare("UPDATE transactions SET spend_type = NULL, spend_type_source = NULL WHERE id = ?")
+        .bind(id)
+        .run();
+    }
+    await rodarCargaDaMigracao();
+    expect(await lerTransacao(cartao)).toMatchObject({ spend_type: "prazeres", spend_type_source: "padrao" });
+    expect(await lerTransacao(pix)).toMatchObject({ spend_type: "metas", spend_type_source: "categoria" });
+  });
+
+  it("a linha que já tem tipo (regra ou escolhido) não muda; a carga só dá tipo a quem não tem", async () => {
+    const lar = await criarLar();
+    const comRegra = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -900,
+      descricao: "[TEST] Ja Regra",
+      spendType: "extras",
+      spendTypeSource: "regra",
+    });
+    const escolhida = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -950,
+      descricao: "[TEST] Ja Escolhida",
+      contraparte: "[TEST] Ja Escolhida",
+      spendType: "conforto",
+      spendTypeSource: "escolhido",
+    });
+    await rodarCargaDaMigracao();
+    expect(await lerTransacao(comRegra)).toMatchObject({ spend_type: "extras", spend_type_source: "regra" });
+    expect(await lerTransacao(escolhida)).toMatchObject({
+      spend_type: "conforto",
+      spend_type_source: "escolhido",
+    });
   });
 });
 
