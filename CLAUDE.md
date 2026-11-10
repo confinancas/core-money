@@ -89,9 +89,6 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **E2E que copia um link:** precisa de `grantPermissions` para a área de transferência; sem isso, a tela mostra o caminho alternativo.
 - **Mutações:** rode a unidade e a integração em comandos separados. A integração ignora os arquivos de unidade, e a bateria junta dá falsa sobrevivência.
 - **Varredura do ciclo:** a varredura exaustiva da transição (`tests/unit/shared/cycle.test.ts`) tem timeout de 30 s, porque passa de 5 s sob o gate.
-- **Tipo de gasto:** `spend_type` só é gravado em `src/worker/categorization/apply.ts` (a herança vai junto com a categoria), em `src/worker/spend-types/derive.ts` e na carga da migração `0008`. A SQL da herança é `tipoDaCategoriaSql` (`src/worker/spend-types/resolve.ts`), com o alias `t`; o espelho em TypeScript é `resolveSpendType`.
-- **A web não importa de `src/worker`:** constantes compartilhadas vão para `src/shared`.
-- **D1 e profundidade:** uma cadeia longa de `REPLACE` estoura "Expression tree is too large (maximum depth 100)". A normalização de acento da contraparte usa 13.
 - **D1 remoto e `pragma_*`:** o D1 remoto recusa `pragma_*` (SQLITE_AUTH). Para ler chaves estrangeiras, use o `CREATE TABLE` em `sqlite_master`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
 - **Configurações:** uma seção nova é um `Section<Nome>.tsx` e uma linha em `sections.ts`, com `tabletColumn` e `desktopColumn`. O layout da tela não muda.
