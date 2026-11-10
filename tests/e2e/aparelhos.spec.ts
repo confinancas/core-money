@@ -99,6 +99,12 @@ async function copiaLinkDeRecuperacao(page: Page, pessoa: string): Promise<strin
   await page.getByRole("button", { name: `Liberar acesso de ${pessoa}` }).click();
   await page.getByRole("button", { name: "Gerar link", exact: true }).click();
   await expect(page.getByRole("button", { name: "Copiar link", exact: true })).toBeVisible();
+  // O painel é o da recuperação: a região e o QR dizem "recuperação", e não "convite" (TASK-0107).
+  await expect(page.getByRole("region", { name: "Compartilhar o link de recuperação" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Compartilhar o convite" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Mostrar QR code", exact: true }).click();
+  await expect(page.getByRole("img", { name: "QR code do link de recuperação" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "QR code do link do convite" })).toHaveCount(0);
   await page.getByRole("button", { name: "Copiar link", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Link copiado.");
   // A frase do pé diz quem entra: a pessoa que perdeu o acesso, e não "cônjuge".
@@ -225,6 +231,8 @@ test("cenário 2: o titular adiciona este aparelho; o aparelho repetido é recus
 
   await page.goto("/configuracoes/casal");
   await expect(page.getByRole("heading", { name: "Casal e aparelhos" })).toBeVisible();
+  // Acessibilidade (TASK-0107): um <main> só, o da moldura. A tela usa <section>.
+  await expect(page.locator("main")).toHaveCount(1);
   // O aparelho já tem a passkey do cadastro: o navegador recusa criar outra.
   await page.getByRole("button", { name: "Adicionar este aparelho", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Este aparelho já tem uma passkey sua.");

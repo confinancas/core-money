@@ -46,6 +46,20 @@ async function cadastraTitular(page: Page): Promise<void> {
 async function criaConvite(page: Page): Promise<string> {
   await page.goto("/configuracoes/casal/adicionar-conjuge");
   await expect(page.getByLabel("Nome do cônjuge")).toBeVisible();
+  // Acessibilidade (TASK-0107): um <main> só, que é o da moldura. A tela usa <section>.
+  await expect(page.locator("main")).toHaveCount(1);
+  // O botão do rodapé fica fora do <form> (liga-se pelo atributo form), e os quatro itens de "Vocês dois vão poder"
+  // são itens de lista, cada um com o seu ✓.
+  await expect(
+    page.getByRole("button", { name: "Adicionar cônjuge", exact: true }).locator("xpath=ancestor::form"),
+  ).toHaveCount(0);
+  const itens = page.locator(
+    "xpath=//span[normalize-space(.)='Vocês dois vão poder']/following-sibling::ul[1]/li",
+  );
+  await expect(itens).toHaveCount(4);
+  for (let indice = 0; indice < 4; indice++) {
+    await expect(itens.nth(indice).locator("svg")).toHaveCount(1);
+  }
   await page.getByLabel("Nome do cônjuge").fill(CONJUGE);
   await page.getByLabel("E-mail do cônjuge (opcional)").fill(EMAIL_DO_CONJUGE);
   const resposta = page.waitForResponse(
@@ -54,6 +68,7 @@ async function criaConvite(page: Page): Promise<string> {
   await page.getByRole("button", { name: "Adicionar cônjuge", exact: true }).click();
   const { link } = (await (await resposta).json()) as { link: string };
   await expect(page.getByRole("heading", { name: "Convite criado" })).toBeVisible();
+  await expect(page.locator("main")).toHaveCount(1);
   return link;
 }
 

@@ -96,3 +96,7 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **D1 e profundidade:** uma cadeia longa de `REPLACE` estoura "Expression tree is too large (maximum depth 100)". A normalização de acento da contraparte usa 13.
 - **D1 remoto e `pragma_*`:** o D1 remoto recusa `pragma_*` (SQLITE_AUTH). Para ler chaves estrangeiras, use o `CREATE TABLE` em `sqlite_master`.
 - **Batch do Drizzle no D1:** `db.batch()` não aceita `db.run()` com SQL cru. Para SQL cru num batch, use `db.$client.batch(...)`, que é o binding medido.
+- **Configurações:** uma seção nova é um `Section<Nome>.tsx` e uma linha em `sections.ts`, com `tabletColumn` e `desktopColumn`. O layout da tela não muda.
+- **E2E na instalação pronta:** chame `semearInstalacaoPronta()` antes de `semeiaSessaoDaInstalacaoPronta()`; sem ele, a tela cai na configuração inicial. Teste que muda o dia de início volta o `cycle_start_day` a 11 antes de cada teste, e teste que sai do app usa sessão própria, para não derrubar a dos outros.
+- **Sair:** o `sair` do `SessionProvider` só vira "saiu" quando a API responde; sem resposta, a tela fica com o aviso e a sessão continua. `encerrarLocal` só serve quando o servidor já encerrou a sessão (remoção do próprio aparelho em uso).
+- **`ShareLink`:** passe `uso` (convite ou recuperação), que muda os rótulos de acessibilidade.
