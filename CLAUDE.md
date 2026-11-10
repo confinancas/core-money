@@ -88,8 +88,6 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Mensagens da API:** os textos em `src/worker` não levam o nome da marca (o teste `brand-literals` confere). Use texto neutro, e a tela usa `brand.name`.
 - **E2E que copia um link:** precisa de `grantPermissions` para a área de transferência; sem isso, a tela mostra o caminho alternativo.
 - **Mutações:** rode a unidade e a integração em comandos separados. A integração ignora os arquivos de unidade, e a bateria junta dá falsa sobrevivência.
-- **Configurações:** uma seção nova é um `Section<Nome>.tsx` e uma linha em `sections.ts`, com `tabletColumn` e `desktopColumn`; o layout não muda.
-- **E2E na instalação pronta (8788):** chame `semearInstalacaoPronta()` antes de `semeiaSessaoDaInstalacaoPronta()`, senão a tela cai na configuração inicial. Teste que muda o dia de início volta o `cycle_start_day` a 11 antes de cada teste, e teste que sai usa sessão própria, para não derrubar a dos outros.
 - **Varredura do ciclo:** a varredura exaustiva da transição (`tests/unit/shared/cycle.test.ts`) tem timeout de 30 s, porque passa de 5 s sob o gate.
 - **Tipo de gasto:** `spend_type` só é gravado em `src/worker/categorization/apply.ts` (a herança vai junto com a categoria), em `src/worker/spend-types/derive.ts` e na carga da migração `0008`. A SQL da herança é `tipoDaCategoriaSql` (`src/worker/spend-types/resolve.ts`), com o alias `t`; o espelho em TypeScript é `resolveSpendType`.
 - **A web não importa de `src/worker`:** constantes compartilhadas vão para `src/shared`.
@@ -100,3 +98,6 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **E2E na instalação pronta:** chame `semearInstalacaoPronta()` antes de `semeiaSessaoDaInstalacaoPronta()`; sem ele, a tela cai na configuração inicial. Teste que muda o dia de início volta o `cycle_start_day` a 11 antes de cada teste, e teste que sai do app usa sessão própria, para não derrubar a dos outros.
 - **Sair:** o `sair` do `SessionProvider` só vira "saiu" quando a API responde; sem resposta, a tela fica com o aviso e a sessão continua. `encerrarLocal` só serve quando o servidor já encerrou a sessão (remoção do próprio aparelho em uso).
 - **`ShareLink`:** passe `uso` (convite ou recuperação), que muda os rótulos de acessibilidade.
+- **Tipo de gasto:** `spend_type` só é gravado em `src/worker/categorization/apply.ts` (a herança vai junto com a categoria), em `src/worker/spend-types/derive.ts` e na migração 0008. O SQL da herança é `tipoDaCategoriaSql` (`src/worker/spend-types/resolve.ts`), e o espelho em TypeScript é `resolveSpendType`. A guarda de entrada (`setDoTipoDaCategoria(..., soSaidas)`) só vale no PUT de categoria: regra não casa entrada, e o pipeline tem teto de leituras por transação.
+- **Web não importa de `src/worker`:** constantes compartilhadas vão para `src/shared`.
+- **D1 e profundidade de expressão:** uma cadeia de `REPLACE` com muitos níveis estoura `Expression tree is too large (maximum depth 100)`. A normalização de acento da contraparte usa 13.
