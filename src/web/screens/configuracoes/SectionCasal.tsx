@@ -41,7 +41,7 @@ export function SectionCasal() {
   return (
     <div className="flex flex-col gap-3">
       <p className="px-1 text-[13px] leading-normal text-ink-2">
-        {brand.name} é de vocês dois. Cada um entra com a própria passkey.
+        O {brand.name} é de vocês dois. Cada um entra com a própria passkey.
       </p>
       <Card className="flex flex-col overflow-hidden p-0 [&>*+*]:border-t [&>*+*]:border-field-border">
         {dados.members.map((pessoa) => (

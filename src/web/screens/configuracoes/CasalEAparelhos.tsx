@@ -22,7 +22,7 @@ import { useSession } from "../../session/SessionProvider";
 // Remover um aparelho encerra as sessões dele; remover o próprio aparelho em uso manda para entrar.
 export function CasalEAparelhos() {
   const navegar = useNavigate();
-  const { signOut, member } = useSession();
+  const { signOut, encerrarLocal, member } = useSession();
   const confirmar = useConfirm();
   const [pessoas, setPessoas] = useState<PessoaComAparelhos[] | null>(null);
   const [falhaNaLista, setFalhaNaLista] = useState(false);
@@ -90,7 +90,8 @@ export function CasalEAparelhos() {
         method: "DELETE",
       });
       if (resposta.endedCurrentSession) {
-        await signOut().catch(() => undefined);
+        // O servidor já encerrou esta sessão: se o logout falhar, a sessão daqui some mesmo assim.
+        await signOut().catch(() => encerrarLocal());
         navegar("/entrar", { replace: true });
         return;
       }
