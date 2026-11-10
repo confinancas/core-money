@@ -69,20 +69,24 @@ export function TiposGasto() {
   const [erroRegra, setErroRegra] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
-  const carregar = useCallback(async () => {
+  // Lê a tela. A primeira leitura põe os percentuais do lar. As seguintes (depois de gravar) só atualizam os dados: os
+  // percentuais da tela são os da pessoa, e um toque que chegou durante a gravação não pode ser apagado pela resposta.
+  const carregar = useCallback(async (inicial: boolean) => {
     setFalhou(false);
     try {
       const resposta = await fetchSpendTypes();
       setDados(resposta);
-      setPercentuais(resposta.percentages);
-      gravado.current = resposta.percentages;
+      if (inicial) {
+        setPercentuais(resposta.percentages);
+        gravado.current = resposta.percentages;
+      }
     } catch {
       setFalhou(true);
     }
   }, []);
 
   useEffect(() => {
-    void carregar();
+    void carregar(true);
   }, [carregar]);
 
   // Grava sozinho 600 ms depois do último toque. Soma acima de 100: não grava nada (o aviso aparece).
@@ -95,7 +99,7 @@ export function TiposGasto() {
         () => {
           gravado.current = alvo;
           setEstadoDoSalvar("salvo");
-          void carregar();
+          void carregar(false);
         },
         () => setEstadoDoSalvar("erro"),
       );
@@ -113,7 +117,10 @@ export function TiposGasto() {
         />
         <div className="mx-auto w-full max-w-[1120px] px-4 pt-6 tablet:px-6">
           {falhou ? (
-            <ErrorState title="Não deu para carregar os tipos de gasto." onRetry={() => void carregar()} />
+            <ErrorState
+              title="Não deu para carregar os tipos de gasto."
+              onRetry={() => void carregar(true)}
+            />
           ) : (
             <SkeletonCard />
           )}
@@ -137,7 +144,7 @@ export function TiposGasto() {
     try {
       await saveCategoryDefaultType(categoria.id, tipoEscolhido === PADRAO ? null : tipoEscolhido);
       setCategoria(null);
-      await carregar();
+      await carregar(false);
     } catch {
       setErroCategoria(MENSAGEM_DE_ERRO);
     } finally {
@@ -159,7 +166,7 @@ export function TiposGasto() {
       if (anterior !== undefined) await deleteAutomaticRule(anterior.id);
       setMensagem(textoDeRegrasSalvas(criada.applied, TIPO_DA_REGRA_AUTOMATICA[regraAberta]));
       setRegraAberta(null);
-      await carregar();
+      await carregar(false);
     } catch (erro) {
       setErroRegra(erro instanceof ApiError && erro.code === "validacao" ? erro.message : MENSAGEM_DE_ERRO);
     } finally {
@@ -175,7 +182,7 @@ export function TiposGasto() {
       await deleteAutomaticRule(existente.id);
       setRegraAberta(null);
       setMensagem("Regra removida. As transações voltaram para a categoria ou o padrão.");
-      await carregar();
+      await carregar(false);
     } catch {
       setErroRegra(MENSAGEM_DE_ERRO);
     } finally {
@@ -190,8 +197,10 @@ export function TiposGasto() {
         title="Tipos de gasto"
         back={{ to: "/configuracoes", label: "Voltar às configurações" }}
       />
-      <div className="mx-auto grid w-full max-w-[1120px] items-start gap-5 px-4 pt-6 pb-8 tablet:grid-cols-2 tablet:px-6">
-        <div className="flex min-w-0 flex-col gap-5">
+      {/* Colunas como nos protótipos: uma no celular, duas no tablet e três no desktop. Cada grupo fica inteiro numa
+          coluna (break-inside-avoid), e a quebra de coluna é do próprio grupo. A ordem do DOM é a da leitura de tela. */}
+      <div className="mx-auto w-full max-w-[1120px] columns-1 gap-x-5 px-4 pt-6 pb-8 tablet:columns-2 tablet:px-6 desktop:columns-3">
+        <div className="mb-5 flex break-inside-avoid flex-col gap-5">
           <DistributionCard percentuais={percentuais} base={dados.base} />
           <p
             role="status"
@@ -223,7 +232,7 @@ export function TiposGasto() {
           </Card>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-5">
+        <div className="mb-5 flex break-inside-avoid flex-col gap-5 desktop:break-before-column">
           <h2 className="px-1.5 text-[12px] font-bold uppercase tracking-[1px] text-ink-2">
             Dinheiro guardado · fica fora do limite
           </h2>
@@ -260,7 +269,9 @@ export function TiposGasto() {
               {AVISO_DE_SOMA}
             </section>
           )}
+        </div>
 
+        <div className="mb-5 flex break-inside-avoid flex-col gap-5 tablet:break-before-column desktop:break-before-auto">
           <h2 className="px-1.5 text-[12px] font-bold uppercase tracking-[1px] text-ink-2">
             Tipo padrão por categoria
           </h2>
@@ -275,7 +286,9 @@ export function TiposGasto() {
               }}
             />
           </Card>
+        </div>
 
+        <div className="mb-5 flex break-inside-avoid flex-col gap-5 desktop:break-before-column">
           <h2 className="px-1.5 text-[12px] font-bold uppercase tracking-[1px] text-ink-2">
             Regras automáticas
           </h2>
@@ -310,6 +323,7 @@ export function TiposGasto() {
         onCancelar={() => setCategoria(null)}
         salvando={salvandoCategoria}
         erro={erroCategoria}
+        rotulos
       />
 
       <RuleSheet
