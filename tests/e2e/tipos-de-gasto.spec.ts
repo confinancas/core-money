@@ -295,6 +295,7 @@ test("alvos de 44 px, sem rolagem horizontal e colunas da largura", async ({ pag
   };
   const distribuicao = await caixa("Distribuição da renda");
   const guardado = await caixa("Dinheiro guardado · fica fora do limite");
+  const gastos = await caixa("Gastos · entram no limite");
   const tipo = await caixa("Tipo padrão por categoria");
   const regras = await caixa("Regras automáticas");
   if (testInfo.project.name === "celular") {
@@ -304,15 +305,17 @@ test("alvos de 44 px, sem rolagem horizontal e colunas da largura", async ({ pag
     expect(tipo.y).toBeGreaterThan(guardado.y);
     expect(regras.y).toBeGreaterThan(tipo.y);
   } else if (testInfo.project.name === "tablet") {
-    expect(Math.abs(guardado.x - distribuicao.x)).toBeLessThan(5);
+    // "Gastos" e "Dinheiro guardado" são títulos da coluna da esquerda; "Tipo padrão" e "Regras", da direita. (O título
+    // da distribuição fica dentro do cartão, com o padding dele, por isso não serve de referência de coluna.)
+    expect(Math.abs(guardado.x - gastos.x)).toBeLessThan(5);
     expect(guardado.y).toBeGreaterThan(distribuicao.y);
-    expect(tipo.x).toBeGreaterThan(distribuicao.x + 50);
+    expect(tipo.x - gastos.x).toBeGreaterThan(200);
     expect(Math.abs(regras.x - tipo.x)).toBeLessThan(5);
     expect(regras.y).toBeGreaterThan(tipo.y);
   } else {
-    expect(guardado.x).toBeGreaterThan(distribuicao.x + 50);
+    expect(guardado.x - distribuicao.x).toBeGreaterThan(200);
     expect(Math.abs(tipo.x - guardado.x)).toBeLessThan(5);
-    expect(regras.x).toBeGreaterThan(guardado.x + 50);
+    expect(regras.x - guardado.x).toBeGreaterThan(200);
     expect(Math.abs(regras.y - guardado.y)).toBeLessThan(5);
   }
 });
@@ -334,8 +337,12 @@ test("um toque feito durante a gravação não se perde: a tela e o banco ficam 
   await botaoDoTipo(page, "Aumentar", "Custos fixos").click();
   await expect(page.getByRole("button", { name: "Diminuir Custos fixos", exact: true })).toBeVisible();
   await expect(page.getByText("37%", { exact: true }).first()).toBeVisible();
+  // Duas gravações em sequência, com o PATCH de 500 ms e a máquina ocupada: o banco pode levar alguns segundos a chegar
+  // ao 37. Se o toque se perdesse, ficaria em 36 para sempre, e o poll acabaria em falha.
   await expect
-    .poll(() => consultaSql("pronta", `SELECT pct_fixed FROM households WHERE id = ${q(LAR)}`))
+    .poll(() => consultaSql("pronta", `SELECT pct_fixed FROM households WHERE id = ${q(LAR)}`), {
+      timeout: 20_000,
+    })
     .toEqual([{ pct_fixed: 37 }]);
   await expect(page.getByText("37%", { exact: true }).first()).toBeVisible();
 });
