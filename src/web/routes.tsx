@@ -9,6 +9,8 @@ import { Catalogo } from "./dev/Catalog";
 import { AceitarConvite } from "./screens/AceitarConvite";
 import { AdicionarConjuge } from "./screens/AdicionarConjuge";
 import { Cadastro } from "./screens/Cadastro";
+import { Cartao } from "./screens/Cartao";
+import { Cartoes } from "./screens/Cartoes";
 import { ConfiguracaoInicial } from "./screens/ConfiguracaoInicial";
 import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
 import { NovaCategoria } from "./screens/categorias/NovaCategoria";
@@ -42,7 +44,7 @@ export const ROTAS: RotaDaTabela[] = [
   },
 
   { path: "/inicio", frame: "tab", tab: "inicio", title: "Início", element: provisoria },
-  { path: "/cartoes", frame: "tab", tab: "cartoes", title: "Cartões", element: provisoria },
+  { path: "/cartoes", frame: "tab", tab: "cartoes", title: "Cartões", element: <Cartoes /> },
   { path: "/contas", frame: "tab", tab: "contas", title: "Contas do mês", element: provisoria },
   { path: "/renda", frame: "tab", tab: "renda", title: "Renda", element: provisoria },
   { path: "/relatorio/:cycleKey?", frame: "tab", tab: "relatorio", title: "Relatório", element: provisoria },
@@ -64,7 +66,7 @@ export const ROTAS: RotaDaTabela[] = [
   },
   { path: "/pix/:transactionId", frame: "detail", tab: "inicio", title: "Pix enviado", element: provisoria },
 
-  { path: "/cartoes/:cardId", frame: "detail", tab: "cartoes", title: "Cartão", element: provisoria },
+  { path: "/cartoes/:cardId", frame: "detail", tab: "cartoes", title: "Cartão", element: <Cartao /> },
   { path: "/compras/:transactionId", frame: "detail", tab: "cartoes", title: "Compra", element: provisoria },
 
   {
