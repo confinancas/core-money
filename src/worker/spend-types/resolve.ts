@@ -13,6 +13,11 @@ export type OrigemDoTipo = (typeof ORIGENS_DO_TIPO)[number];
 const TIPOS_FORA_DO_CARTAO: readonly string[] = ["metas", "investimentos"];
 const TIPO_PADRAO: SpendType = "prazeres";
 
+// Saídas que têm tipo: compra, saída de conta (pix, ted, débito, boleto, outro) e estorno. Entradas, pagamento de
+// fatura e transferência não têm tipo (TASK-0802, rodada 2). `a` é o alias da tabela na consulta.
+export const movimentosComTipo = (a: string): string =>
+  `((${a}.amount_cents < 0 AND ${a}.movement IN ('compra', 'pix_enviado', 'ted_enviada', 'debito', 'boleto', 'outro')) OR ${a}.movement = 'estorno')`;
+
 export type EntradaDeResolucao = {
   atual: { spendType: string | null; source: string | null };
   cartao: boolean;
@@ -57,10 +62,11 @@ export function tipoDaCategoriaSql(categoria: string, a = "t"): { tipo: string; 
 }
 
 // As duas atribuições de uma instrução que grava o tipo pela categoria. O que o casal escolheu (escolhido) e o que uma
-// regra gravou (regra) não muda. Cada "?" dentro delas pede o id da categoria, na ordem em que aparece.
+// regra gravou (regra) não muda, e entrada, pagamento de fatura e transferência não recebem tipo. Cada "?" dentro delas
+// pede o id da categoria, na ordem em que aparece.
 export function setDoTipoDaCategoria(categoria: string, a = "t"): string[] {
   const { tipo, origem } = tipoDaCategoriaSql(categoria, a);
-  const guarda = `${a}.spend_type_source IN ('escolhido', 'regra')`;
+  const guarda = `(${a}.spend_type_source IN ('escolhido', 'regra') OR NOT ${movimentosComTipo(a)})`;
   return [
     `spend_type = CASE WHEN ${guarda} THEN ${a}.spend_type ELSE ${tipo} END`,
     `spend_type_source = CASE WHEN ${guarda} THEN ${a}.spend_type_source ELSE ${origem} END`,

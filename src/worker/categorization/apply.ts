@@ -5,13 +5,14 @@ import {
   SCOPE_MOVEMENTS,
 } from "../../shared/rule-match";
 import type { Db } from "../db/client";
-import { setDoTipoDaCategoria, tipoDaCategoriaSql } from "../spend-types/resolve";
+import { movimentosComTipo, setDoTipoDaCategoria, tipoDaCategoriaSql } from "../spend-types/resolve";
 
 // Único arquivo que grava category_id (TASK-0302). Toda escrita de categoria, nome, tipo ou movimento por regra ou
 // por escolha do casal sai daqui. As chaves de casamento vêm do servidor (ESTABLISHMENT_KEY_SQL e COUNTERPARTY_KEY_SQL,
 // com o alias t). Escrita nunca toca ai_category_id (a sugestão da IA fica como está).
 // TASK-0802: a mesma instrução que grava a categoria grava o tipo de gasto pela categoria (herança), exceto quando o
-// casal escolheu o tipo (escolhido) ou uma regra o gravou (regra). Ver src/worker/spend-types/resolve.ts.
+// casal escolheu o tipo (escolhido) ou uma regra o gravou (regra), e só em saída (entrada não tem tipo). Ver
+// src/worker/spend-types/resolve.ts.
 
 // Regra já pronta para gravar: a categoria aqui é a categoria ativa, ou null (categoria arquivada não grava).
 export type RegraParaAplicar = {
@@ -42,22 +43,53 @@ const chaveDoEscopo = (escopo: RuleScope): string =>
 
 type Escrita = { sets: string[]; params: unknown[] };
 
-// SET de uma regra, só com o que ela faz. Nome só quando a transação não tem nome próprio. Tipo de gasto nunca
-// metas/investimentos numa compra de cartão (quando o cartão é conhecido, nem entra no SET). Movimento grava o
-// anterior. A marca de categorização (categorized_*, rule_id) só entra quando grava categoria ou movimento.
-function escritaDaRegra(
-  regra: RegraParaAplicar,
-  agora: string,
-  cartaoConhecido: { cardId: string | null } | null,
-): Escrita | null {
+// Um id de categoria para cada "?" de um trecho de SQL, na ordem em que aparecem.
+const pedidosDaCategoria = (sql: string, categoriaId: string): string[] =>
+  Array.from({ length: (sql.match(/\?/g) ?? []).length }, () => categoriaId);
+
+// O tipo que a regra grava na linha (TASK-0802, rodada 2). escolhido nunca muda por regra. Metas e Investimentos não
+// entram numa compra de cartão: ali a linha mantém o que tem, ou, quando a regra grava uma categoria, herda o tipo dela
+// (como a fatia retroativa). Na conta, a regra grava o tipo. O cartão é lido na própria linha (card_id), não de fora.
+function tipoDaRegraNaLinha(tipo: string, categoriaId: string | null): Escrita {
+  if (!TIPOS_FORA_DO_CARTAO.has(tipo)) {
+    return {
+      sets: [
+        "spend_type = CASE WHEN spend_type_source = 'escolhido' THEN spend_type ELSE ? END",
+        "spend_type_source = CASE WHEN spend_type_source = 'escolhido' THEN spend_type_source ELSE 'regra' END",
+      ],
+      params: [tipo],
+    };
+  }
+  if (categoriaId === null) {
+    const guarda = "spend_type_source = 'escolhido' OR card_id IS NOT NULL";
+    return {
+      sets: [
+        `spend_type = CASE WHEN ${guarda} THEN spend_type ELSE ? END`,
+        `spend_type_source = CASE WHEN ${guarda} THEN spend_type_source ELSE 'regra' END`,
+      ],
+      params: [tipo],
+    };
+  }
+  const herdado = tipoDaCategoriaSql("?", "t");
+  return {
+    sets: [
+      `spend_type = CASE WHEN spend_type_source = 'escolhido' THEN spend_type WHEN card_id IS NULL THEN ? WHEN spend_type_source = 'regra' THEN spend_type ELSE ${herdado.tipo} END`,
+      `spend_type_source = CASE WHEN spend_type_source = 'escolhido' THEN spend_type_source WHEN card_id IS NULL THEN 'regra' WHEN spend_type_source = 'regra' THEN spend_type_source ELSE ${herdado.origem} END`,
+    ],
+    params: [
+      tipo,
+      ...pedidosDaCategoria(herdado.tipo, categoriaId),
+      ...pedidosDaCategoria(herdado.origem, categoriaId),
+    ],
+  };
+}
+
+// SET de uma regra, só com o que ela faz. Nome só quando a transação não tem nome próprio. Tipo de gasto pela
+// tipoDaRegraNaLinha. Movimento grava o anterior. A marca de categorização (categorized_*, rule_id) só entra quando
+// grava categoria ou movimento.
+function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null {
   const sets: string[] = [];
   const params: unknown[] = [];
-  const tipo = regra.setSpendType;
-  const tipoBloqueado =
-    tipo !== null &&
-    cartaoConhecido !== null &&
-    cartaoConhecido.cardId !== null &&
-    TIPOS_FORA_DO_CARTAO.has(tipo);
   const gravaCategoria = regra.setCategoryId !== null;
   const gravaMovimento = regra.setMovement !== null;
   const marca = gravaCategoria || gravaMovimento;
@@ -66,14 +98,10 @@ function escritaDaRegra(
     sets.push("custom_name = CASE WHEN custom_name IS NULL THEN ? ELSE custom_name END");
     params.push(regra.setCustomName);
   }
-  if (tipo !== null && !tipoBloqueado) {
-    // escolhido nunca muda por regra (precedência escolhido > regra).
-    const bloqueio =
-      "spend_type_source = 'escolhido' OR (card_id IS NOT NULL AND ? IN ('metas', 'investimentos'))";
-    sets.push(`spend_type = CASE WHEN ${bloqueio} THEN spend_type ELSE ? END`);
-    params.push(tipo, tipo);
-    sets.push(`spend_type_source = CASE WHEN ${bloqueio} THEN spend_type_source ELSE 'regra' END`);
-    params.push(tipo);
+  if (regra.setSpendType !== null) {
+    const tipo = tipoDaRegraNaLinha(regra.setSpendType, regra.setCategoryId);
+    sets.push(...tipo.sets);
+    params.push(...tipo.params);
   }
   if (gravaMovimento) {
     sets.push(
@@ -88,7 +116,7 @@ function escritaDaRegra(
     sets.push("category_id = ?");
     params.push(regra.setCategoryId);
     // Sem tipo na regra, o tipo vem da categoria que ela grava (herança, na mesma instrução).
-    if (tipo === null) {
+    if (regra.setSpendType === null) {
       const herdado = tipoPelaCategoria(regra.setCategoryId);
       sets.push(...herdado.sets);
       params.push(...herdado.params);
@@ -131,18 +159,18 @@ export function setTransactionCategoryStmt(
 }
 
 // Importação (passo 3 do afterIngest): a regra gravada numa transação. Nulo quando a regra não tem o que gravar
-// (só nome, com categoria arquivada). cardId, quando conhecido, impede metas/investimentos num cartão.
+// (só nome, com categoria arquivada). O cartão é conhecido pela própria linha (card_id), e a regra não grava metas nem
+// investimentos nele.
 export function applyRuleToTransactionStmt(
   db: Db,
   entrada: {
     householdId: string;
     transactionId: string;
     rule: RegraParaAplicar;
-    cardId: string | null;
     now: string;
   },
 ): D1PreparedStatement | null {
-  const escrita = escritaDaRegra(entrada.rule, entrada.now, { cardId: entrada.cardId });
+  const escrita = escritaDaRegra(entrada.rule, entrada.now);
   if (escrita === null) return null;
   return db.$client
     .prepare(`UPDATE transactions AS t SET ${escrita.sets.join(", ")} WHERE t.id = ? AND t.household_id = ?`)
@@ -170,11 +198,12 @@ const MARCA_DA_REGRA =
   "((SELECT categoria FROM regra) IS NOT NULL OR (SELECT movimento FROM regra) IS NOT NULL)";
 
 // Tipo da fatia (TASK-0802): escolhido nunca muda; o tipo da regra vale quando não é Metas/Investimentos num cartão;
-// sem tipo na regra, a categoria que ela grava dá o tipo (herança), exceto nas linhas que já são regra. A alias da
-// tabela no UPDATE é u (ver o FROM da fatia).
+// sem tipo na regra, a categoria que ela grava dá o tipo (herança), exceto nas linhas que já são regra e nas que não
+// têm tipo (entrada, pagamento de fatura, transferência). A alias da tabela no UPDATE é u (ver o FROM da fatia).
 const TIPO_DA_REGRA_VALE = `(SELECT tipo FROM regra) IS NOT NULL
       AND NOT (u.card_id IS NOT NULL AND (SELECT tipo FROM regra) IN ('metas', 'investimentos'))`;
-const CATEGORIA_DA_REGRA_VALE = `(SELECT categoria FROM regra) IS NOT NULL AND COALESCE(u.spend_type_source, '') <> 'regra'`;
+const CATEGORIA_DA_REGRA_VALE = `(SELECT categoria FROM regra) IS NOT NULL AND COALESCE(u.spend_type_source, '') <> 'regra'
+      AND ${movimentosComTipo("u")}`;
 const HERDADO_DA_FATIA = tipoDaCategoriaSql("(SELECT categoria FROM regra)", "u");
 
 const SET_DA_FATIA = `custom_name = CASE WHEN (SELECT nome FROM regra) IS NOT NULL AND custom_name IS NULL
@@ -256,7 +285,7 @@ export function applyRuleToPendingStmt(
 ): D1PreparedStatement | null {
   const { rule } = entrada;
   if (rule.setCategoryId === null && rule.setMovement === null) return null;
-  const escrita = escritaDaRegra(rule, entrada.now, null);
+  const escrita = escritaDaRegra(rule, entrada.now);
   if (escrita === null) return null;
   const movimentos = SCOPE_MOVEMENTS[rule.scope];
   return db.$client
