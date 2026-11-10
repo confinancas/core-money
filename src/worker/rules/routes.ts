@@ -258,7 +258,9 @@ export function regrasRoutes(
       if (!SPEND_TYPES.some((tipo) => tipo.id === set.spendType)) {
         campos.spendType = "Tipo de gasto inválido.";
       } else if (
-        escopo === "estabelecimento" &&
+        // A trava é o cartão da transação de origem (TASK-0802, rodada 2): boleto e débito na conta são contas fixas e
+        // podem ter qualquer tipo, como o manual diz.
+        transacao.cardId !== null &&
         (set.spendType === "metas" || set.spendType === "investimentos")
       ) {
         campos.spendType = "Compra no cartão nunca é Metas nem Investimentos.";
