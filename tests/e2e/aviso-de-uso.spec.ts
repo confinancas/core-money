@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { executaSql } from "./helpers/db";
+import { consultaSql, executaSql } from "./helpers/db";
 import { semeiaSessaoDaInstalacaoPronta, signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta } from "./helpers/setup";
 
@@ -14,11 +14,14 @@ const LEITURAS_91 = 4_550_000;
 const hoje = () => new Date().toISOString().slice(0, 10);
 
 // Uso do dia no D1 de teste (o que as requisições teriam gravado). Os testes desfazem no fim.
+// Relê a linha depois de gravar: se o D1 não guardou o valor, o teste para aqui com a causa, e não na faixa ausente.
 function semeiaLeiturasDeHoje(leituras: number): void {
   executaSql(
     "pronta",
     `INSERT INTO usage_daily (day, requests, rows_read, rows_written, size_bytes) VALUES ('${hoje()}', 0, ${leituras}, 0, 0) ON CONFLICT(day) DO UPDATE SET rows_read = ${leituras}`,
   );
+  const lida = consultaSql("pronta", `SELECT rows_read FROM usage_daily WHERE day = '${hoje()}'`);
+  expect(lida, "a linha do dia de hoje depois de semear").toEqual([{ rows_read: leituras }]);
 }
 
 function zeraUso(): void {
@@ -26,12 +29,16 @@ function zeraUso(): void {
 }
 
 // Abre Configurações e espera a leitura do uso: a faixa depende dela, e a primeira chamada de cada página pode demorar.
-async function abreConfiguracoes(page: Page): Promise<void> {
+// Devolve o que a API respondeu, para o teste dizer a faixa que o servidor calculou quando a faixa não aparece.
+async function abreConfiguracoes(
+  page: Page,
+): Promise<{ band: string; resources: { id: string; pct: number }[] }> {
   const usoLido = page.waitForResponse((resposta) => resposta.url().endsWith("/api/usage") && resposta.ok(), {
     timeout: 20_000,
   });
   await page.goto("/configuracoes");
-  await usoLido;
+  const resposta = await usoLido;
+  return (await resposta.json()) as { band: string; resources: { id: string; pct: number }[] };
 }
 
 // Alvo de toque: pelo menos 44 px de altura e de largura, medido pelo navegador.
@@ -73,7 +80,16 @@ test.describe("aviso de uso do plano gratuito", () => {
   }) => {
     semeiaLeiturasDeHoje(LEITURAS_72);
     await signUpAndSignIn(page);
-    await abreConfiguracoes(page);
+    const usoDaApi = await abreConfiguracoes(page);
+    const estadoDoBanco = consultaSql(
+      "pronta",
+      `SELECT h.paid_plan AS paid_plan, u.day AS dia, u.rows_read AS rows_read FROM households h LEFT JOIN usage_daily u ON u.day = '${hoje()}'`,
+    );
+    // Primeiro o banco (valores exatos, para o diff mostrar o que está lá), depois a faixa que a API calculou.
+    expect(estadoDoBanco, "o banco no dia de hoje").toEqual([
+      expect.objectContaining({ paid_plan: 0, rows_read: LEITURAS_72 }),
+    ]);
+    expect(usoDaApi, "a API tem que dizer atenção com 72% de leituras").toMatchObject({ band: "atencao" });
 
     const faixa = page.getByRole("region", { name: "Aviso de uso do plano gratuito" });
     await expect(faixa).toContainText(TEXTO_DA_FAIXA_DE_LEITURA_72);
