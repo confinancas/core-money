@@ -1,8 +1,13 @@
 import { defineConfig } from "@playwright/test";
+import { portasDoE2E } from "./scripts/dev/e2e-portas.mjs";
 
-// Só Chromium. O servidor do E2E (scripts/dev/e2e-server.mjs) sobe sozinho: a porta 8788 (instalação pronta) e a
-// 8790 (configuração inicial do zero, nos testes de configuracao-inicial.spec.ts). Um worker só: os testes mudam o
-// estado do D1 local, e os dois projetos compartilham a instalação pronta.
+// Só Chromium. O servidor do E2E (scripts/dev/e2e-server.mjs) sobe sozinho, nas portas do bloco de MM_E2E_PORTA_BASE
+// (scripts/dev/e2e-portas.mjs; sem a variável, vale o padrão do módulo): a instalação pronta (a base) e a configuração inicial
+// do zero (testes de configuracao-inicial.spec.ts). Um worker só: os testes mudam o estado do D1 local, e os dois
+// projetos compartilham a instalação pronta.
+const portas = portasDoE2E(process.env.MM_E2E_PORTA_BASE);
+const origem = `http://127.0.0.1:${portas.instalacaoPronta}`;
+
 export default defineConfig({
   testDir: "tests/e2e",
   // Semeia o lar, a passkey e a sessão da instalação pronta (TASK-0104), uma vez por execução.
@@ -11,10 +16,10 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   reporter: [["list"], ["html", { open: "never" }]],
-  use: { baseURL: "http://127.0.0.1:8788", trace: "on-first-retry" },
+  use: { baseURL: origem, trace: "on-first-retry" },
   webServer: {
     command: "npm run e2e:server",
-    url: "http://127.0.0.1:8788/api/health",
+    url: `${origem}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
