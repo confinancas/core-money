@@ -11,6 +11,7 @@ import {
   semearInstalacaoPronta,
 } from "./helpers/setup";
 import { ligaAutenticadorVirtual } from "./helpers/webauthn";
+import { marca } from "./marca";
 
 // Configurações (TASK-0107). Dois jeitos de chegar ao lar:
 // - a instalação pronta (8788), com a sessão semeada: lar com uma pessoa (cenários 2, 4, 6, 7, 8 e 9);
@@ -126,6 +127,12 @@ test.describe("lar com uma pessoa (instalação pronta)", () => {
     await page.goto("/configuracoes");
 
     await expect(page.getByText("Criou a conta · 1 aparelho")).toBeVisible();
+    // A frase do topo do Casal: o nome da marca vem do build de teste (dev/marca.json), com o artigo.
+    await expect(
+      page.getByText(`O ${marca.name} é de vocês dois. Cada um entra com a própria passkey.`, {
+        exact: true,
+      }),
+    ).toBeVisible();
     await page.getByRole("link", { name: "+ Adicionar cônjuge" }).click();
 
     await expect(page).toHaveURL(/\/configuracoes\/casal\/adicionar-conjuge$/);
@@ -225,6 +232,46 @@ test.describe("lar com uma pessoa (instalação pronta)", () => {
       `SELECT COUNT(*) AS n FROM sessions WHERE token_hash = '${hashDe(token)}'`,
     )[0];
     expect(Number(restantes?.n ?? -1)).toBe(0);
+  });
+
+  test("cenário 9b: Sair sem rede fica em /configuracoes, com o aviso, e a sessão continua; com a rede de volta, sai", async ({
+    page,
+  }) => {
+    // Uma sessão só deste teste, como no cenário 9: a da instalação pronta não é tocada.
+    const token = "E2E-SESSAO-0107-sair-falha-token-00000002";
+    const agora = new Date();
+    const expira = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    executaSql(
+      "pronta",
+      `INSERT OR REPLACE INTO sessions (token_hash, member_id, passkey_id, created_at, last_seen_at, expires_at, notices_seen_at) VALUES ('${hashDe(token)}', 'e2e-pessoa-pronta', 'e2e-passkey-pronta', '${agora.toISOString()}', '${agora.toISOString()}', '${expira}', NULL)`,
+    );
+    const sessoesDoTeste = () =>
+      Number(
+        consultaSql("pronta", `SELECT COUNT(*) AS n FROM sessions WHERE token_hash = '${hashDe(token)}'`)[0]
+          ?.n ?? -1,
+      );
+    await page
+      .context()
+      .addCookies([
+        { name: "mm_sess", value: token, domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" },
+      ]);
+    await page.goto("/configuracoes");
+    await expect(page.getByText(`Versão ${versao}`)).toBeVisible();
+
+    // A rede cai só na saída: o POST do logout não chega ao servidor.
+    await page.route("**/api/auth/logout", (rota) => rota.abort("internetdisconnected"));
+    await page.getByRole("button", { name: /^Sair/ }).click();
+
+    await expect(page.getByRole("alert")).toContainText("Não deu para sair agora. Tente de novo.");
+    await expect(page).toHaveURL(/\/configuracoes$/);
+    expect(sessoesDoTeste()).toBe(1);
+
+    // Com a rede de volta, a linha volta a aceitar o toque, e a saída termina em /entrar.
+    await page.unroute("**/api/auth/logout");
+    await page.getByRole("button", { name: /^Sair/ }).click();
+
+    await expect(page).toHaveURL(/\/entrar$/);
+    expect(sessoesDoTeste()).toBe(0);
   });
 });
 

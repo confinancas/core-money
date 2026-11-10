@@ -200,6 +200,46 @@ describe("pendingInvite: só o convite aguardando", () => {
     expect(corpo.pendingInvite).toBeNull();
   });
 
+  it("link de recuperação aguardando, do mesmo lar, não aparece como convite de cônjuge", async () => {
+    const lar = await semearLar(env.DB, { nome: "[TEST] Pessoa A", email: "pessoa.a@example.com" });
+    await semearSessao(env.DB, { memberId: lar.memberId, passkeyId: lar.passkeyId });
+    // Um link de recuperação ainda aberto, para a própria pessoa do lar: o tipo é 'recuperacao', não 'conjuge'.
+    await env.DB.prepare(
+      "INSERT INTO invites (id, household_id, kind, token_hash, member_id, invitee_name, invitee_email, created_by, created_at, expires_at, used_at, cancelled_at) VALUES (?, ?, 'recuperacao', ?, ?, NULL, NULL, NULL, ?, ?, NULL, NULL)",
+    )
+      .bind(
+        crypto.randomUUID(),
+        lar.householdId,
+        `hash-de-teste-recuperacao-${crypto.randomUUID()}`,
+        lar.memberId,
+        new Date().toISOString(),
+        new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      )
+      .run();
+    const app = createApp();
+
+    const corpo = await listaDoLar(app, COOKIE_DE_SESSAO_DE_TESTE);
+
+    expect(corpo.pendingInvite).toBeNull();
+  });
+
+  it("no instante do vencimento o convite sai da lista; um milissegundo antes, ainda aparece", async () => {
+    const lar = await semearLar(env.DB, { nome: "[TEST] Pessoa A", email: "pessoa.a@example.com" });
+    await semearSessao(env.DB, { memberId: lar.memberId, passkeyId: lar.passkeyId });
+    const expira = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+    const conviteId = await insereConvite(lar.householdId, lar.memberId, { expiraEm: expira });
+
+    // "agora" é o próprio vencimento: o convite já não está aguardando (a regra é expires_at > agora).
+    const noInstante = createApp({ agora: () => new Date(expira) });
+    expect((await listaDoLar(noInstante, COOKIE_DE_SESSAO_DE_TESTE)).pendingInvite).toBeNull();
+
+    // Um milissegundo antes do vencimento, o mesmo convite ainda aparece.
+    const umMilissegundoAntes = createApp({ agora: () => new Date(Date.parse(expira) - 1) });
+    const corpo = await listaDoLar(umMilissegundoAntes, COOKIE_DE_SESSAO_DE_TESTE);
+    expect(corpo.pendingInvite?.id).toBe(conviteId);
+    expect(corpo.pendingInvite?.expiresAt).toBe(expira);
+  });
+
   it("com o cônjuge já no lar, nenhum convite aguardando aparece", async () => {
     const { householdId, titularId } = await criaLarDeDuas();
     await insereConvite(householdId, titularId);
