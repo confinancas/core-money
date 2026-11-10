@@ -16,8 +16,10 @@ type ControleDaSessao = {
   garantir: () => void;
   // Esquece a sessão lida: a próxima rota protegida lê de novo (depois de entrar).
   esquecer: () => void;
-  // Chama o logout e manda para /entrar (pelo estado "saiu").
+  // Chama o logout. Só vira "saiu" (e a tela vai para /entrar) quando a API respondeu; na falha, o erro sobe.
   sair: () => Promise<void>;
+  // Esquece a sessão deste aparelho sem chamar a API: para quando o servidor já a encerrou.
+  encerrarLocal: () => void;
   // Tira os avisos de aparelho novo da sessão (depois do "Foi eu" na API).
   marcaAvisosVistos: () => void;
 };
@@ -28,6 +30,7 @@ const SEM_CONTROLE: ControleDaSessao = {
   garantir: () => undefined,
   esquecer: () => undefined,
   sair: async () => undefined,
+  encerrarLocal: () => undefined,
   marcaAvisosVistos: () => undefined,
 };
 
@@ -66,13 +69,16 @@ export function SessionProvider({ valores, children }: { valores?: SessionRespon
     mudaEstado("desconhecido");
   }, [mudaEstado, valores]);
 
+  // Sem resposta da API, a sessão continua aberta e o erro sobe para quem chamou (a tela mostra o aviso).
   const sair = useCallback(async () => {
-    try {
-      await apiEnviar<{ ok: true }>("/api/auth/logout", "POST", {});
-    } finally {
-      setDados(null);
-      mudaEstado("saiu");
-    }
+    await apiEnviar<{ ok: true }>("/api/auth/logout", "POST", {});
+    setDados(null);
+    mudaEstado("saiu");
+  }, [mudaEstado]);
+
+  const encerrarLocal = useCallback(() => {
+    setDados(null);
+    mudaEstado("saiu");
   }, [mudaEstado]);
 
   const marcaAvisosVistos = useCallback(() => {
@@ -80,8 +86,8 @@ export function SessionProvider({ valores, children }: { valores?: SessionRespon
   }, []);
 
   const controle = useMemo<ControleDaSessao>(
-    () => ({ estado, dados, garantir: carregar, esquecer, sair, marcaAvisosVistos }),
-    [estado, dados, carregar, esquecer, sair, marcaAvisosVistos],
+    () => ({ estado, dados, garantir: carregar, esquecer, sair, encerrarLocal, marcaAvisosVistos }),
+    [estado, dados, carregar, esquecer, sair, encerrarLocal, marcaAvisosVistos],
   );
 
   return <Contexto.Provider value={controle}>{children}</Contexto.Provider>;
@@ -98,11 +104,12 @@ export type SessaoDoApp = {
   household: SessionResponse["household"];
   notices: unknown[];
   signOut: () => Promise<void>;
+  encerrarLocal: () => void;
 };
 
 // Quem está logado. Só dentro de RequireSession (que espera a sessão chegar).
 export function useSession(): SessaoDoApp {
-  const { dados, sair } = useContext(Contexto);
+  const { dados, sair, encerrarLocal } = useContext(Contexto);
   if (!dados) throw new Error("useSession fora de RequireSession: a sessão ainda não chegou.");
   return {
     member: dados.member,
@@ -110,6 +117,7 @@ export function useSession(): SessaoDoApp {
     household: dados.household,
     notices: dados.notices,
     signOut: sair,
+    encerrarLocal,
   };
 }
 
