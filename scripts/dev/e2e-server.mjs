@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Sobe o app para o Playwright: build no modo e2e (igual à produção), o stub do serviço de IA e duas instâncias do wrangler dev.
-// As portas vêm do bloco de scripts/dev/e2e-portas.mjs (MM_E2E_PORTA_BASE; sem a variável, a base é 8788):
+// As portas vêm do bloco de scripts/dev/e2e-portas.mjs (MM_E2E_PORTA_BASE; sem a variável, vale o padrão do módulo):
 // - instalação pronta (a base): os testes semeiam o primeiro acesso; é a do webServer do Playwright.
 // - configuração do zero (base + 2; TASK-0102): existe à parte porque o Worker guarda "pronto" no módulo:
 //   uma instalação que volta à configuração precisa de outro processo.
