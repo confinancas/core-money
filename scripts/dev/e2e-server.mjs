@@ -3,6 +3,8 @@
 // - porta 8788: a instalação pronta (os testes semeiam o primeiro acesso); é a do webServer do Playwright.
 // - porta 8790: a configuração inicial do zero (TASK-0102). Existe à parte porque o Worker guarda "pronto" no módulo:
 //   uma instalação que volta à configuração precisa de outro processo.
+// - porta 8791: o Meu Pluggy falso (TASK-0203, scripts/dev/pluggy-fake.mjs); os dois Workers apontam PLUGGY_BASE_URL para lá.
+//   A TASK-0203 pede 8790, mas essa porta já é a da configuração do zero: o falso ficou na 8791.
 // Sem shell: roda os binários do node_modules com o próprio Node, no Windows e no Linux.
 import { spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
@@ -14,6 +16,7 @@ const CHAVE_MESTRA_DO_E2E = "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo=";
 const PORTA_PRONTA = 8788;
 const PORTA_CONFIGURACAO = 8790;
 const PORTA_DO_STUB = 8789;
+const PORTA_DO_PLUGGY = 8791;
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const estadoPronto = join(".wrangler", "e2e-state");
@@ -52,6 +55,8 @@ function sobeWrangler(porta, estado, extras = []) {
       `MASTER_KEY:${CHAVE_MESTRA_DO_E2E}`,
       "--var",
       `ANTHROPIC_BASE_URL:http://127.0.0.1:${PORTA_DO_STUB}`,
+      "--var",
+      `PLUGGY_BASE_URL:http://127.0.0.1:${PORTA_DO_PLUGGY}`,
       ...extras.flatMap((variavel) => ["--var", variavel]),
     ],
     { cwd: raiz, stdio: "inherit", env: ambiente },
@@ -69,6 +74,11 @@ const processos = [
     cwd: raiz,
     stdio: "inherit",
     env: ambiente,
+  }),
+  spawn(process.execPath, [join(raiz, "scripts", "dev", "pluggy-fake.mjs")], {
+    cwd: raiz,
+    stdio: "inherit",
+    env: { ...ambiente, PLUGGY_FAKE_PORTA: String(PORTA_DO_PLUGGY) },
   }),
   sobeWrangler(PORTA_PRONTA, estadoPronto),
   sobeWrangler(PORTA_CONFIGURACAO, estadoConfiguracao, ["SETUP_SEM_CACHE:1"]),
