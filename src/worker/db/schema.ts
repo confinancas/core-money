@@ -485,3 +485,47 @@ export const webauthnChallenges = sqliteTable(
     ),
   ],
 );
+
+// Central de notificações (TASK-0701). "Lida" vale para o lar inteiro: read_at guarda a primeira leitura, e nulo é não
+// lida. O índice parcial de não lidas é o do contador do sino. Os tipos são os 11 do catálogo (src/shared/notifications).
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    link: text("link").notNull(),
+    dedupeKey: text("dedupe_key").notNull(),
+    createdAt: text("created_at").notNull(),
+    readAt: text("read_at"),
+  },
+  (t) => [
+    check(
+      "notifications_kind_ck",
+      sql`${t.kind} IN ('pendencias', 'insight', 'negativo', 'meta_dia', 'vencimento', 'balanco', 'consentimento', 'pix_recebido', 'fatura_paga', 'renda_dolar', 'aviso_ia')`,
+    ),
+    uniqueIndex("notifications_household_dedupe_uq").on(t.householdId, t.dedupeKey),
+    index("notifications_household_created_idx").on(t.householdId, t.createdAt),
+    index("notifications_household_unread_idx").on(t.householdId).where(sql`${t.readAt} IS NULL`),
+  ],
+);
+
+// Preferências por tipo (TASK-0701): sem linha = ligado. A chave é o lar e o tipo.
+export const notificationPrefs = sqliteTable(
+  "notification_prefs",
+  {
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id),
+    kind: text("kind").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.householdId, t.kind] }),
+    check("notification_prefs_enabled_ck", sql`${t.enabled} IN (0, 1)`),
+  ],
+);
