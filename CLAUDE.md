@@ -16,7 +16,8 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - Ver como em produção: `npm run preview`.
 - Banco local: `npm run db:migrate:local`.
 - Gate, antes de entregar: `npm run gate` (lint, typecheck, testes unitários, build e integração), 2× seguidas.
-- E2E: `npm run test:e2e` (obrigatório se a task tocou `src/web`, `index.html`, `vite.config.ts`, `preset/` ou arquivos públicos).
+- E2E (obrigatório se a task tocou `src/web`, `index.html`, `vite.config.ts`, `preset/` ou arquivos públicos): na máquina, só as specs da task, com `CI=1` e a base da task (`npx playwright test tests/e2e/<spec>.spec.ts`; ver "Portas do E2E"). O `npm run test:e2e` completo é o job `e2e` do CI do PR.
+- Merge: a `main` tem fila de merge. O CI roda também no evento `merge_group`, sobre o grupo que a fila monta; job novo no `ci.yml` precisa rodar nos dois eventos.
 - CPU: `npm run cpu -- tests/cpu/TASK-NNXX.json` (obrigatório se a task criou ou mudou rota ou cron; precisa do `.env` no worktree).
 - App fino: `npm run check:app-fino` monta uma fixture com o núcleo empacotado (`npm pack`, instalação, build, typecheck e dry-run). Quebrar um item de `exports` faz o job `app-fino` falhar.
 - Arquivos locais a copiar para o worktree: `.env` da pasta principal, só para `npm run cpu`. O dev local e o gate não usam.
