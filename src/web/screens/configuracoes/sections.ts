@@ -25,6 +25,7 @@ import { SectionCasal } from "./SectionCasal";
 import { SectionCiclo } from "./SectionCiclo";
 import { SectionDados } from "./SectionDados";
 import { SectionDistribuicaoRenda } from "./SectionDistribuicaoRenda";
+import { SectionPlano } from "./SectionPlano";
 import { SectionSincronizacao } from "./SectionSincronizacao";
 
 export type SettingsSection = {
@@ -61,6 +62,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     tabletColumn: 2,
     desktopColumn: 3,
     Component: SectionSincronizacao,
+  },
+  {
+    id: "plano-cloudflare",
+    title: "Plano da Cloudflare",
+    order: 85,
+    tabletColumn: 2,
+    desktopColumn: 3,
+    Component: SectionPlano,
   },
   { id: "dados", title: "Dados", order: 90, tabletColumn: 2, desktopColumn: 3, Component: SectionDados },
 ];

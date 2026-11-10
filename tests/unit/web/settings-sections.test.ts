@@ -7,10 +7,17 @@ const ids = (coluna: SettingsSection[]) => coluna.map((secao) => secao.id);
 const SecaoDeTeste = () => null;
 
 describe("registro de seções", () => {
-  it("registra as seções das tasks 0107 e 0802, com ids únicos", () => {
+  it("registra as seções das tasks 0107, 0802 e 0109, com ids únicos", () => {
     const registradas = SETTINGS_SECTIONS.map((secao) => secao.id);
 
-    expect(registradas).toEqual(["casal", "ciclo", "distribuicao-da-renda", "sincronizacao", "dados"]);
+    expect(registradas).toEqual([
+      "casal",
+      "ciclo",
+      "distribuicao-da-renda",
+      "sincronizacao",
+      "plano-cloudflare",
+      "dados",
+    ]);
     expect(new Set(registradas).size).toBe(registradas.length);
   });
 
@@ -22,6 +29,7 @@ describe("registro de seções", () => {
       ["ciclo", "Ciclo e orçamento", 30],
       ["distribuicao-da-renda", "Distribuição da renda", 40],
       ["sincronizacao", "Sincronização", 80],
+      ["plano-cloudflare", "Plano da Cloudflare", 85],
       ["dados", "Dados", 90],
     ]);
   });
@@ -31,7 +39,9 @@ describe("colunas por largura", () => {
   it("celular: uma coluna, na ordem da tabela", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "celular");
 
-    expect(colunas.map(ids)).toEqual([["casal", "ciclo", "distribuicao-da-renda", "sincronizacao", "dados"]]);
+    expect(colunas.map(ids)).toEqual([
+      ["casal", "ciclo", "distribuicao-da-renda", "sincronizacao", "plano-cloudflare", "dados"],
+    ]);
   });
 
   it("tablet: duas colunas; Casal, Ciclo e Distribuição na primeira, Sincronização e Dados na segunda", () => {
@@ -39,7 +49,7 @@ describe("colunas por largura", () => {
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "ciclo", "distribuicao-da-renda"],
-      ["sincronizacao", "dados"],
+      ["sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
 
@@ -49,7 +59,7 @@ describe("colunas por largura", () => {
     expect(colunas.map(ids)).toEqual([
       ["casal"],
       ["ciclo", "distribuicao-da-renda"],
-      ["sincronizacao", "dados"],
+      ["sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
 
@@ -65,16 +75,24 @@ describe("colunas por largura", () => {
     const registro = [...SETTINGS_SECTIONS, falsa];
 
     expect(colunasDasSecoes(registro, "celular").map(ids)).toEqual([
-      ["casal", "falsa-de-teste", "ciclo", "distribuicao-da-renda", "sincronizacao", "dados"],
+      [
+        "casal",
+        "falsa-de-teste",
+        "ciclo",
+        "distribuicao-da-renda",
+        "sincronizacao",
+        "plano-cloudflare",
+        "dados",
+      ],
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
       ["casal", "ciclo", "distribuicao-da-renda"],
-      ["falsa-de-teste", "sincronizacao", "dados"],
+      ["falsa-de-teste", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
     expect(colunasDasSecoes(registro, "desktop").map(ids)).toEqual([
       ["casal"],
       ["falsa-de-teste", "ciclo", "distribuicao-da-renda"],
-      ["sincronizacao", "dados"],
+      ["sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
 });
