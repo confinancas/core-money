@@ -1,22 +1,28 @@
 #!/usr/bin/env node
-// Sobe o app para o Playwright: build no modo e2e (igual à produção), o stub da Anthropic e duas instâncias do wrangler dev.
-// - porta 8788: a instalação pronta (os testes semeiam o primeiro acesso); é a do webServer do Playwright.
-// - porta 8790: a configuração inicial do zero (TASK-0102). Existe à parte porque o Worker guarda "pronto" no módulo:
+// Sobe o app para o Playwright: build no modo e2e (igual à produção), o stub do serviço de IA e duas instâncias do wrangler dev.
+// As portas vêm do bloco de scripts/dev/e2e-portas.mjs (MM_E2E_PORTA_BASE; sem a variável, vale o padrão do módulo):
+// - instalação pronta (a base): os testes semeiam o primeiro acesso; é a do webServer do Playwright.
+// - configuração do zero (base + 2; TASK-0102): existe à parte porque o Worker guarda "pronto" no módulo:
 //   uma instalação que volta à configuração precisa de outro processo.
-// - porta 8791: o Meu Pluggy falso (TASK-0203, scripts/dev/pluggy-fake.mjs); os dois Workers apontam PLUGGY_BASE_URL para lá.
-//   A TASK-0203 pede 8790, mas essa porta já é a da configuração do zero: o falso ficou na 8791.
+// - Meu Pluggy falso (base + 3; TASK-0203, scripts/dev/pluggy-fake.mjs): os dois Workers apontam PLUGGY_BASE_URL para lá.
+// A base é validada antes de qualquer processo subir.
 // Sem shell: roda os binários do node_modules com o próprio Node, no Windows e no Linux.
 import { spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { portasDoE2E } from "./e2e-portas.mjs";
 
 // Chave mestra falsa e fixa, só do E2E: cifra as chaves de teste no D1 local.
 const CHAVE_MESTRA_DO_E2E = "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo=";
-const PORTA_PRONTA = 8788;
-const PORTA_CONFIGURACAO = 8790;
-const PORTA_DO_STUB = 8789;
-const PORTA_DO_PLUGGY = 8791;
+
+let portas;
+try {
+  portas = portasDoE2E(process.env.MM_E2E_PORTA_BASE);
+} catch (erro) {
+  console.error(erro.message);
+  process.exit(1);
+}
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const estadoPronto = join(".wrangler", "e2e-state");
@@ -26,7 +32,7 @@ const wrangler = join("node_modules", "wrangler", "bin", "wrangler.js");
 const ambiente = {
   ...process.env,
   WRANGLER_SEND_METRICS: "false",
-  MM_E2E_PORTA_DO_STUB: String(PORTA_DO_STUB),
+  MM_E2E_PORTA_DO_STUB: String(portas.stub),
 };
 
 function roda(args) {
@@ -34,10 +40,10 @@ function roda(args) {
   if (resultado.status !== 0) process.exit(resultado.status ?? 1);
 }
 
-// Cada wrangler dev tem a sua porta de inspeção (o padrão é a mesma para os dois, e o segundo não sobe no CI).
-// extras: variáveis a mais do Worker. A instância de configuração do zero (8790) leva SETUP_SEM_CACHE=1: volta a
+// Cada wrangler dev tem a sua porta de inspeção, do bloco (a mesma para os dois derrubaria o segundo no CI).
+// extras: variáveis a mais do Worker. A instância de configuração do zero leva SETUP_SEM_CACHE=1: volta a
 // cadastro no mesmo processo, sem o cache de "pronto" do módulo (TASK-0103 cria o lar nela).
-function sobeWrangler(porta, estado, extras = []) {
+function sobeWrangler(porta, inspecao, estado, extras = []) {
   return spawn(
     process.execPath,
     [
@@ -48,15 +54,15 @@ function sobeWrangler(porta, estado, extras = []) {
       "--port",
       String(porta),
       "--inspector-port",
-      String(porta + 1000),
+      String(inspecao),
       "--persist-to",
       estado,
       "--var",
       `MASTER_KEY:${CHAVE_MESTRA_DO_E2E}`,
       "--var",
-      `ANTHROPIC_BASE_URL:http://127.0.0.1:${PORTA_DO_STUB}`,
+      `ANTHROPIC_BASE_URL:http://127.0.0.1:${portas.stub}`,
       "--var",
-      `PLUGGY_BASE_URL:http://127.0.0.1:${PORTA_DO_PLUGGY}`,
+      `PLUGGY_BASE_URL:http://127.0.0.1:${portas.pluggy}`,
       ...extras.flatMap((variavel) => ["--var", variavel]),
     ],
     { cwd: raiz, stdio: "inherit", env: ambiente },
@@ -78,10 +84,10 @@ const processos = [
   spawn(process.execPath, [join(raiz, "scripts", "dev", "pluggy-fake.mjs")], {
     cwd: raiz,
     stdio: "inherit",
-    env: { ...ambiente, PLUGGY_FAKE_PORTA: String(PORTA_DO_PLUGGY) },
+    env: { ...ambiente, PLUGGY_FAKE_PORTA: String(portas.pluggy) },
   }),
-  sobeWrangler(PORTA_PRONTA, estadoPronto),
-  sobeWrangler(PORTA_CONFIGURACAO, estadoConfiguracao, ["SETUP_SEM_CACHE:1"]),
+  sobeWrangler(portas.instalacaoPronta, portas.inspecaoInstalacaoPronta, estadoPronto),
+  sobeWrangler(portas.configuracao, portas.inspecaoConfiguracao, estadoConfiguracao, ["SETUP_SEM_CACHE:1"]),
 ];
 
 function encerraTudo(sinal) {

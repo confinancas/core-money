@@ -3,7 +3,7 @@ import { consultaSql, executaSql } from "./helpers/db";
 import { semeiaSessaoDaInstalacaoPronta, signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta } from "./helpers/setup";
 
-// Conectar Meu Pluggy (TASK-0203), na instalação pronta (8788) contra o Worker real e o Meu Pluggy falso (8791).
+// Conectar Meu Pluggy (TASK-0203), na instalação pronta (8788) contra o Worker real e o Meu Pluggy falso (base + 3 do bloco de portas).
 // Três larguras (os projetos celular, tablet e desktop). Os dados são [TEST]; o falso aceita só o par de chaves dele.
 const CLIENT_ID = "11111111-1111-4111-8111-111111111111";
 const SEGREDO = "TEST-segredo-valido-0203";

@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 // Meu Pluggy falso para o E2E (TASK-0203): o Worker de teste aponta PLUGGY_BASE_URL para cá, e nenhuma chamada sai
 // para o Pluggy de verdade. Os dados são [TEST] e seguem a forma das fixtures da TASK-0201. Só fala o que o app
-// usa: /auth, /items/:id, /accounts, /identity. O resto responde 404. Porta: PLUGGY_FAKE_PORTA (padrão 8791).
+// usa: /auth, /items/:id, /accounts, /identity. O resto responde 404. Porta: PLUGGY_FAKE_PORTA (base + 3 do bloco).
 import { createServer } from "node:http";
 
-const PORTA = Number(process.env.PLUGGY_FAKE_PORTA ?? 8791);
+// Sem porta fixa: quem sobe o falso (scripts/dev/e2e-server.mjs) passa a porta base + 3 do bloco de portas do E2E.
+const PORTA = Number(process.env.PLUGGY_FAKE_PORTA);
+if (!Number.isInteger(PORTA) || PORTA < 1024 || PORTA > 65535) {
+  throw new Error("PLUGGY_FAKE_PORTA precisa ser uma porta (inteiro de 1024 a 65535).");
+}
 
 // Par de chaves que o falso aceita, e a apiKey que ele devolve. Qualquer outro par responde 401.
 const CLIENT_ID_VALIDO = "11111111-1111-4111-8111-111111111111";
