@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Fila de merge da main (TASK-0009): os três jobs rodam também no grupo que a fila monta com a main e os PRs.
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
