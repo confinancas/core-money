@@ -57,6 +57,13 @@
       "when": 1794105807301,
       "tag": "0007_passkeys_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794184739757,
+      "tag": "0008_spend-types",
+      "breakpoints": true
     }
   ]
 }

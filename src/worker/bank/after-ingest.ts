@@ -1,6 +1,7 @@
 import { processNewTransactions } from "../categorization/pipeline";
 import { assignCycleKeys } from "../cycle/calendar";
 import type { Db } from "../db/client";
+import { applySpendTypesOnImport } from "../spend-types/derive";
 import { classifyMovements } from "./classify";
 
 export type AfterIngestContext = {
@@ -20,6 +21,8 @@ const LOTE_DO_PIPELINE = 100;
 //   3. processNewTransactions (TASK-0302): regras, só com as inseridas, em lotes de até 100. Entra depois da
 //      classificação para que a regra enxergue o movimento já classificado (pagamento de fatura, transferência).
 //      As TASK-0303, 0902 e 0903 acrescentam os seus passos depois deste.
+//   4. tipo de gasto (TASK-0802): padrão e regras automáticas (corretora, caixinha), só nas inseridas, em lotes de 100.
+//      Depois do pipeline, para que a categoria e a regra de categoria já tenham gravado o tipo delas.
 export async function afterIngest(db: Db, ctx: AfterIngestContext): Promise<void> {
   const ids = [...ctx.insertedIds, ...ctx.updatedIds];
   await classifyMovements(db, ctx.householdId, ids, ctx.now);
@@ -27,5 +30,9 @@ export async function afterIngest(db: Db, ctx: AfterIngestContext): Promise<void
   for (let inicio = 0; inicio < ctx.insertedIds.length; inicio += LOTE_DO_PIPELINE) {
     const lote = ctx.insertedIds.slice(inicio, inicio + LOTE_DO_PIPELINE);
     await processNewTransactions(db, ctx.householdId, lote, ctx.now);
+  }
+  for (let inicio = 0; inicio < ctx.insertedIds.length; inicio += LOTE_DO_PIPELINE) {
+    const lote = ctx.insertedIds.slice(inicio, inicio + LOTE_DO_PIPELINE);
+    await applySpendTypesOnImport(db, ctx.householdId, lote);
   }
 }

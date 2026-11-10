@@ -7,10 +7,10 @@ const ids = (coluna: SettingsSection[]) => coluna.map((secao) => secao.id);
 const SecaoDeTeste = () => null;
 
 describe("registro de seções", () => {
-  it("registra só as quatro seções desta task, com ids únicos", () => {
+  it("registra as seções das tasks 0107 e 0802, com ids únicos", () => {
     const registradas = SETTINGS_SECTIONS.map((secao) => secao.id);
 
-    expect(registradas).toEqual(["casal", "ciclo", "sincronizacao", "dados"]);
+    expect(registradas).toEqual(["casal", "ciclo", "distribuicao-da-renda", "sincronizacao", "dados"]);
     expect(new Set(registradas).size).toBe(registradas.length);
   });
 
@@ -20,6 +20,7 @@ describe("registro de seções", () => {
     expect(tabela).toEqual([
       ["casal", "Casal", 10],
       ["ciclo", "Ciclo e orçamento", 30],
+      ["distribuicao-da-renda", "Distribuição da renda", 40],
       ["sincronizacao", "Sincronização", 80],
       ["dados", "Dados", 90],
     ]);
@@ -30,22 +31,26 @@ describe("colunas por largura", () => {
   it("celular: uma coluna, na ordem da tabela", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "celular");
 
-    expect(colunas.map(ids)).toEqual([["casal", "ciclo", "sincronizacao", "dados"]]);
+    expect(colunas.map(ids)).toEqual([["casal", "ciclo", "distribuicao-da-renda", "sincronizacao", "dados"]]);
   });
 
-  it("tablet: duas colunas; Casal e Ciclo na primeira, Sincronização e Dados na segunda", () => {
+  it("tablet: duas colunas; Casal, Ciclo e Distribuição na primeira, Sincronização e Dados na segunda", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "tablet");
 
     expect(colunas.map(ids)).toEqual([
-      ["casal", "ciclo"],
+      ["casal", "ciclo", "distribuicao-da-renda"],
       ["sincronizacao", "dados"],
     ]);
   });
 
-  it("desktop: três colunas, Casal à esquerda, Ciclo no meio e Sincronização e Dados à direita", () => {
+  it("desktop: três colunas, Casal à esquerda, Ciclo e Distribuição no meio, Sincronização e Dados à direita", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "desktop");
 
-    expect(colunas.map(ids)).toEqual([["casal"], ["ciclo"], ["sincronizacao", "dados"]]);
+    expect(colunas.map(ids)).toEqual([
+      ["casal"],
+      ["ciclo", "distribuicao-da-renda"],
+      ["sincronizacao", "dados"],
+    ]);
   });
 
   it("cenário 11: uma seção falsa com order 20 entra entre Casal e Ciclo, na coluna indicada", () => {
@@ -60,15 +65,15 @@ describe("colunas por largura", () => {
     const registro = [...SETTINGS_SECTIONS, falsa];
 
     expect(colunasDasSecoes(registro, "celular").map(ids)).toEqual([
-      ["casal", "falsa-de-teste", "ciclo", "sincronizacao", "dados"],
+      ["casal", "falsa-de-teste", "ciclo", "distribuicao-da-renda", "sincronizacao", "dados"],
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
-      ["casal", "ciclo"],
+      ["casal", "ciclo", "distribuicao-da-renda"],
       ["falsa-de-teste", "sincronizacao", "dados"],
     ]);
     expect(colunasDasSecoes(registro, "desktop").map(ids)).toEqual([
       ["casal"],
-      ["falsa-de-teste", "ciclo"],
+      ["falsa-de-teste", "ciclo", "distribuicao-da-renda"],
       ["sincronizacao", "dados"],
     ]);
   });

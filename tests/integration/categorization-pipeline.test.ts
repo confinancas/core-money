@@ -249,8 +249,9 @@ describe("pipeline: o que não entra na categoria", () => {
 
     const linha = await lerTransacao(id ?? "");
     expect(linha.category_id).toBe(categoriaDoLar(lar, "servicos"));
-    expect(linha.spend_type).toBeNull();
-    expect(linha.spend_type_source).toBeNull();
+    // TASK-0802: toda saída tem tipo. Cartão nunca fica com metas/investimentos: a categoria (sem tipo) cai no padrão.
+    expect(linha.spend_type).toBe("prazeres");
+    expect(linha.spend_type_source).toBe("padrao");
   });
 
   it("o tipo comum da regra vai para a compra, com a procedência 'regra'", async () => {
@@ -417,7 +418,9 @@ describe("custo do pipeline e da gravação", () => {
       AGORA,
     );
 
-    expect(pequeno.rowsRead).toBeLessThanOrEqual(10 * 100);
+    // TASK-0802: a herança do tipo (apply.ts) lê a categoria da compra com regra: cerca de 3 linhas a mais por
+    // transação (medido: 900 → 1.200 para 100). O que o teste prova é a estabilidade entre lares, abaixo.
+    expect(pequeno.rowsRead).toBeLessThanOrEqual(12 * 100);
     expect(grande.rowsRead).toBeGreaterThanOrEqual(pequeno.rowsRead * 0.95);
     expect(grande.rowsRead).toBeLessThanOrEqual(pequeno.rowsRead * 1.05);
   });

@@ -3,26 +3,29 @@ import { ChoiceTile } from "@/components/ui/choice-tile";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-export type OpcaoDeEscolha = { valor: number; rotulo: string };
+export type OpcaoDeEscolha<T extends string | number = number> = { valor: T; rotulo: string };
 
-type Props = {
+type Props<T extends string | number> = {
   aberto: boolean;
   titulo: string;
   descricao: string;
   // Nome do grupo de opções, para a leitura de tela.
   nomeDoGrupo: string;
-  opcoes: OpcaoDeEscolha[];
-  escolhido: number;
-  onEscolher: (valor: number) => void;
+  opcoes: OpcaoDeEscolha<T>[];
+  escolhido: T;
+  onEscolher: (valor: T) => void;
   onSalvar: () => void;
   onCancelar: () => void;
   salvando: boolean;
   erro: string | null;
+  // Rótulos de texto (tipos de gasto, "Investimentos" e "Usar o padrão"): duas colunas no celular, quatro no tablet.
+  // Sem a opção, os números (dias) ficam em quatro e sete colunas.
+  rotulos?: boolean;
 };
 
 // Painel de escolha dentro da tela (nunca confirm() nem prompt()): folha de baixo no celular, cartão no centro a
 // partir do tablet. Radix Dialog, como o ConfirmDialog. O botão principal fica no rodapé (à direita no tablet).
-export function ChoiceSheet({
+export function ChoiceSheet<T extends string | number>({
   aberto,
   titulo,
   descricao,
@@ -34,7 +37,8 @@ export function ChoiceSheet({
   onCancelar,
   salvando,
   erro,
-}: Props) {
+  rotulos = false,
+}: Props<T>) {
   return (
     <Dialog open={aberto} onOpenChange={(proximo) => !proximo && onCancelar()}>
       <DialogContent
@@ -49,7 +53,10 @@ export function ChoiceSheet({
         <div
           role="radiogroup"
           aria-label={nomeDoGrupo}
-          className="mt-5 grid grid-cols-4 gap-2.5 tablet:grid-cols-7"
+          className={cn(
+            "mt-5 grid gap-2.5",
+            rotulos ? "grid-cols-2 tablet:grid-cols-4" : "grid-cols-4 tablet:grid-cols-7",
+          )}
         >
           {opcoes.map((opcao) => (
             <ChoiceTile

@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { investmentsPct, type PlannedPercentages, type PlannedSpendType } from "./spend-types";
+
+export type { PlannedPercentages, PlannedSpendType };
+export { investmentsPct };
 
 export type BrandId = "matrimoney" | "meumoney";
 export type MemberRole = "titular" | "conjuge";
-export type PlannedSpendType = "fixos" | "conforto" | "educacao" | "extras" | "metas" | "prazeres";
-export type PlannedPercentages = Record<PlannedSpendType, number>;
 
 export const CYCLE_START_DAY = { min: 1, max: 28 } as const;
 
@@ -15,11 +17,6 @@ export const HOUSEHOLD_DEFAULTS = {
 const PERCENTUAL_TOTAL = 100;
 
 const soma = (p: PlannedPercentages): number => Object.values(p).reduce((total, valor) => total + valor, 0);
-
-// Investimentos não tem coluna: é a sobra do que os seis tipos planejados não usam.
-export function investmentsPct(p: PlannedPercentages): number {
-  return PERCENTUAL_TOTAL - soma(p);
-}
 
 const MENSAGEM_NOME = "Informe um nome de 1 a 40 caracteres.";
 const MENSAGEM_CICLO = "O ciclo começa entre o dia 1 e o dia 28.";

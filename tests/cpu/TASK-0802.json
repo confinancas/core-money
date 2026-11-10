@@ -1,0 +1,77 @@
+{
+  "task": "TASK-0802",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-1', 'cpu-membro-1', 'CPU-SEM-LOGIN-0802', 0, NULL, 'CPU Chromium', 'cadastro', '2026-11-08T00:00:00.000Z', NULL)",
+    "INSERT INTO pluggy_connections (id, household_id, label, created_at) VALUES ('cpu-conexao', 'cpu-lar', '[TEST] Conexão', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO bank_items (id, connection_id, institution_name, created_at) VALUES ('cpu-banco', 'cpu-conexao', '[TEST] Banco', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO accounts (id, bank_item_id, kind, name, balance_cents, overdraft_used_cents, balance_at) VALUES ('cpu-conta', 'cpu-banco', 'corrente', '[TEST] Conta', 0, 0, '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO cards (id, bank_item_id, last4, name) VALUES ('cpu-cartao', 'cpu-banco', '1234', '[TEST] Cartão')",
+    "INSERT INTO categories (id, household_id, name, color, parent_id, default_spend_type, ai_hint, sort, archived_at) VALUES ('cpu-categoria', 'cpu-lar', '[TEST] CPU Categoria', '#7C4DFF', NULL, 'fixos', NULL, 0, NULL)",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000)\nINSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, last_seen_at)\nSELECT 'cpu-pix-' || i, 'cpu-lar', 'cpu-ext-pix-' || i, 'cpu-banco', 'cpu-conta', NULL, 'pix_enviado', '2026-11-05T12:00:00.000Z', '2026-11-05', -1000, '[TEST] Pix ' || i, 'TEST PIX ' || i, 'CPU PESSOA ' || i, NULL, '2026-11-08T00:00:00.000Z' FROM n",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000)\nINSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, category_id, categorized_by, categorized_at, last_seen_at)\nSELECT 'cpu-compra-' || i, 'cpu-lar', 'cpu-ext-compra-' || i, 'cpu-banco', NULL, 'cpu-cartao', 'compra', '2026-11-05T12:00:00.000Z', '2026-11-05', -2000, '[TEST] Compra ' || i, 'TEST COMPRA ' || i, CASE WHEN i <= 50 THEN 'cpu-categoria' ELSE NULL END, CASE WHEN i <= 50 THEN 'cpu-membro-1' ELSE NULL END, CASE WHEN i <= 50 THEN '2026-11-08T00:00:00.000Z' ELSE NULL END, '2026-11-08T00:00:00.000Z' FROM n",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-1', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-2', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-3', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-4', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-5', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-6', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-7', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-8', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-9', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-10', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-11', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')",
+    "INSERT INTO automatic_rules (id, household_id, kind, match_value, created_by, created_at) VALUES ('cpu-regra-12', 'cpu-lar', 'corretora', 'CPU CORRETORA', 'cpu-membro-1', '2026-11-08T00:00:00.000Z')"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/spend-types (2.000 transações)",
+      "method": "GET",
+      "path": "/api/spend-types",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    },
+    {
+      "name": "POST /api/automatic-rules (2.000 transações)",
+      "method": "POST",
+      "path": "/api/automatic-rules",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "corpos": [
+        {
+          "kind": "corretora",
+          "matchValue": "CPU CORRETORA {i}"
+        }
+      ]
+    },
+    {
+      "name": "DELETE /api/automatic-rules/:id (2.000 transações)",
+      "method": "DELETE",
+      "path": "/api/automatic-rules/cpu-regra-{i}",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    },
+    {
+      "name": "PATCH /api/categories/:id com tipo padrão (50 transações na categoria)",
+      "method": "PATCH",
+      "path": "/api/categories/cpu-categoria",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "corpos": [
+        {
+          "defaultSpendType": "conforto"
+        },
+        {
+          "defaultSpendType": "extras"
+        }
+      ]
+    }
+  ]
+}

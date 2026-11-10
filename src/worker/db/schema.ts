@@ -353,6 +353,27 @@ export const rules = sqliteTable(
   ],
 );
 
+// Regras automáticas de tipo de gasto (TASK-0802): a conta destino da corretora (vira Investimentos) e a caixinha de
+// reserva (vira Metas). match_value é o texto normalizado (3 a 60 caracteres); várias por tipo.
+export const automaticRules = sqliteTable(
+  "automatic_rules",
+  {
+    id: text("id").primaryKey(),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id),
+    kind: text("kind").notNull(),
+    matchValue: text("match_value").notNull(),
+    createdBy: text("created_by").references(() => members.id),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    check("automatic_rules_kind_ck", sql`${t.kind} IN ('corretora', 'caixinha')`),
+    check("automatic_rules_match_ck", sql`length(${t.matchValue}) BETWEEN 3 AND 60`),
+    index("automatic_rules_household_kind_idx").on(t.householdId, t.kind),
+  ],
+);
+
 // Documento de regras da IA (TASK-0302 cria a tabela; a TASK-0305 edita o texto). Uma linha por lar.
 export const aiRulesDocument = sqliteTable("ai_rules_document", {
   householdId: text("household_id")

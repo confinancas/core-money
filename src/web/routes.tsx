@@ -15,6 +15,7 @@ import { NovaCategoria } from "./screens/categorias/NovaCategoria";
 import { CasalEAparelhos } from "./screens/configuracoes/CasalEAparelhos";
 import { ChaveDoClaude } from "./screens/configuracoes/ChaveDoClaude";
 import { Configuracoes } from "./screens/configuracoes/Configuracoes";
+import { TiposGasto } from "./screens/configuracoes/TiposGasto";
 import { Login } from "./screens/Login";
 import { Recuperar } from "./screens/Recuperar";
 import { RequireSession } from "./session/RequireSession";
@@ -172,7 +173,7 @@ export const ROTAS: RotaDaTabela[] = [
     frame: "full",
     tab: "configuracoes",
     title: "Tipos de gasto",
-    element: provisoria,
+    element: <TiposGasto />,
   },
   {
     path: "/configuracoes/casal/adicionar-conjuge",
