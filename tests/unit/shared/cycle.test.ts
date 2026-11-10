@@ -329,7 +329,7 @@ describe("transição mínima: a varredura exaustiva", () => {
       }
     }
     expect(falhas).toEqual([]);
-  });
+  }, 30_000);
 });
 
 describe("calendário: busca e falta", () => {

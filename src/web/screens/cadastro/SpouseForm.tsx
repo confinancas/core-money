@@ -16,11 +16,18 @@ export function SpouseForm({
   erroGeral,
   textoDoBotao = "Adicionar cônjuge",
   aoEnviar,
+  formId,
+  semBotao = false,
+  aoMudarNome,
 }: {
   enviando: boolean;
   erroGeral: string | null;
   textoDoBotao?: string;
   aoEnviar: (dados: DadosDoConjuge) => void;
+  // Com semBotao, o botão de envio fica num rodapé fora do cartão (TASK-0107): ele aponta para este formId.
+  formId?: string;
+  semBotao?: boolean;
+  aoMudarNome?: (nome: string) => void;
 }) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
@@ -39,13 +46,16 @@ export function SpouseForm({
   }
 
   return (
-    <form onSubmit={enviar} className="flex flex-col gap-5" noValidate>
+    <form id={formId} onSubmit={enviar} className="flex flex-col gap-5" noValidate>
       <TextField
         label="Nome do cônjuge"
         placeholder="Como vocês chamam"
         autoComplete="off"
         value={nome}
-        onChange={(evento) => setNome(evento.target.value)}
+        onChange={(evento) => {
+          setNome(evento.target.value);
+          aoMudarNome?.(evento.target.value);
+        }}
         error={erros.name}
       />
       <TextField
@@ -64,9 +74,11 @@ export function SpouseForm({
           {erroGeral}
         </p>
       )}
-      <Button type="submit" full loading={enviando} disabled={enviando || nome.trim() === ""}>
-        {textoDoBotao}
-      </Button>
+      {!semBotao && (
+        <Button type="submit" full loading={enviando} disabled={enviando || nome.trim() === ""}>
+          {textoDoBotao}
+        </Button>
+      )}
     </form>
   );
 }

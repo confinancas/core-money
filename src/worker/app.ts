@@ -10,6 +10,7 @@ import type { AppEnv } from "./env";
 import type { SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
+import { membersRoutes } from "./members/routes";
 import { type ValidacaoDaChave, validateClaudeKey } from "./providers/anthropic";
 import { authRoutes } from "./routes/auth";
 import { devicesRoutes } from "./routes/devices";
@@ -96,6 +97,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/auth", authRoutes(login, resolverDaSessao));
   app.route("/", settingsRoutes(validar));
   app.route("/household", householdRoutes(resolverDaSessao, options.agora));
+  app.route("/members", membersRoutes(resolverDaSessao, options.agora));
   app.route("/categories", categoriesRoutes(resolverDaSessao, options.agora));
   app.route("/rules", regrasRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));

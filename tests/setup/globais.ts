@@ -5,5 +5,7 @@ import { join } from "node:path";
 // do front não acham as globais. Aqui entram os mesmos valores do build de desenvolvimento do núcleo.
 // O Vitest roda a partir da raiz do repositório.
 const marca = JSON.parse(readFileSync(join(process.cwd(), "dev", "marca.json"), "utf8"));
+// A versão vem do package.json do núcleo, como no preset (o __APP_VERSION__ do build de desenvolvimento).
+const versao = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).version;
 
-Object.assign(globalThis, { __BRAND__: marca, __DEV_ROUTES__: true });
+Object.assign(globalThis, { __BRAND__: marca, __DEV_ROUTES__: true, __APP_VERSION__: versao });

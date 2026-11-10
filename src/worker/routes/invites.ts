@@ -47,7 +47,7 @@ const MENSAGEM_INVALIDO = "Link de convite inválido. Confira se copiou o link i
 const MENSAGEM_VENCIDO = "Este convite venceu. Peça um link novo a quem convidou.";
 const MENSAGEM_USADO = "Este convite já foi usado. Se foi você, entre com sua passkey.";
 const MENSAGEM_CANCELADO = "Este convite foi cancelado.";
-const MENSAGEM_JA_CONECTADO = "Você já está entrado neste aparelho.";
+const MENSAGEM_JA_CONECTADO = "Este aparelho já tem uma sessão aberta neste app.";
 const MENSAGEM_DESAFIO = "Demorou demais. Toque em Criar passkey de novo.";
 const MENSAGEM_PASSKEY = "Não deu para confirmar a passkey. Toque em Criar passkey de novo.";
 

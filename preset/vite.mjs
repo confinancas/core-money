@@ -11,6 +11,8 @@ import { VitePWA } from "vite-plugin-pwa";
 // __DEV_ROUTES__ depende do mode: as rotas de desenvolvimento (o catálogo) não entram no build de produção.
 export function presetVite({ marca = "marca.json", publicDir = "public" } = {}) {
   const dadosDaMarca = JSON.parse(readFileSync(resolve(process.cwd(), marca), "utf8"));
+  // A versão do app é a do package.json do app (TASK-0107: a tela Configurações mostra "Versão …").
+  const versaoDoApp = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")).version;
 
   return ({ mode }) => ({
     plugins: [react(), tailwindcss(), brandHtml(dadosDaMarca), VitePWA(opcoesDoPwa(dadosDaMarca))],
@@ -21,6 +23,7 @@ export function presetVite({ marca = "marca.json", publicDir = "public" } = {}) 
     define: {
       __DEV_ROUTES__: JSON.stringify(mode !== "production"),
       __BRAND__: JSON.stringify(dadosDaMarca),
+      __APP_VERSION__: JSON.stringify(versaoDoApp),
     },
     build: { outDir: "dist/client", emptyOutDir: true },
     server: {

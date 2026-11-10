@@ -116,3 +116,22 @@ describe("ShareLink", () => {
     expect(screen.getByText(/quem abrir o link primeiro entra como cônjuge/)).toBeTruthy();
   });
 });
+
+// Os rótulos de acessibilidade acompanham o uso (TASK-0107): o painel de recuperação não diz "convite".
+describe("rótulos pelo uso", () => {
+  it("o painel de recuperação se chama de recuperação, e o do convite, de convite", () => {
+    render(<ShareLink link={LINK} shareTitle="t" shareText="x" dica="d" uso="recuperacao" />);
+    expect(screen.getByRole("region", { name: "Compartilhar o link de recuperação" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Compartilhar o convite" })).toBeNull();
+    cleanup();
+    render(<ShareLink link={LINK} shareTitle="t" shareText="x" dica="d" />);
+    expect(screen.getByRole("region", { name: "Compartilhar o convite" })).toBeTruthy();
+  });
+
+  it("o QR do painel de recuperação se chama de recuperação, e não de convite", () => {
+    render(<ShareLink link={LINK} shareTitle="t" shareText="x" dica="d" uso="recuperacao" />);
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar QR code" }));
+    expect(screen.getByRole("img", { name: "QR code do link de recuperação" })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "QR code do link do convite" })).toBeNull();
+  });
+});
