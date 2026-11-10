@@ -13,6 +13,7 @@ import { sameOrigin } from "./http/same-origin";
 import { membersRoutes } from "./members/routes";
 import { type ValidacaoDaChave, validateClaudeKey } from "./providers/anthropic";
 import { authRoutes } from "./routes/auth";
+import { cartoesRoutes } from "./routes/cards";
 import { devicesRoutes } from "./routes/devices";
 import { healthRoute } from "./routes/health";
 import { householdRoutes } from "./routes/household";
@@ -102,6 +103,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/categories", categoriesRoutes(resolverDaSessao, options.agora));
   app.route("/rules", regrasRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
+  app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
