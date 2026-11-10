@@ -75,8 +75,10 @@ export function montarSerie(
 
   const aberta = doBanco.find((fatura) => fatura.status === "aberta") ?? null;
   const fechadas = doBanco.filter((fatura) => fatura.status === "fechada");
-  const ultimaFechada = fechadas[fechadas.length - 1] ?? null;
-  const base = aberta ?? ultimaFechada;
+  // Sem aberta, a base é a última fechada ou paga (a spec: "a última fechada é a fechada ou a paga").
+  const fechadasOuPagas = doBanco.filter((fatura) => fatura.status === "fechada" || fatura.status === "paga");
+  const ultimaFechadaOuPaga = fechadasOuPagas[fechadasOuPagas.length - 1] ?? null;
+  const base = aberta ?? ultimaFechadaOuPaga;
 
   const projetadas: FaturaProjetada[] = projectFutureBills(
     base ? { closesOn: base.closesOn, dueOn: base.dueOn } : null,

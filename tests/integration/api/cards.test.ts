@@ -77,7 +77,7 @@ type Compra = {
   faturaId: string | null;
   data: string;
   valorCentavos: number;
-  movimento?: "compra" | "estorno";
+  movimento?: string;
   descricao?: string;
   parcela?: [number, number];
   oculto?: boolean;
@@ -743,5 +743,277 @@ describe("GET /api/cards/:cardId (detalhe)", () => {
     const { status, corpo } = await chamar(createApp({}), `/api/cards/${lar.cardId}`);
     expect(status).toBe(401);
     expect(corpo).toMatchObject({ error: "nao_autenticado" });
+  });
+});
+
+// Correções da rodada 1 (TASK-0402): a base de "Últimas compras" (F4), a projeção sem aberta (F7) e as mutações que
+// sobreviveram (F9). Cada teste prova uma regra que uma mutação quebraria; a tabela está nas Evidências.
+describe("rodada 1: regras que as mutações provaram", () => {
+  const appEm = (lar: { householdId: string; memberId: string }, agora: string): Hono<AppEnv> =>
+    createApp({ resolveSession: async () => lar, agora: () => new Date(agora) });
+
+  it("F4 (sonda 05/11): a fatura aberta que fecha em 03/12 entra inteira em 'Últimas compras', da mais nova para a mais velha", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const cartao = lar.cardId;
+    await inserirFatura(cartao, {
+      id: "f4-fechada",
+      fecha: "2026-11-03",
+      vence: "2026-11-10",
+      status: "fechada",
+      ciclo: "2026-10",
+    });
+    await inserirFatura(cartao, {
+      id: "f4-aberta",
+      fecha: "2026-12-03",
+      vence: "2026-12-10",
+      status: "aberta",
+      ciclo: "2026-11",
+    });
+    await inserirCompra({
+      id: "f4-20-10",
+      cartaoId: cartao,
+      faturaId: "f4-fechada",
+      data: "2026-10-20",
+      valorCentavos: -1_000,
+      ciclo: "2026-10",
+    });
+    await inserirCompra({
+      id: "f4-04-11",
+      cartaoId: cartao,
+      faturaId: "f4-aberta",
+      data: "2026-11-04",
+      valorCentavos: -2_000,
+      ciclo: "2026-11",
+    });
+    await inserirCompra({
+      id: "f4-05-11",
+      cartaoId: cartao,
+      faturaId: "f4-aberta",
+      data: "2026-11-05",
+      valorCentavos: -3_000,
+      ciclo: "2026-11",
+    });
+    await inserirCompra({
+      id: "f4-antiga",
+      cartaoId: cartao,
+      faturaId: null,
+      data: "2026-08-20",
+      valorCentavos: -9_000,
+      ciclo: "2026-08",
+    });
+
+    const resposta = RespostaDeCartoesSchema.parse(
+      (await chamar(appEm(lar, "2026-11-05T12:00:00.000Z"), "/api/cards")).corpo,
+    );
+    expect(resposta.recent.map((r) => r.id)).toEqual(["f4-05-11", "f4-04-11", "f4-20-10"]);
+  });
+
+  it("F7 (sonda 60,00): sem fatura aberta, a projeção sai da última paga", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const cartao = lar.cardId;
+    await inserirFatura(cartao, {
+      id: "f7-paga",
+      fecha: "2026-10-03",
+      vence: "2026-10-10",
+      status: "paga",
+      pago: "2026-10-10",
+      ciclo: "2026-09",
+    });
+    await inserirCompra({
+      id: "f7-parcela",
+      cartaoId: cartao,
+      faturaId: "f7-paga",
+      data: "2026-10-02",
+      valorCentavos: -3_000,
+      parcela: [1, 3],
+      ciclo: "2026-09",
+      descricao: "[TEST] Parcelada sem aberta",
+    });
+
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.futureInstallmentsCents).toBe(6_000);
+    expect(resposta.openBillsCents).toBe(0);
+  });
+
+  it("K2: um pagamento de fatura na aberta não entra no total", async () => {
+    const { lar, nubank } = await cenarioDoisCartoes();
+    await inserirCompra({
+      id: "k2-pagamento",
+      cartaoId: nubank,
+      faturaId: "b-nu-nov",
+      data: "2026-11-06",
+      valorCentavos: -50_000,
+      movimento: "pagamento_fatura",
+      ciclo: "2026-10",
+    });
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.cards.find((c) => c.id === nubank)?.current?.totalCents).toBe(234_000);
+  });
+
+  it("K3: uma fatura fechada não projeta parcelas quando há aberta", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const cartao = lar.cardId;
+    await inserirFatura(cartao, {
+      id: "k3-fechada",
+      fecha: "2026-10-03",
+      vence: "2026-10-10",
+      status: "fechada",
+      ciclo: "2026-09",
+    });
+    await inserirFatura(cartao, {
+      id: "k3-aberta",
+      fecha: "2026-11-03",
+      vence: "2026-11-10",
+      status: "aberta",
+      ciclo: "2026-10",
+    });
+    await inserirCompra({
+      id: "k3-parcela",
+      cartaoId: cartao,
+      faturaId: "k3-fechada",
+      data: "2026-10-02",
+      valorCentavos: -3_000,
+      parcela: [1, 3],
+      ciclo: "2026-09",
+    });
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.futureInstallmentsCents).toBe(0);
+  });
+
+  it("K5: uma compra removida não aparece em 'Últimas compras'", async () => {
+    const { lar, nubank } = await cenarioDoisCartoes();
+    await inserirCompra({
+      id: "k5-removida",
+      cartaoId: nubank,
+      faturaId: "b-nu-nov",
+      data: "2026-11-06",
+      valorCentavos: -4_100,
+      removido: true,
+      ciclo: "2026-10",
+    });
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.recent.some((r) => r.id === "k5-removida")).toBe(false);
+  });
+
+  it("K6: uma compra removida não aparece nos gastos da fatura aberta", async () => {
+    const { lar, nubank } = await cenarioDoisCartoes();
+    await inserirCompra({
+      id: "k6-removida",
+      cartaoId: nubank,
+      faturaId: "b-nu-nov",
+      data: "2026-11-06",
+      valorCentavos: -4_100,
+      removido: true,
+      ciclo: "2026-10",
+    });
+    const detalhe = RespostaDeCartaoSchema.parse((await chamar(appDoLar(lar), `/api/cards/${nubank}`)).corpo);
+    expect(detalhe.openItems.some((i) => i.id === "k6-removida")).toBe(false);
+    expect(detalhe.openCount).toBe(2);
+  });
+
+  it("K7a: as compras de um banco desconectado não entram em 'Últimas compras'", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const desconectado = await cartaoExtra(lar, "[TEST] Banco desconectado", "5555");
+    await env.DB.prepare(
+      "UPDATE bank_items SET disconnected_at = ? WHERE id = (SELECT bank_item_id FROM cards WHERE id = ?)",
+    )
+      .bind(AGORA, desconectado)
+      .run();
+    await inserirFatura(desconectado, {
+      id: "k7-fatura",
+      fecha: "2026-11-03",
+      vence: "2026-11-10",
+      status: "aberta",
+      ciclo: "2026-10",
+    });
+    await inserirCompra({
+      id: "k7-compra",
+      cartaoId: desconectado,
+      faturaId: "k7-fatura",
+      data: "2026-11-05",
+      valorCentavos: -7_000,
+      ciclo: "2026-10",
+    });
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.recent.some((r) => r.id === "k7-compra")).toBe(false);
+  });
+
+  it("K7b: um cartão de banco desconectado não aparece na lista e dá 404 no detalhe", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const desconectado = await cartaoExtra(lar, "[TEST] Banco desconectado", "5555");
+    await env.DB.prepare(
+      "UPDATE bank_items SET disconnected_at = ? WHERE id = (SELECT bank_item_id FROM cards WHERE id = ?)",
+    )
+      .bind(AGORA, desconectado)
+      .run();
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.cards.map((c) => c.id)).not.toContain(desconectado);
+    const detalhe = await chamar(appDoLar(lar), `/api/cards/${desconectado}`);
+    expect(detalhe.status).toBe(404);
+  });
+
+  it("K10: uma compra que o banco mandou numa fatura futura não entra nos gastos da fatura aberta", async () => {
+    const { lar, nubank } = await cenarioDoisCartoes();
+    await inserirFatura(nubank, {
+      id: "k10-futura",
+      fecha: "2026-12-03",
+      vence: "2026-12-10",
+      status: "futura",
+    });
+    await inserirCompra({
+      id: "k10-compra-futura",
+      cartaoId: nubank,
+      faturaId: "k10-futura",
+      data: "2026-11-06",
+      valorCentavos: -8_800,
+      ciclo: "2026-11",
+    });
+    const detalhe = RespostaDeCartaoSchema.parse((await chamar(appDoLar(lar), `/api/cards/${nubank}`)).corpo);
+    expect(detalhe.openItems.some((i) => i.id === "k10-compra-futura")).toBe(false);
+  });
+
+  it("K17: um estorno parcelado não projeta parcelas", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const cartao = lar.cardId;
+    await inserirFatura(cartao, {
+      id: "k17-aberta",
+      fecha: "2026-11-03",
+      vence: "2026-11-10",
+      status: "aberta",
+      ciclo: "2026-10",
+    });
+    await inserirCompra({
+      id: "k17-estorno",
+      cartaoId: cartao,
+      faturaId: "k17-aberta",
+      data: "2026-11-02",
+      valorCentavos: 3_000,
+      movimento: "estorno",
+      parcela: [1, 3],
+      ciclo: "2026-10",
+    });
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.futureInstallmentsCents).toBe(0);
+  });
+
+  it("K18: um pagamento de fatura não entra em 'Últimas compras'", async () => {
+    const { lar, nubank } = await cenarioDoisCartoes();
+    await inserirCompra({
+      id: "k18-pagamento",
+      cartaoId: nubank,
+      faturaId: "b-nu-nov",
+      data: "2026-11-06",
+      valorCentavos: -50_000,
+      movimento: "pagamento_fatura",
+      ciclo: "2026-10",
+    });
+    const resposta = RespostaDeCartoesSchema.parse((await chamar(appDoLar(lar), "/api/cards")).corpo);
+    expect(resposta.recent.some((r) => r.id === "k18-pagamento")).toBe(false);
   });
 });
