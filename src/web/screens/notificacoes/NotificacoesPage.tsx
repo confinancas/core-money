@@ -139,7 +139,7 @@ export function NotificacoesPage() {
 
         {lista !== null && lista.previous.length > 0 && (
           <div className="flex min-w-0 flex-col gap-2 tablet:-mt-11">
-            <h2 className="mx-1.5 pt-2.5 text-[11px] font-extrabold tracking-[1.1px] text-ink-2 uppercase">
+            <h2 className="px-1.5 pt-2.5 text-[11px] font-extrabold tracking-[1.1px] text-ink-2 uppercase">
               Anteriores
             </h2>
             <div className="flex flex-col rounded-[24px] bg-card px-[18px] pt-0.5 pb-1 shadow-[0_8px_24px_rgba(22,60,45,0.07)]">
