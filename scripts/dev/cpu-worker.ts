@@ -4,12 +4,12 @@ import pkg from "../../package.json";
 import type { BrandConfig } from "../../src/shared/brand/types";
 import type { MappedTransaction } from "../../src/worker/bank/map";
 import { ingestTransactions } from "../../src/worker/bank/repository";
-import { criarWorker } from "../../src/worker/criar-worker";
-import type { AppEnv } from "../../src/worker/env";
 import type { ClienteDaIA } from "../../src/worker/categorization/claude";
 import { runCategorizationSlice } from "../../src/worker/categorization/cron";
-import { getSession } from "../../src/worker/household/context";
+import { criarWorker } from "../../src/worker/criar-worker";
 import { newMeter } from "../../src/worker/db/metered-d1";
+import type { AppEnv } from "../../src/worker/env";
+import { getSession } from "../../src/worker/household/context";
 
 // Anthropic falsa para a medição da fatia (TASK-0303): responde a cada ref do lote com uma sugestão, sem rede. A chave
 // é de mentira e não sai deste arquivo para a rede; o cliente de verdade nunca roda aqui.
@@ -31,7 +31,12 @@ const clienteFalsoDeLote: ClienteDaIA = {
       return {
         stop_reason: "end_turn",
         content: [{ type: "text", text: JSON.stringify({ sugestoes }) }],
-        usage: { input_tokens: 4000, output_tokens: 600, cache_read_input_tokens: 3000, cache_creation_input_tokens: 0 },
+        usage: {
+          input_tokens: 4000,
+          output_tokens: 600,
+          cache_read_input_tokens: 3000,
+          cache_creation_input_tokens: 0,
+        },
       };
     },
   },
