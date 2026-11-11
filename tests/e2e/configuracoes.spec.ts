@@ -48,6 +48,8 @@ async function provaDasColunas(page: Page): Promise<void> {
   const ciclo = await caixaDe(titulo("Ciclo e orçamento"));
   const sincronizacao = await caixaDe(titulo("Sincronização"));
   const dados = await caixaDe(titulo("Dados"));
+  // A seção Renda fixa (TASK-0901) entra no registro com tabletColumn 2 e desktopColumn 2.
+  const rendaFixa = await caixaDe(titulo("Renda fixa"));
 
   const projeto = test.info().project.name;
   if (projeto === "celular") {
@@ -58,11 +60,13 @@ async function provaDasColunas(page: Page): Promise<void> {
     return;
   }
   if (projeto === "tablet") {
-    // Coluna 1: Casal e Ciclo. Coluna 2: Sincronização e Dados. As duas começam no mesmo topo.
+    // Coluna 1: Casal e Ciclo. Coluna 2: Renda fixa, Sincronização e Dados. Casal e Renda fixa começam no mesmo topo.
     expect(Math.abs(ciclo.x - casal.x)).toBeLessThanOrEqual(1);
     expect(ciclo.y).toBeGreaterThan(casal.y);
-    expect(sincronizacao.x).toBeGreaterThan(casal.x + casal.width / 2);
-    expect(Math.abs(sincronizacao.y - casal.y)).toBeLessThanOrEqual(2);
+    expect(rendaFixa.x).toBeGreaterThan(casal.x + casal.width / 2);
+    expect(Math.abs(rendaFixa.y - casal.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(sincronizacao.x - rendaFixa.x)).toBeLessThanOrEqual(1);
+    expect(sincronizacao.y).toBeGreaterThan(rendaFixa.y);
     expect(Math.abs(dados.x - sincronizacao.x)).toBeLessThanOrEqual(1);
     expect(dados.y).toBeGreaterThan(sincronizacao.y);
     return;

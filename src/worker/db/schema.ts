@@ -495,3 +495,32 @@ export const usageDaily = sqliteTable("usage_daily", {
   rowsWritten: integer("rows_written").notNull().default(0),
   sizeBytes: integer("size_bytes").notNull().default(0),
 });
+
+// Rendas fixas (TASK-0901): salários e outras entradas com dia certo. Dinheiro em centavos na moeda (US$ 2.000,00 =
+// 200000). Excluir arquiva (archived_at): a renda sai da lista e do previsto, e o que já foi recebido fica no histórico.
+// kept_usd_is_investment vale só no dólar: o banco guarda 0 quando a moeda é real.
+export const fixedIncomes = sqliteTable(
+  "fixed_incomes",
+  {
+    id: text("id").primaryKey(),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id),
+    name: text("name").notNull(),
+    currency: text("currency").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    usualDay: integer("usual_day").notNull(),
+    arrival: text("arrival").notNull(),
+    statementText: text("statement_text"),
+    keptUsdIsInvestment: integer("kept_usd_is_investment").notNull().default(1),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    check("fixed_incomes_currency_ck", sql`${t.currency} IN ('BRL', 'USD')`),
+    check("fixed_incomes_amount_ck", sql`${t.amountCents} BETWEEN 1 AND 10000000000`),
+    check("fixed_incomes_usual_day_ck", sql`${t.usualDay} BETWEEN 1 AND 31`),
+    check("fixed_incomes_arrival_ck", sql`${t.arrival} IN ('auto', 'partes', 'manual')`),
+    check("fixed_incomes_kept_ck", sql`${t.keptUsdIsInvestment} IN (0, 1)`),
+    index("fixed_incomes_household_archived_idx").on(t.householdId, t.archivedAt),
+  ],
+);

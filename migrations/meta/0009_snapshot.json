@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "04050ed7-a85c-4369-87ee-2c438b6bee6b",
+  "id": "2c97c052-1e5d-4a6b-9359-e0762f6f959e",
   "prevId": "2d2661dc-0320-4fbb-9bfd-cb7ea29b62c2",
   "tables": {
     "accounts": {
@@ -829,6 +829,131 @@
         "feature_flags_enabled_ck": {
           "name": "feature_flags_enabled_ck",
           "value": "\"feature_flags\".\"enabled\" IN (0, 1)"
+        }
+      }
+    },
+    "fixed_incomes": {
+      "name": "fixed_incomes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "household_id": {
+          "name": "household_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "usual_day": {
+          "name": "usual_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "arrival": {
+          "name": "arrival",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statement_text": {
+          "name": "statement_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kept_usd_is_investment": {
+          "name": "kept_usd_is_investment",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fixed_incomes_household_archived_idx": {
+          "name": "fixed_incomes_household_archived_idx",
+          "columns": [
+            "household_id",
+            "archived_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "fixed_incomes_household_id_households_id_fk": {
+          "name": "fixed_incomes_household_id_households_id_fk",
+          "tableFrom": "fixed_incomes",
+          "tableTo": "households",
+          "columnsFrom": [
+            "household_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fixed_incomes_currency_ck": {
+          "name": "fixed_incomes_currency_ck",
+          "value": "\"fixed_incomes\".\"currency\" IN ('BRL', 'USD')"
+        },
+        "fixed_incomes_amount_ck": {
+          "name": "fixed_incomes_amount_ck",
+          "value": "\"fixed_incomes\".\"amount_cents\" BETWEEN 1 AND 10000000000"
+        },
+        "fixed_incomes_usual_day_ck": {
+          "name": "fixed_incomes_usual_day_ck",
+          "value": "\"fixed_incomes\".\"usual_day\" BETWEEN 1 AND 31"
+        },
+        "fixed_incomes_arrival_ck": {
+          "name": "fixed_incomes_arrival_ck",
+          "value": "\"fixed_incomes\".\"arrival\" IN ('auto', 'partes', 'manual')"
+        },
+        "fixed_incomes_kept_ck": {
+          "name": "fixed_incomes_kept_ck",
+          "value": "\"fixed_incomes\".\"kept_usd_is_investment\" IN (0, 1)"
         }
       }
     },
@@ -2272,55 +2397,6 @@
           "value": "(\"transactions\".\"account_id\" IS NULL) <> (\"transactions\".\"card_id\" IS NULL)"
         }
       }
-    },
-    "usage_daily": {
-      "name": "usage_daily",
-      "columns": {
-        "day": {
-          "name": "day",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "requests": {
-          "name": "requests",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "rows_read": {
-          "name": "rows_read",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "rows_written": {
-          "name": "rows_written",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "webauthn_challenges": {
       "name": "webauthn_challenges",

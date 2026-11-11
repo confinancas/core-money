@@ -14,11 +14,25 @@ type Props = {
   close?: Rota;
   // Mais 70 px de respiro embaixo, para o cartão de baixo sobrepor a faixa.
   overlap?: boolean;
+  // Linha de apoio logo abaixo do título (detail): alinhada como o título, centrada no celular.
+  subtitle?: string;
+  // Conteúdo dentro da faixa, abaixo do título (o cartão de vidro da Renda fixa, por exemplo).
+  children?: ReactNode;
 };
 
 // Topo verde. tab: título de aba com ações à direita; detail: seta e título centrado no celular
 // (à esquerda a partir do tablet); form: X no lugar da seta.
-export function GreenTop({ variant = "tab", title, eyebrow, actions, back, close, overlap = false }: Props) {
+export function GreenTop({
+  variant = "tab",
+  title,
+  eyebrow,
+  actions,
+  back,
+  close,
+  overlap = false,
+  subtitle,
+  children,
+}: Props) {
   const aba = variant === "tab";
 
   return (
@@ -56,6 +70,12 @@ export function GreenTop({ variant = "tab", title, eyebrow, actions, back, close
           )}
         </div>
       )}
+      {subtitle && (
+        <p className="mt-1 text-center text-[13px] font-semibold text-white/82 tablet:pl-14 tablet:text-left">
+          {subtitle}
+        </p>
+      )}
+      {children && <div className="mt-4">{children}</div>}
     </header>
   );
 }
