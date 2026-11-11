@@ -6,6 +6,7 @@ import {
   type RuleScope,
   type RuleSet,
 } from "../../shared/rule-match";
+import { semAcentoSql } from "../../shared/texto-busca";
 import type { RegraParaAplicar } from "../categorization/apply";
 import type { Db } from "../db/client";
 
@@ -306,7 +307,7 @@ export async function listarRegras(
     valores.push(filtro.escopo);
   }
   if (filtro.busca !== "") {
-    condicoes.push("r.match_value LIKE '%' || ? || '%'");
+    condicoes.push(`UPPER(${semAcentoSql("r.match_value")}) LIKE '%' || ? || '%'`);
     valores.push(filtro.busca);
   }
   const onde = condicoes.join(" AND ");

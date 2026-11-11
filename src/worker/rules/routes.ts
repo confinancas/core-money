@@ -9,6 +9,7 @@ import {
   type RegraParaAplicar,
   setTransactionCategoryStmt,
 } from "../categorization/apply";
+import { termoDeBusca } from "../../shared/texto-busca";
 import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
@@ -272,10 +273,8 @@ export function regrasRoutes(
     const { householdId } = getSession(c);
     const escopo = c.req.query("escopo") ?? "todos";
     if (!ESCOPOS_DA_LISTA.includes(escopo as (typeof ESCOPOS_DA_LISTA)[number])) return dadosInvalidos(c);
-    const busca = (c.req.query("busca") ?? "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9 ]/g, "")
-      .trim();
+    // Sem acento e em maiúsculas, dos dois lados da comparação (F4, TASK-0305 rodada 1).
+    const busca = termoDeBusca(c.req.query("busca") ?? "");
     const cursor = decodificaCursor(c.req.query("cursor"));
     if (cursor === "invalido") return dadosInvalidos(c);
     const filtro: FiltroDaListaDeRegras = {
