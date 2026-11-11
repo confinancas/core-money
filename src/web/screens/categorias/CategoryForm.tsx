@@ -55,8 +55,12 @@ export function CategoryForm({
   const [errosLocais, setErrosLocais] = useState<CategoryFieldErrors>({});
 
   const erros: CategoryFieldErrors = { ...erroCampos, ...errosLocais };
+  // Só as principais ativas, e a mãe atual mesmo arquivada (senão o campo perde o valor). A validação usa a lista toda.
   const principais = categorias.filter(
-    (categoria) => categoria.parentId === null && categoria.id !== idEmEdicao,
+    (categoria) =>
+      categoria.parentId === null &&
+      categoria.id !== idEmEdicao &&
+      (!categoria.archived || categoria.id === inicial.parentId),
   );
   const nomeVisivel = nome.trim() === "" ? "Nova categoria" : nome.trim();
 

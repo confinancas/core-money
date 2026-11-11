@@ -56,3 +56,20 @@ describe("F3: no editor ao lado da lista, o formulário fica em coluna no tablet
     expect(corpo?.className).not.toContain("tablet:flex-row");
   });
 });
+
+describe("F5: 'Dentro de' não oferece principal arquivada", () => {
+  const lazerArquivada: CategoryDTO = { ...servicos, id: "cat-lazer", name: "Lazer", color: "#13B5A6", archived: true };
+  const mercado: CategoryDTO = { ...servicos, id: "cat-mercado", name: "Mercado", color: "#22B8E0" };
+
+  it("uma principal arquivada não aparece nas opções; a ativa aparece", () => {
+    render(<EditarCategoria categoria={servicos} todas={[servicos, mercado, lazerArquivada]} aoMudar={() => {}} />);
+    expect(screen.queryByRole("option", { name: "Lazer", exact: true })).toBeNull();
+    expect(screen.getByRole("option", { name: "Mercado", exact: true })).toBeTruthy();
+  });
+
+  it("a mãe atual, se estiver arquivada, continua como opção para não sumir do campo", () => {
+    const subcategoria: CategoryDTO = { ...servicos, id: "cat-sub", name: "Cinema", parentId: "cat-lazer" };
+    render(<EditarCategoria categoria={subcategoria} todas={[subcategoria, lazerArquivada]} aoMudar={() => {}} />);
+    expect(screen.getByRole("option", { name: "Lazer", exact: true })).toBeTruthy();
+  });
+});
