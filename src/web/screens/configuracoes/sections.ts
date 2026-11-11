@@ -27,6 +27,7 @@ import { SectionContasMeuPluggy } from "./SectionContasMeuPluggy";
 import { SectionDados } from "./SectionDados";
 import { SectionDistribuicaoRenda } from "./SectionDistribuicaoRenda";
 import { SectionNotificacoes } from "./SectionNotificacoes";
+import { SectionPlano } from "./SectionPlano";
 import { SectionRendaFixa } from "./SectionRendaFixa";
 import { SectionSincronizacao } from "./SectionSincronizacao";
 
@@ -88,6 +89,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     tabletColumn: 2,
     desktopColumn: 3,
     Component: SectionSincronizacao,
+  },
+  {
+    id: "plano-cloudflare",
+    title: "Plano da Cloudflare",
+    order: 85,
+    tabletColumn: 2,
+    desktopColumn: 3,
+    Component: SectionPlano,
   },
   { id: "dados", title: "Dados", order: 90, tabletColumn: 2, desktopColumn: 3, Component: SectionDados },
 ];

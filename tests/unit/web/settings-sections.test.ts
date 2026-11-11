@@ -8,7 +8,7 @@ const ids = (coluna: SettingsSection[]) => coluna.map((secao) => secao.id);
 const SecaoDeTeste = () => null;
 
 describe("registro de seções", () => {
-  it("registra as seções das tasks 0107, 0203, 0802, 0901 e 0701, com ids únicos", () => {
+  it("registra as seções das tasks 0107, 0203, 0802, 0901, 0701 e 0109, com ids únicos", () => {
     const registradas = SETTINGS_SECTIONS.map((secao) => secao.id);
 
     expect(registradas).toEqual([
@@ -19,6 +19,7 @@ describe("registro de seções", () => {
       "renda-fixa",
       "notificacoes",
       "sincronizacao",
+      "plano-cloudflare",
       "dados",
     ]);
     expect(new Set(registradas).size).toBe(registradas.length);
@@ -35,6 +36,7 @@ describe("registro de seções", () => {
       ["renda-fixa", "Renda fixa", 50],
       ["notificacoes", "Notificações", 70],
       ["sincronizacao", "Sincronização", 80],
+      ["plano-cloudflare", "Plano da Cloudflare", 85],
       ["dados", "Dados", 90],
     ]);
   });
@@ -53,6 +55,7 @@ describe("colunas por largura", () => {
         "renda-fixa",
         "notificacoes",
         "sincronizacao",
+        "plano-cloudflare",
         "dados",
       ],
     ]);
@@ -63,7 +66,7 @@ describe("colunas por largura", () => {
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["renda-fixa", "notificacoes", "sincronizacao", "dados"],
+      ["renda-fixa", "notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
 
@@ -73,7 +76,7 @@ describe("colunas por largura", () => {
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
       ["ciclo", "distribuicao-da-renda", "renda-fixa"],
-      ["notificacoes", "sincronizacao", "dados"],
+      ["notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
 
@@ -99,17 +102,18 @@ describe("colunas por largura", () => {
         "renda-fixa",
         "notificacoes",
         "sincronizacao",
+        "plano-cloudflare",
         "dados",
       ],
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["falsa-de-teste", "renda-fixa", "notificacoes", "sincronizacao", "dados"],
+      ["falsa-de-teste", "renda-fixa", "notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
     expect(colunasDasSecoes(registro, "desktop").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
       ["falsa-de-teste", "ciclo", "distribuicao-da-renda", "renda-fixa"],
-      ["notificacoes", "sincronizacao", "dados"],
+      ["notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
 });
