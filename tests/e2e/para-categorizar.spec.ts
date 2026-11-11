@@ -71,6 +71,9 @@ function ligaIADeTeste(): void {
   );
 }
 
+// Cada executaSql sobe o wrangler (3 a 5 s) e o gancho entra no limite do teste: 120 s, como o Meu Pluggy.
+test.setTimeout(120_000);
+
 test.beforeEach(async ({ page }) => {
   semearInstalacaoPronta();
   ligaIADeTeste();

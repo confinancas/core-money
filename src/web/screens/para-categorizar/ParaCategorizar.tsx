@@ -306,9 +306,7 @@ export function ParaCategorizar() {
           {dados && linhas.length === 0 && !falhou && (
             <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
               {faltam === 0 ? (
-                <>
-                  <p className="font-bold text-[#3D4943]">Tudo categorizado!</p>
-                </>
+                <p className="font-bold text-[#3D4943]">Tudo categorizado!</p>
               ) : (
                 <p className="font-bold text-[#3D4943]">Nada pendente aqui</p>
               )}
