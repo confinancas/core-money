@@ -244,14 +244,28 @@ test.describe("Notificações", () => {
     expect(rotulo.y).toBeGreaterThanOrEqual(cartao.y);
     expect(rotulo.y + rotulo.height).toBeLessThanOrEqual(cartao.y + cartao.height);
 
-    const cor = await page
+    // A cor como o navegador a pinta: o canvas converte qualquer forma de cor (rgb, oklab, color-mix) em RGBA.
+    const pixel = await page
       .getByRole("heading", { level: 2, name: "Anteriores", exact: true })
-      .evaluate((elemento) => getComputedStyle(elemento).color);
+      .evaluate((elemento) => {
+        const tela = document.createElement("canvas");
+        tela.width = 1;
+        tela.height = 1;
+        const contexto = tela.getContext("2d");
+        if (!contexto) throw new Error("sem canvas");
+        contexto.fillStyle = getComputedStyle(elemento).color;
+        contexto.fillRect(0, 0, 1, 1);
+        return Array.from(contexto.getImageData(0, 0, 1, 1).data);
+      });
     if (test.info().project.name === "celular") {
-      expect(cor).toBe("rgb(102, 117, 110)");
+      // Cinza do texto (#66756E) sobre o fundo claro.
+      expect(pixel).toEqual([102, 117, 110, 255]);
     } else {
-      // Branco a 90%: o navegador pode devolver a cor como rgba ou como color(srgb ...), conforme a versão.
-      expect(cor).toMatch(/rgba\(255, 255, 255, 0\.9\)|color\(srgb 1 1 1 \/ 0\.9\)/);
+      // Branco a 90% sobre a faixa verde: RGB branco e alfa de 90% (229 de 255).
+      const [r, g, b, a] = pixel;
+      expect(Math.min(r, g, b)).toBeGreaterThanOrEqual(254);
+      expect(a).toBeGreaterThanOrEqual(227);
+      expect(a).toBeLessThanOrEqual(231);
     }
   });
 
