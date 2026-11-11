@@ -66,7 +66,7 @@ export function Cartoes() {
 
           <div className="mx-auto grid w-full max-w-[1120px] items-start gap-5 px-4 pt-6 pb-8 tablet:grid-cols-2 tablet:px-6 desktop:grid-cols-3">
             {dados.cards.length === 0 ? (
-              <div className="desktop:col-span-3">
+              <div className="tablet:col-span-2 desktop:col-span-3">
                 <EmptyState
                   title="Nenhum cartão ainda"
                   description="Os cartões aparecem aqui quando um banco com cartão de crédito estiver conectado."

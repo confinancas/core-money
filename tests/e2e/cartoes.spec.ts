@@ -279,7 +279,7 @@ test("detalhe: as setas e as barras trocam a fatura; a anterior mostra a variaç
   await expect(page.getByRole("button", { name: nome ?? "", exact: true, pressed: true })).toBeVisible();
 });
 
-test("sem cartões: o estado vazio leva a conectar banco", async ({ page }) => {
+test("sem cartões: o estado vazio leva a conectar banco", async ({ page }, info) => {
   desconectaBanco();
   try {
     await page.goto("/cartoes");
@@ -288,6 +288,16 @@ test("sem cartões: o estado vazio leva a conectar banco", async ({ page }) => {
       page.getByText("Os cartões aparecem aqui quando um banco com cartão de crédito estiver conectado."),
     ).toBeVisible();
     await alvoDeToque44(page.getByRole("button", { name: "Conectar banco" }));
+    // Tablet (834): o cartão do estado vazio ocupa as duas colunas, a largura toda do conteúdo (não a metade). A medida
+    // é do cartão (o pai do título), porque o título é um item centralizado e encolhe ao texto.
+    if (info.project.name === "tablet") {
+      const cartaoVazio = await page
+        .getByRole("heading", { name: "Nenhum cartão ainda" })
+        .locator("xpath=..")
+        .boundingBox();
+      const largura = page.viewportSize()?.width ?? 834;
+      expect(cartaoVazio?.width ?? 0).toBeGreaterThan(largura * 0.8);
+    }
   } finally {
     reconectaBanco();
   }
