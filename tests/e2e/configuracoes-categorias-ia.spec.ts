@@ -70,7 +70,8 @@ test("cenário 4: renomear uma subcategoria e trocar a cor; o seletor mostra o n
   await expect(page).toHaveURL(/\/configuracoes\/categorias\/e2e-0305-sub-academia$/);
 
   await page.getByLabel("Nome", { exact: true }).fill("[TEST] Academia nova 0305");
-  await page.getByRole("radio", { name: "Rosa", exact: true }).check({ force: true });
+  // Azul (#1B84F2), diferente da cor da semente (Rosa, #F0559A): a troca de cor tem que aparecer.
+  await page.getByRole("radio", { name: "Azul", exact: true }).check({ force: true });
   await page.getByRole("button", { name: "Salvar alterações" }).click();
   // Depois de salvar, a lista recarrega e o editor volta com o nome novo.
   await expect(page.getByLabel("Nome", { exact: true })).toHaveValue("[TEST] Academia nova 0305");
@@ -79,7 +80,12 @@ test("cenário 4: renomear uma subcategoria e trocar a cor; o seletor mostra o n
     "pronta",
     `SELECT name, color FROM categories WHERE id = 'e2e-0305-sub-academia'`,
   );
-  expect(salvo[0]).toMatchObject({ name: "[TEST] Academia nova 0305" });
+  expect(salvo[0]).toMatchObject({ name: "[TEST] Academia nova 0305", color: "#1B84F2" });
+  await expect(page.getByRole("radio", { name: "Azul", exact: true })).toBeChecked();
+
+  // F3: o editor não estoura a largura da janela (sem rolagem horizontal), nas três larguras.
+  const estoura = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(estoura).toBe(false);
 
   await page.goto("/categorias/escolher");
   await expect(page.getByRole("radio", { name: "[TEST] Academia nova 0305", exact: true })).toBeVisible();

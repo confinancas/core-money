@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { CategoryDTO } from "../../src/shared/categories";
 import { executaSql } from "./helpers/db";
 import { LAR_DA_INSTALACAO_PRONTA, signUpAndSignIn } from "./helpers/sessao";
+import { semearInstalacaoPronta } from "./helpers/setup";
 
 // A API de categorias é simulada com page.route nos cenários 9, 10 e 12. Os cenários 4 e 5 usam a API de verdade
 // (criam e leem a semente do lar de teste). O simulador devolve a semente
@@ -71,6 +72,11 @@ async function simularApi(page: Page) {
 
 // Cenário 4: criar pelo seletor e voltar com a nova selecionada.
 // Sessão da instalação pronta: o cookie da sessão de teste em cada página (o lar foi semeado pelo global setup).
+// A instância pronta precisa estar pronta mesmo quando esta spec roda sozinha (sem a spec de abertura antes).
+test.beforeAll(() => {
+  semearInstalacaoPronta();
+});
+
 test.beforeEach(async ({ page }) => {
   await signUpAndSignIn(page);
 });
