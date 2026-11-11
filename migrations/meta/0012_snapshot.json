@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3e448568-40ef-417a-94cf-54eaac0ba712",
+  "id": "ba778bcc-217c-453b-957d-e06b2da10749",
   "prevId": "bf60d401-ea0e-43b2-a2a5-3118e421e71e",
   "tables": {
     "accounts": {
@@ -650,6 +650,78 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "categorization_pausa": {
+      "name": "categorization_pausa",
+      "columns": {
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pausar_ate": {
+          "name": "pausar_ate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "categorization_queue": {
+      "name": "categorization_queue",
+      "columns": {
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enqueued_at": {
+          "name": "enqueued_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "categorization_queue_attempts_idx": {
+          "name": "categorization_queue_attempts_idx",
+          "columns": [
+            "attempts",
+            "enqueued_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "cycles": {
       "name": "cycles",
       "columns": {
@@ -832,128 +904,6 @@
         }
       }
     },
-    "fixed_income_receipts": {
-      "name": "fixed_income_receipts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fixed_income_id": {
-          "name": "fixed_income_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cycle_key": {
-          "name": "cycle_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "transaction_id": {
-          "name": "transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "amount_cents": {
-          "name": "amount_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "received_on": {
-          "name": "received_on",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fx_rate": {
-          "name": "fx_rate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "fx_date": {
-          "name": "fx_date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "confirmed_by": {
-          "name": "confirmed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "fixed_income_receipts_transaction_uq": {
-          "name": "fixed_income_receipts_transaction_uq",
-          "columns": [
-            "transaction_id"
-          ],
-          "isUnique": true,
-          "where": "\"fixed_income_receipts\".\"transaction_id\" IS NOT NULL"
-        },
-        "fixed_income_receipts_income_cycle_idx": {
-          "name": "fixed_income_receipts_income_cycle_idx",
-          "columns": [
-            "fixed_income_id",
-            "cycle_key"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "fixed_income_receipts_fixed_income_id_fixed_incomes_id_fk": {
-          "name": "fixed_income_receipts_fixed_income_id_fixed_incomes_id_fk",
-          "tableFrom": "fixed_income_receipts",
-          "tableTo": "fixed_incomes",
-          "columnsFrom": [
-            "fixed_income_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fixed_income_receipts_transaction_id_transactions_id_fk": {
-          "name": "fixed_income_receipts_transaction_id_transactions_id_fk",
-          "tableFrom": "fixed_income_receipts",
-          "tableTo": "transactions",
-          "columnsFrom": [
-            "transaction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "fixed_income_receipts_amount_ck": {
-          "name": "fixed_income_receipts_amount_ck",
-          "value": "\"fixed_income_receipts\".\"amount_cents\" >= 0"
-        }
-      }
-    },
     "fixed_incomes": {
       "name": "fixed_incomes",
       "columns": {
@@ -1076,57 +1026,6 @@
         "fixed_incomes_kept_ck": {
           "name": "fixed_incomes_kept_ck",
           "value": "\"fixed_incomes\".\"kept_usd_is_investment\" IN (0, 1)"
-        }
-      }
-    },
-    "fx_rates": {
-      "name": "fx_rates",
-      "columns": {
-        "currency": {
-          "name": "currency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "date": {
-          "name": "date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rate": {
-          "name": "rate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "fx_rates_currency_date_pk": {
-          "columns": [
-            "currency",
-            "date"
-          ],
-          "name": "fx_rates_currency_date_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "fx_rates_rate_ck": {
-          "name": "fx_rates_rate_ck",
-          "value": "\"fx_rates\".\"rate\" > 0"
         }
       }
     },

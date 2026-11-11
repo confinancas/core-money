@@ -1,14 +1,20 @@
+import { needsCategory, needsIncome } from "../../shared/categorization";
 import { COUNTERPARTY_KEY_SQL, chaveVazia, type RuleScope } from "../../shared/rule-match";
+import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { Db } from "../db/client";
 import { type CandidataDeEntrada, casamentosDoExtrato, type RendaDoExtrato } from "../income/casamento-puro";
 import { escritasDosCasamentos, SQL_RENDAS_DO_EXTRATO } from "../income/statement-match";
 import { applyRuleToTransactionStmt, type RegraParaAplicar } from "./apply";
+import { enqueuePendingStmt, markBackfillStmt } from "./queue";
 
 // Pipeline de regras na importação (TASK-0302). Chamado pelo afterIngest, depois da classificação e do ciclo, só com os
-// ids inseridos. No máximo 2 idas ao D1: uma leitura (as linhas, os casamentos e as entradas do extrato, num lote) e uma
-// escrita (as regras e os recebimentos). Escopo remetente fica de fora nesta task (a TASK-0903 o acrescenta).
-// Ordem: o casamento pelo extrato das entradas (TASK-0902) vem antes das regras; as duas partes são disjuntas (entrada
-// não recebe regra de categoria), e a entrada casada não entra em pendentes.
+// ids inseridos. No máximo 2 idas ao D1: uma leitura (as linhas, os casamentos e o ciclo anterior, num lote) e uma
+// escrita (as regras, a marca do histórico e a fila da categorização, TASK-0303).
+// A decisão de fila e de histórico sai das linhas já lidas, com os predicados de src/shared/categorization.ts: a escrita
+// só recebe os ids decididos (json_each), e não relê a tabela. Assim o custo não cresce com o lar nem com a regra.
+// Escopo remetente fica de fora nesta task (a TASK-0903 o acrescenta). As TASK-0902 e 0903 acrescentam passos aqui.
+// O casamento pelo extrato das entradas (TASK-0902) vem antes das regras: a entrada casada não entra em pendentes nem na
+// fila, e a leitura das rendas com texto de extrato é uma consulta a mais, sem laço sobre o lote.
 
 export type ResultadoDoPipeline = {
   // Ids que a regra categorizou nesta chamada.
@@ -17,20 +23,18 @@ export type ResultadoDoPipeline = {
   pending: string[];
 };
 
-// As colunas da leitura do lote. As de entrada (description, cycle_key, amount, hidden, removed_at, income_kind) são
-// as do casamento pelo extrato (TASK-0902): saem da mesma leitura, para não reler as transações do lote.
 type LinhaDaImportacao = {
   id: string;
   movement: string;
+  amount_cents: number;
   card_id: string | null;
   category_id: string | null;
+  income_kind: string | null;
+  cycle_key: string | null;
+  removed_at: string | null;
   description: string;
   received_on: string;
-  cycle_key: string | null;
-  amount_cents: number;
   hidden: number;
-  removed_at: string | null;
-  income_kind: string | null;
 };
 
 type CasamentoDeRegra = {
@@ -72,13 +76,15 @@ const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.i
   LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL
 `;
 
-const SQL_LINHAS = `SELECT t.id, t.movement, t.card_id, t.category_id, t.original_description AS description,
-    t.local_date AS received_on, t.cycle_key AS cycle_key, t.amount_cents AS amount_cents, t.hidden AS hidden,
-    t.removed_at AS removed_at, t.income_kind AS income_kind
+// As linhas dos ids recebidos: a chave primária, uma vez. Traz o que a fila e o histórico decidem (movimento, valor,
+// tipo de entrada, ciclo e remoção).
+const SQL_LINHAS = `SELECT t.id, t.movement, t.amount_cents, t.card_id, t.category_id, t.income_kind, t.cycle_key,
+    t.removed_at, t.original_description AS description, t.local_date AS received_on, t.hidden AS hidden
   FROM json_each(?) AS j
   CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?`;
 
-// Entrada que pode casar com uma renda pelo extrato: sem renda, visível, não removida, de entrada (TASK-0902).
+// Entrada que pode casar com uma renda pelo extrato: sem renda, visível, não removida e de entrada (TASK-0902). Lê as
+// colunas da própria leitura de linhas, sem outra consulta ao lote.
 const MOVIMENTOS_DE_ENTRADA = ["pix_recebido", "ted_recebida", "outro"];
 const ehCandidataDeEntrada = (linha: LinhaDaImportacao): boolean =>
   linha.amount_cents > 0 &&
@@ -86,6 +92,10 @@ const ehCandidataDeEntrada = (linha: LinhaDaImportacao): boolean =>
   linha.removed_at === null &&
   linha.income_kind === null &&
   MOVIMENTOS_DE_ENTRADA.includes(linha.movement);
+
+// O ciclo anterior ao de hoje (em São Paulo): o último com ends_on antes de hoje. Uma linha, pela chave do lar.
+const SQL_CICLO_ANTERIOR = `SELECT c.key AS key FROM cycles AS c WHERE c.household_id = ? AND c.ends_on < ?
+  ORDER BY c.starts_on DESC LIMIT 1`;
 
 const PAGAMENTO_DE_FATURA = "pagamento_fatura";
 
@@ -99,13 +109,15 @@ export async function processNewTransactions(
   if (ids.length === 0) return { categorizedByRule: [], pending: [] };
   const json = JSON.stringify(ids);
 
-  const [linhasLidas, casamentosLidos, rendasLidas] = await db.$client.batch([
+  const [linhasLidas, casamentosLidos, cicloLido, rendasLidas] = await db.$client.batch([
     db.$client.prepare(SQL_LINHAS).bind(json, householdId),
     db.$client.prepare(SQL_CASAMENTOS).bind(json, householdId, json, householdId),
+    db.$client.prepare(SQL_CICLO_ANTERIOR).bind(householdId, todayInSaoPaulo(now)),
     db.$client.prepare(SQL_RENDAS_DO_EXTRATO).bind(householdId),
   ]);
   const linhas = (linhasLidas?.results ?? []) as LinhaDaImportacao[];
   const casamentos = (casamentosLidos?.results ?? []) as CasamentoDeRegra[];
+  const anterior = (cicloLido?.results?.[0] as { key: string } | undefined)?.key ?? null;
   const rendas = ((rendasLidas?.results ?? []) as { id: string; statement_text: string }[]).map(
     (renda): RendaDoExtrato => ({ id: renda.id, statementText: renda.statement_text }),
   );
@@ -151,16 +163,36 @@ export async function processNewTransactions(
     if (regra.setCategoryId !== null) categorizadas.add(casamento.transaction_id);
     if (regra.setMovement === PAGAMENTO_DE_FATURA) viraramPagamento.add(casamento.transaction_id);
   }
-  if (escritas.length > 0) await db.$client.batch(escritas);
 
   const porId = new Map(linhas.map((linha) => [linha.id, linha]));
   const pending: string[] = [];
+  const naFila: string[] = [];
   for (const id of ids) {
     const linha = porId.get(id);
     if (!linha || linha.category_id !== null) continue;
     if (linha.movement === PAGAMENTO_DE_FATURA || viraramPagamento.has(id) || categorizadas.has(id)) continue;
     if (idsCasados.has(id)) continue;
     pending.push(id);
+    // Fila da categorização (TASK-0303): saída que pede categoria, ou entrada candidata sem tipo. Removida não entra.
+    const pedeSugestao =
+      linha.removed_at === null &&
+      (needsCategory(linha) ||
+        needsIncome({
+          movement: linha.movement,
+          amount_cents: linha.amount_cents,
+          income_kind: linha.income_kind,
+        }));
+    if (pedeSugestao) naFila.push(id);
   }
+
+  // Histórico (TASK-0303): o ciclo mais antigo que o anterior ao de hoje nasce com is_backfill = 1, e não muda depois.
+  const historico = linhas
+    .filter((linha) => anterior !== null && linha.cycle_key !== null && linha.cycle_key < anterior)
+    .map((linha) => linha.id);
+  // Fim do lote de escritas: a marca do histórico e a fila, depois das regras (a categoria e o tipo já gravados).
+  if (historico.length > 0) escritas.push(markBackfillStmt(db, { householdId, transactionIds: historico }));
+  if (naFila.length > 0) escritas.push(enqueuePendingStmt(db, { transactionIds: naFila, now }));
+  if (escritas.length > 0) await db.$client.batch(escritas);
+
   return { categorizedByRule: [...categorizadas], pending };
 }
