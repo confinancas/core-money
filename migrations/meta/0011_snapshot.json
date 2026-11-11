@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6cb2674b-bd23-449d-ad46-7b0af185c73d",
+  "id": "bf60d401-ea0e-43b2-a2a5-3118e421e71e",
   "prevId": "f24ca028-2b92-4edd-bd18-236fe923b0fe",
   "tables": {
     "accounts": {
@@ -2026,51 +2026,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
-        },
-        "slices_total": {
-          "name": "slices_total",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "slices_done": {
-          "name": "slices_done",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "retried": {
-          "name": "retried",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "error_code": {
-          "name": "error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "cursor_json": {
-          "name": "cursor_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "heartbeat_at": {
-          "name": "heartbeat_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -2079,14 +2034,6 @@
           "columns": [
             "bank_item_id",
             "started_at"
-          ],
-          "isUnique": false
-        },
-        "sync_runs_open_idx": {
-          "name": "sync_runs_open_idx",
-          "columns": [
-            "bank_item_id",
-            "finished_at"
           ],
           "isUnique": false
         }
@@ -2116,10 +2063,6 @@
         "sync_runs_status_ck": {
           "name": "sync_runs_status_ck",
           "value": "\"sync_runs\".\"status\" IS NULL OR \"sync_runs\".\"status\" IN ('ok', 'instavel', 'repetiu', 'erro')"
-        },
-        "sync_runs_retried_ck": {
-          "name": "sync_runs_retried_ck",
-          "value": "\"sync_runs\".\"retried\" IN (0, 1)"
         }
       }
     },
@@ -2629,6 +2572,55 @@
           "value": "(\"transactions\".\"account_id\" IS NULL) <> (\"transactions\".\"card_id\" IS NULL)"
         }
       }
+    },
+    "usage_daily": {
+      "name": "usage_daily",
+      "columns": {
+        "day": {
+          "name": "day",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requests": {
+          "name": "requests",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rows_read": {
+          "name": "rows_read",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rows_written": {
+          "name": "rows_written",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "webauthn_challenges": {
       "name": "webauthn_challenges",

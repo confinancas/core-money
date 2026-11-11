@@ -494,6 +494,16 @@ export const webauthnChallenges = sqliteTable(
   ],
 );
 
+// Uso do dia do app, em UTC (TASK-0109, ADR-008): uma linha por dia. O D1 é um por instalação, então não há lar aqui.
+// requests, rows_read e rows_written somam o que o medidor conta; size_bytes é o último tamanho medido (não é diário).
+export const usageDaily = sqliteTable("usage_daily", {
+  day: text("day").primaryKey(),
+  requests: integer("requests").notNull().default(0),
+  rowsRead: integer("rows_read").notNull().default(0),
+  rowsWritten: integer("rows_written").notNull().default(0),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+});
+
 // Rendas fixas (TASK-0901): salários e outras entradas com dia certo. Dinheiro em centavos na moeda (US$ 2.000,00 =
 // 200000). Excluir arquiva (archived_at): a renda sai da lista e do previsto, e o que já foi recebido fica no histórico.
 // kept_usd_is_investment vale só no dólar: o banco guarda 0 quando a moeda é real.
