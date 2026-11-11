@@ -22,8 +22,11 @@ describe("F4: busca de regras sem acento", () => {
     });
     const app = createApp({ resolveSession: async () => lar });
     const total = async (busca: string) =>
-      ((await (await callApi(app, "GET", `/api/rules?busca=${encodeURIComponent(busca)}`)).json()) as { total: number })
-        .total;
+      (
+        (await (await callApi(app, "GET", `/api/rules?busca=${encodeURIComponent(busca)}`)).json()) as {
+          total: number;
+        }
+      ).total;
     expect(await total("joão")).toBe(1);
     expect(await total("joao")).toBe(1);
     expect(await total("JOÃO")).toBe(1);
@@ -33,9 +36,15 @@ describe("F4: busca de regras sem acento", () => {
 
   it("'pag*jose' acha 'PAG JOSEDASILVA'", async () => {
     const lar = await criarLar();
-    await criarRegra(lar, { scope: "estabelecimento", matchValue: "PAG JOSEDASILVA", createdFrom: "lembrar" });
+    await criarRegra(lar, {
+      scope: "estabelecimento",
+      matchValue: "PAG JOSEDASILVA",
+      createdFrom: "lembrar",
+    });
     const app = createApp({ resolveSession: async () => lar });
-    const corpo = (await (await callApi(app, "GET", `/api/rules?busca=${encodeURIComponent("pag*jose")}`)).json()) as {
+    const corpo = (await (
+      await callApi(app, "GET", `/api/rules?busca=${encodeURIComponent("pag*jose")}`)
+    ).json()) as {
       total: number;
     };
     expect(corpo.total).toBe(1);

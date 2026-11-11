@@ -19,8 +19,26 @@ import { SessionProvider } from "@/session/SessionProvider";
 import { SESSAO_DE_TESTE } from "./helpers/app";
 
 const categorias: CategoryDTO[] = [
-  { id: "cat-saude", name: "Saúde", color: "#F0559A", parentId: null, defaultSpendType: null, aiHint: null, sort: 0, archived: false },
-  { id: "cat-lazer", name: "Lazer", color: "#13B5A6", parentId: null, defaultSpendType: null, aiHint: null, sort: 1, archived: false },
+  {
+    id: "cat-saude",
+    name: "Saúde",
+    color: "#F0559A",
+    parentId: null,
+    defaultSpendType: null,
+    aiHint: null,
+    sort: 0,
+    archived: false,
+  },
+  {
+    id: "cat-lazer",
+    name: "Lazer",
+    color: "#13B5A6",
+    parentId: null,
+    defaultSpendType: null,
+    aiHint: null,
+    sort: 1,
+    archived: false,
+  },
 ];
 
 beforeEach(() => {

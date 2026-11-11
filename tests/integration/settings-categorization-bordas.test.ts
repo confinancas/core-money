@@ -30,7 +30,12 @@ const filaComErro = async (lar: Lar, erro: string, descricao: string): Promise<s
   return transacao;
 };
 
-type Estado = { keyState: string; chaveNovaRecente: boolean; activeRulesCount: number; categoriesCount: number };
+type Estado = {
+  keyState: string;
+  chaveNovaRecente: boolean;
+  activeRulesCount: number;
+  categoriesCount: number;
+};
 const estado = async (app: ReturnType<typeof createApp>): Promise<Estado> =>
   (await (await callApi(app, "GET", "/api/categorization/status")).json()) as Estado;
 
@@ -80,7 +85,9 @@ describe("estado da chave", () => {
     const lar = await criarLar();
     await guardarChave();
     await filaComErro(lar, "chave", "[TEST] D");
-    await env.DB.prepare("UPDATE app_secrets SET ciphertext = 'AAAA', iv = 'AAAA' WHERE name = 'claude_api_key'").run();
+    await env.DB.prepare(
+      "UPDATE app_secrets SET ciphertext = 'AAAA', iv = 'AAAA' WHERE name = 'claude_api_key'",
+    ).run();
     const e = await estado(appDoLar(lar));
     expect(e.keyState).toBe("problema_chave");
     expect(e.chaveNovaRecente).toBe(false);
@@ -90,7 +97,11 @@ describe("estado da chave", () => {
 describe("contagens", () => {
   it("regra desfeita sai da contagem de regras ativas", async () => {
     const lar = await criarLar();
-    const regra = await criarRegra(lar, { scope: "estabelecimento", matchValue: "[TEST] LOJA X", createdFrom: "lembrar" });
+    const regra = await criarRegra(lar, {
+      scope: "estabelecimento",
+      matchValue: "[TEST] LOJA X",
+      createdFrom: "lembrar",
+    });
     await criarRegra(lar, { scope: "estabelecimento", matchValue: "[TEST] LOJA Y", createdFrom: "lembrar" });
     const app = appDoLar(lar);
     expect((await estado(app)).activeRulesCount).toBe(2);
@@ -131,7 +142,11 @@ describe("lista de regras", () => {
   it("50 regras exatas: uma página, sem nextCursor", async () => {
     const lar = await criarLar();
     for (let i = 0; i < 50; i++) {
-      await criarRegra(lar, { scope: "estabelecimento", matchValue: `[TEST] EXATA ${i}`, createdFrom: "lembrar" });
+      await criarRegra(lar, {
+        scope: "estabelecimento",
+        matchValue: `[TEST] EXATA ${i}`,
+        createdFrom: "lembrar",
+      });
     }
     const corpo = (await (await callApi(appDoLar(lar), "GET", "/api/rules")).json()) as {
       total: number;

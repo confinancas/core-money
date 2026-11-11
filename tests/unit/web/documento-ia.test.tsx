@@ -43,9 +43,9 @@ describe("F2: conflito do documento não perde o texto digitado", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ver a versão salva" }));
 
     await waitFor(() => {
-      expect((screen.getByRole("textbox", { name: "Documento de regras" }) as HTMLTextAreaElement).value).toBe(
-        "[TEST] texto de B",
-      );
+      expect(
+        (screen.getByRole("textbox", { name: "Documento de regras" }) as HTMLTextAreaElement).value,
+      ).toBe("[TEST] texto de B");
     });
     // O texto de A continua visível na caixa para copiar, mesmo depois do clique.
     const copia = screen.getByDisplayValue("[TEST] meu texto de A") as HTMLTextAreaElement;
@@ -68,9 +68,9 @@ describe("F2: conflito do documento não perde o texto digitado", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Ver a versão salva" }));
     await waitFor(() => {
-      expect((screen.getByRole("textbox", { name: "Documento de regras" }) as HTMLTextAreaElement).value).toBe(
-        "[TEST] texto de B",
-      );
+      expect(
+        (screen.getByRole("textbox", { name: "Documento de regras" }) as HTMLTextAreaElement).value,
+      ).toBe("[TEST] texto de B");
     });
     expect(buscar.mock.calls.length).toBe(leiturasAntes);
   });

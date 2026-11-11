@@ -5,9 +5,10 @@ import { SkeletonCard } from "@/components/ui/skeleton";
 import type { CategorizationStatus } from "../../../shared/categorization";
 import { fetchCategorizationStatus } from "../../api/settings-categorization";
 import { SettingsRow } from "../../components/settings/SettingsRow";
+import { COR_DE_AVISO, COR_DE_FALTA } from "./cores-da-chave";
 
 // Seção Categorias e IA (TASK-0305): as quatro linhas. O estado da chave vem de /api/categorization/status (mascarado).
-// Cores dos estados: vermelho para a chave recusada, cor de aviso para o Claude fora do ar (tokens do design system).
+// Cores dos estados: falta para a chave recusada, aviso para o Claude fora do ar (cores-da-chave.ts, N9).
 export function SectionCategoriasEIA() {
   const [estado, setEstado] = useState<CategorizationStatus | null>(null);
   const [falhou, setFalhou] = useState(false);
@@ -66,9 +67,9 @@ function EstadoDaChave({ estado }: { estado: CategorizationStatus }) {
       if (estado.chaveNovaRecente) {
         return "Chave nova recebida; a categorização volta em alguns minutos";
       }
-      return <span className="text-[#E5484D]">A chave foi recusada · toque para trocar</span>;
+      return <span style={{ color: COR_DE_FALTA }}>A chave foi recusada · toque para trocar</span>;
     case "indisponivel":
-      return <span className="text-[#C27400]">Claude fora do ar agora · tentando de novo</span>;
+      return <span style={{ color: COR_DE_AVISO }}>Claude fora do ar agora · tentando de novo</span>;
     case "sem_chave":
       return "Sem chave · toque para colar";
   }
