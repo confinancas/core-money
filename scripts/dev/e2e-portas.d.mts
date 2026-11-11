@@ -4,6 +4,7 @@ export type PortasDoE2E = {
   instalacaoPronta: number;
   stub: number;
   configuracao: number;
+  pluggy: number;
   inspecaoInstalacaoPronta: number;
   inspecaoConfiguracao: number;
 };

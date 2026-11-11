@@ -1,0 +1,38 @@
+{
+  "task": "TASK-0402",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-1', 'cpu-membro-1', 'CPU-SEM-LOGIN-0402', 0, NULL, 'CPU Chromium', 'cadastro', '2026-11-10T00:00:00.000Z', NULL)",
+    "INSERT INTO pluggy_connections (id, household_id, label, created_at) VALUES ('cpu-conexao', 'cpu-lar', '[TEST] Conexão', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO bank_items (id, connection_id, institution_name, institution_color, created_at) VALUES ('cpu-banco', 'cpu-conexao', '[TEST] Banco CPU', '#8A05BE', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO cards (id, bank_item_id, last4, name, limit_cents, available_cents) VALUES ('cpu-cartao', 'cpu-banco', '1234', '[TEST] Cartão CPU', 600000, 366000)",
+    "INSERT INTO cycles (household_id, key, starts_on, ends_on) VALUES ('cpu-lar', '2026-09', '2026-09-11', '2026-10-10')",
+    "INSERT INTO cycles (household_id, key, starts_on, ends_on) VALUES ('cpu-lar', '2026-10', '2026-10-11', '2026-11-10')",
+    "INSERT INTO cycles (household_id, key, starts_on, ends_on) VALUES ('cpu-lar', '2026-11', '2026-11-11', '2026-12-10')",
+    "INSERT INTO bills (id, card_id, closes_on, due_on, amount_cents, status, paid_on, cycle_key) VALUES ('cpu-b-paga', 'cpu-cartao', '2026-10-03', '2026-10-10', NULL, 'paga', '2026-10-10', '2026-09')",
+    "INSERT INTO bills (id, card_id, closes_on, due_on, amount_cents, status, paid_on, cycle_key) VALUES ('cpu-b-aberta', 'cpu-cartao', '2026-11-03', '2026-11-10', NULL, 'aberta', NULL, '2026-10')",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000)\nINSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, installment_number, installment_total, cycle_key, hidden, last_seen_at)\nSELECT 'cpu-compra-' || i, 'cpu-lar', 'cpu-ext-compra-' || i, 'cpu-banco', NULL, 'cpu-cartao', 'cpu-b-aberta', 'compra', '2026-11-05T12:00:00.000Z', '2026-11-05', -(1000 + i), '[TEST] Compra ' || i, 'TEST COMPRA ' || i, CASE WHEN i <= 60 THEN 2 ELSE NULL END, CASE WHEN i <= 60 THEN 6 ELSE NULL END, '2026-10', 0, '2026-11-10T00:00:00.000Z' FROM n",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000)\nINSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, installment_number, installment_total, cycle_key, hidden, last_seen_at)\nSELECT 'cpu-paga-' || i, 'cpu-lar', 'cpu-ext-paga-' || i, 'cpu-banco', NULL, 'cpu-cartao', 'cpu-b-paga', 'compra', '2026-10-05T12:00:00.000Z', '2026-10-05', -(5000 + i), '[TEST] Paga ' || i, 'TEST PAGA ' || i, NULL, NULL, '2026-09', 0, '2026-11-10T00:00:00.000Z' FROM n"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/cards (lar de 2.000 compras: 1.000 na aberta, 1.000 na paga)",
+      "method": "GET",
+      "path": "/api/cards",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    },
+    {
+      "name": "GET /api/cards/:cardId (1.000 compras na aberta, 60 parceladas)",
+      "method": "GET",
+      "path": "/api/cards/cpu-cartao",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    }
+  ]
+}

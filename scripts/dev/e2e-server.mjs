@@ -4,6 +4,7 @@
 // - instalação pronta (a base): os testes semeiam o primeiro acesso; é a do webServer do Playwright.
 // - configuração do zero (base + 2; TASK-0102): existe à parte porque o Worker guarda "pronto" no módulo:
 //   uma instalação que volta à configuração precisa de outro processo.
+// - Meu Pluggy falso (base + 3; TASK-0203, scripts/dev/pluggy-fake.mjs): os dois Workers apontam PLUGGY_BASE_URL para lá.
 // A base é validada antes de qualquer processo subir.
 // Sem shell: roda os binários do node_modules com o próprio Node, no Windows e no Linux.
 import { spawn, spawnSync } from "node:child_process";
@@ -60,6 +61,8 @@ function sobeWrangler(porta, inspecao, estado, extras = []) {
       `MASTER_KEY:${CHAVE_MESTRA_DO_E2E}`,
       "--var",
       `ANTHROPIC_BASE_URL:http://127.0.0.1:${portas.stub}`,
+      "--var",
+      `PLUGGY_BASE_URL:http://127.0.0.1:${portas.pluggy}`,
       ...extras.flatMap((variavel) => ["--var", variavel]),
     ],
     { cwd: raiz, stdio: "inherit", env: ambiente },
@@ -77,6 +80,11 @@ const processos = [
     cwd: raiz,
     stdio: "inherit",
     env: ambiente,
+  }),
+  spawn(process.execPath, [join(raiz, "scripts", "dev", "pluggy-fake.mjs")], {
+    cwd: raiz,
+    stdio: "inherit",
+    env: { ...ambiente, PLUGGY_FAKE_PORTA: String(portas.pluggy) },
   }),
   sobeWrangler(portas.instalacaoPronta, portas.inspecaoInstalacaoPronta, estadoPronto),
   sobeWrangler(portas.configuracao, portas.inspecaoConfiguracao, estadoConfiguracao, ["SETUP_SEM_CACHE:1"]),

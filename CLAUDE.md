@@ -18,7 +18,7 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - Gate, antes de entregar: `npm run gate` (lint, typecheck, testes unitários, build e integração), 2× seguidas.
 - E2E (obrigatório se a task tocou `src/web`, `index.html`, `vite.config.ts`, `preset/` ou arquivos públicos): na máquina, só as specs da task, com `CI=1` e a base da task (`npx playwright test tests/e2e/<spec>.spec.ts`; ver "Portas do E2E"). O `npm run test:e2e` completo é o job `e2e` do CI do PR.
 - Merge: a `main` tem fila de merge. O CI roda também no evento `merge_group`, sobre o grupo que a fila monta; job novo no `ci.yml` precisa rodar nos dois eventos.
-- CPU: `npm run cpu -- tests/cpu/TASK-NNXX.json` (obrigatório se a task criou ou mudou rota ou cron; precisa do `.env` no worktree).
+- CPU (TASK-0010): **rota pesada** (trabalho que cresce com os dados do lar: importação, lote, recálculo, lista ou soma sobre o lar inteiro, e todo cron) mede com `npm run cpu -- tests/cpu/TASK-NNXX.json`, uma vez por task, com o lar que a spec pede; precisa do `.env` no worktree, e o branch traz a `main` antes de medir. **Rota simples** (por id, preferência, lista com `LIMIT` pequeno, número fixo de consultas) não mede na Cloudflare: as Evidências dizem as consultas dela e que não há laço sobre o lar. Rodada de correção só mede de novo a rota cuja consulta mudou.
 - App fino: `npm run check:app-fino` monta uma fixture com o núcleo empacotado (`npm pack`, instalação, build, typecheck e dry-run). Quebrar um item de `exports` faz o job `app-fino` falhar.
 - Arquivos locais a copiar para o worktree: `.env` da pasta principal, só para `npm run cpu`. O dev local e o gate não usam.
 
@@ -46,7 +46,8 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **Glob no TypeScript 7:** `dir/**` é recusado; use `dir/**/*`.
 - **Windows:** scripts Node chamam `node node_modules/<pacote>/bin/...` com `spawn`, sem shell. Encerre todo processo que subiu (wrangler, workerd, vite, playwright), ou a pasta do worktree não pode ser apagada.
 - **Proxy do Vite:** aponta para `127.0.0.1`; `localhost` resolve para `::1`, e o wrangler escuta em IPv4.
-- **`wrangler tail`:** perde eventos em rajada, por isso o `npm run cpu` espaça as requisições em 1 s.
+- **`wrangler tail`:** perde eventos em rajada, por isso o `npm run cpu` espaça as requisições em 1,5 s e mede de novo, uma vez, a rota que perdeu evento.
+- **Lar da medição reaproveitado:** o `npm run cpu` grava o lar do arquivo uma vez e o reaproveita enquanto a impressão digital (tabela `_medicao_cpu` no banco de medição) bater e a rodada só tiver `GET`, sem fluxo de navegador. `POST`, `PUT`, `PATCH`, `DELETE` ou fluxo apagam e gravam de novo.
 - **Testes de integração:** o D1 de teste é compartilhado e aplica chaves estrangeiras. O `vitest.integration.config.ts` roda um arquivo por vez (`fileParallelism: false`), e o setup esvazia as tabelas antes de cada teste, filhos antes dos pais.
 - **Tailwind 4 não procura classes em `node_modules`:** o núcleo declara `@source ".."` em `src/web/styles/global.css`. Sem isso, as classes dos componentes somem nos apps finos.
 - **Os apps finos só chamam `montarApp()`:** CSS e provedores ficam em `src/web/montar-app.tsx`, nunca em `src/web/main.tsx`. Caminhos do preset saem de `import.meta.url`, porque num app o núcleo está em `node_modules`.
@@ -95,6 +96,10 @@ Núcleo dos apps de finanças da Confinanças (o Matrimoney, para casais, e depo
 - **E2E na instalação pronta:** chame `semearInstalacaoPronta()` antes de `semeiaSessaoDaInstalacaoPronta()`; sem ele, a tela cai na configuração inicial. Teste que muda o dia de início volta o `cycle_start_day` a 11 antes de cada teste, e teste que sai do app usa sessão própria, para não derrubar a dos outros.
 - **Sair:** o `sair` do `SessionProvider` só vira "saiu" quando a API responde; sem resposta, a tela fica com o aviso e a sessão continua. `encerrarLocal` só serve quando o servidor já encerrou a sessão (remoção do próprio aparelho em uso).
 - **`ShareLink`:** passe `uso` (convite ou recuperação), que muda os rótulos de acessibilidade.
+- **Renda fixa:** o `GET` soma por moeda no SQL (janela na consulta das ativas); `expectedPerCycle` em `src/shared/fixed-incomes.ts` é a regra, e a integração confere as duas.
+- **E2E do Meu Pluggy:** a spec põe `test.setTimeout(120_000)`, porque cada `executaSql` ou `consultaSql` sobe o `wrangler` (3 a 5 s). Não baixe o tempo.
+- **Limpeza de E2E que mexe em bancos:** nada de `DELETE` geral em `bank_items` nem em `pluggy_connections`, porque `transactions` e `accounts` de outras specs referenciam esses bancos. Apague só as linhas do próprio arquivo.
+- **Asserção logo depois de um clique que troca de tela:** um texto que existe nas duas telas acha dois elementos (strict mode) e falha sem tentar de novo. Espere primeiro um título que só a tela nova tem.
 - **Tipo de gasto:** `spend_type` só é gravado em `src/worker/categorization/apply.ts` (a herança vai junto com a categoria), em `src/worker/spend-types/derive.ts` e na migração 0008. O SQL da herança é `tipoDaCategoriaSql` (`src/worker/spend-types/resolve.ts`), e o espelho em TypeScript é `resolveSpendType`. A guarda de entrada (`setDoTipoDaCategoria(..., soSaidas)`) só vale no PUT de categoria: regra não casa entrada, e o pipeline tem teto de leituras por transação.
 - **Web não importa de `src/worker`:** constantes compartilhadas vão para `src/shared`.
 - **D1 e profundidade de expressão:** uma cadeia de `REPLACE` com muitos níveis estoura `Expression tree is too large (maximum depth 100)`. A normalização de acento da contraparte usa 13.

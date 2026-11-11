@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
+import { ordemDeEsvaziamento } from "./cpu-medicao.mjs";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const wranglerJs = join(raiz, "node_modules", "wrangler", "bin", "wrangler.js");
@@ -66,30 +67,14 @@ function d1(sql, { json = false } = {}) {
 
 // Esvazia todas as tabelas do banco de medição, filhos antes dos pais, e põe a instalação em "cadastro" com o
 // código de teste aberto (e uma linha de chave, para o modo não ser "configuração"). Só dados [TEST].
+// A tabela da medição (_medicao_cpu, TASK-0010) fica de fora: a ordem vem de cpu-medicao.mjs.
 // O D1 remoto recusa as funções de pragma (SQLITE_AUTH); as chaves estrangeiras saem do texto do CREATE TABLE.
-function ordemDeEsvaziamento() {
+function ordemDoBanco() {
   const tabelas = d1(
     "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
     { json: true },
   );
-  const pais = new Map(tabelas.map((linha) => [linha.name, new Set()]));
-  for (const { name: filho, sql } of tabelas) {
-    for (const casa of String(sql ?? "").matchAll(/REFERENCES\s+[`"[]?(\w+)/gi)) {
-      const pai = casa[1];
-      if (pais.has(pai) && pai !== filho) pais.get(filho).add(pai);
-    }
-  }
-  const ordem = [];
-  while (pais.size > 0) {
-    const referenciadas = new Set([...pais.values()].flatMap((conjunto) => [...conjunto]));
-    const saem = [...pais.keys()].filter((nome) => !referenciadas.has(nome));
-    const lote = saem.length > 0 ? saem : [...pais.keys()];
-    for (const nome of lote) {
-      ordem.push(nome);
-      pais.delete(nome);
-    }
-  }
-  return ordem;
+  return ordemDeEsvaziamento(tabelas);
 }
 
 function preparaInstalacao(ordem) {
@@ -425,7 +410,7 @@ async function main() {
       await fluxo(navegador, rodadas);
       return;
     }
-    const ordem = ordemDeEsvaziamento();
+    const ordem = ordemDoBanco();
     for (let i = 1; i <= rodadas; i++) {
       preparaInstalacao(ordem);
       await fluxo(navegador);

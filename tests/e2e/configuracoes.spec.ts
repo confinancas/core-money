@@ -46,6 +46,8 @@ async function provaDasColunas(page: Page): Promise<void> {
   const titulo = (nome: string) => page.getByRole("heading", { level: 2, name: nome, exact: true });
   const casal = await caixaDe(titulo("Casal"));
   const ciclo = await caixaDe(titulo("Ciclo e orçamento"));
+  // Notificações (TASK-0701) entra antes de Sincronização, na coluna 2 do tablet e na 3 do desktop.
+  const notificacoes = await caixaDe(titulo("Notificações"));
   const sincronizacao = await caixaDe(titulo("Sincronização"));
   const dados = await caixaDe(titulo("Dados"));
   // A seção Renda fixa (TASK-0901) entra no registro com tabletColumn 2 e desktopColumn 2.
@@ -54,28 +56,34 @@ async function provaDasColunas(page: Page): Promise<void> {
   const projeto = test.info().project.name;
   if (projeto === "celular") {
     expect(casal.y).toBeLessThan(ciclo.y);
-    expect(ciclo.y).toBeLessThan(sincronizacao.y);
+    expect(ciclo.y).toBeLessThan(notificacoes.y);
+    expect(notificacoes.y).toBeLessThan(sincronizacao.y);
     expect(sincronizacao.y).toBeLessThan(dados.y);
     expect(Math.abs(casal.x - sincronizacao.x)).toBeLessThanOrEqual(1);
     return;
   }
   if (projeto === "tablet") {
-    // Coluna 1: Casal e Ciclo. Coluna 2: Renda fixa, Sincronização e Dados. Casal e Renda fixa começam no mesmo topo.
+    // Coluna 1: Casal e Ciclo. Coluna 2: Renda fixa, Notificações, Sincronização e Dados. Casal e Renda fixa começam no mesmo topo.
     expect(Math.abs(ciclo.x - casal.x)).toBeLessThanOrEqual(1);
     expect(ciclo.y).toBeGreaterThan(casal.y);
     expect(rendaFixa.x).toBeGreaterThan(casal.x + casal.width / 2);
     expect(Math.abs(rendaFixa.y - casal.y)).toBeLessThanOrEqual(2);
-    expect(Math.abs(sincronizacao.x - rendaFixa.x)).toBeLessThanOrEqual(1);
-    expect(sincronizacao.y).toBeGreaterThan(rendaFixa.y);
+    expect(notificacoes.x).toBeGreaterThan(casal.x + casal.width / 2);
+    expect(Math.abs(notificacoes.x - rendaFixa.x)).toBeLessThanOrEqual(1);
+    expect(notificacoes.y).toBeGreaterThan(rendaFixa.y);
+    expect(Math.abs(sincronizacao.x - notificacoes.x)).toBeLessThanOrEqual(1);
+    expect(sincronizacao.y).toBeGreaterThan(notificacoes.y);
     expect(Math.abs(dados.x - sincronizacao.x)).toBeLessThanOrEqual(1);
     expect(dados.y).toBeGreaterThan(sincronizacao.y);
     return;
   }
-  // Desktop: Casal à esquerda, Ciclo no meio, Sincronização e Dados à direita, os três do mesmo topo.
+  // Desktop: Casal à esquerda, Ciclo no meio, Notificações, Sincronização e Dados à direita, os três primeiros do mesmo topo.
   expect(casal.x).toBeLessThan(ciclo.x);
-  expect(ciclo.x).toBeLessThan(sincronizacao.x);
+  expect(ciclo.x).toBeLessThan(notificacoes.x);
   expect(Math.abs(casal.y - ciclo.y)).toBeLessThanOrEqual(2);
-  expect(Math.abs(casal.y - sincronizacao.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(casal.y - notificacoes.y)).toBeLessThanOrEqual(2);
+  expect(Math.abs(notificacoes.x - sincronizacao.x)).toBeLessThanOrEqual(1);
+  expect(sincronizacao.y).toBeGreaterThan(notificacoes.y);
   expect(Math.abs(dados.x - sincronizacao.x)).toBeLessThanOrEqual(1);
   expect(dados.y).toBeGreaterThan(sincronizacao.y);
 }
