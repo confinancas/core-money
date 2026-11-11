@@ -314,3 +314,26 @@ export function applyRuleToPendingStmt(
       entrada.excludeTransactionId ?? "",
     );
 }
+
+// Sugestão da IA aplicada no histórico (TASK-0303): só a transação de um ciclo mais antigo que o anterior (is_backfill
+// = 1), sem categoria, com a categoria sugerida ainda ativa. Grava a categoria, o tipo pela categoria e a marca 'ia'.
+// Nenhum outro caminho do cron grava category_id: a sugestão de uma transação nova fica em ai_category_id.
+export function applyAiSuggestionStmt(
+  db: Db,
+  entrada: { householdId: string; transactionId: string; now: string },
+): D1PreparedStatement {
+  const sets = [
+    "category_id = t.ai_category_id",
+    ...setDoTipoDaCategoria("t.ai_category_id", "t", true),
+    "categorized_at = ?",
+    "categorized_by = 'ia'",
+    "rule_id = NULL",
+  ];
+  return db.$client
+    .prepare(
+      `UPDATE transactions AS t SET ${sets.join(", ")}
+        WHERE t.id = ? AND t.household_id = ? AND t.is_backfill = 1 AND t.category_id IS NULL AND t.ai_category_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM categories AS c WHERE c.id = t.ai_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL)`,
+    )
+    .bind(entrada.now, entrada.transactionId, entrada.householdId);
+}

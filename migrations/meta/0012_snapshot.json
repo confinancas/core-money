@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e1536726-0866-45af-9b02-df31310dfe3c",
+  "id": "ba778bcc-217c-453b-957d-e06b2da10749",
   "prevId": "bf60d401-ea0e-43b2-a2a5-3118e421e71e",
   "tables": {
     "accounts": {
@@ -340,15 +340,7 @@
           "autoincrement": false
         }
       },
-      "indexes": {
-        "bank_items_connection_idx": {
-          "name": "bank_items_connection_idx",
-          "columns": [
-            "connection_id"
-          ],
-          "isUnique": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "bank_items_connection_id_pluggy_connections_id_fk": {
           "name": "bank_items_connection_id_pluggy_connections_id_fk",
@@ -654,6 +646,78 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "categorization_pausa": {
+      "name": "categorization_pausa",
+      "columns": {
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pausar_ate": {
+          "name": "pausar_ate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "categorization_queue": {
+      "name": "categorization_queue",
+      "columns": {
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enqueued_at": {
+          "name": "enqueued_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "categorization_queue_attempts_idx": {
+          "name": "categorization_queue_attempts_idx",
+          "columns": [
+            "attempts",
+            "enqueued_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -2034,51 +2098,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
-        },
-        "slices_total": {
-          "name": "slices_total",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "slices_done": {
-          "name": "slices_done",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "retried": {
-          "name": "retried",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "error_code": {
-          "name": "error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "cursor_json": {
-          "name": "cursor_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "heartbeat_at": {
-          "name": "heartbeat_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -2089,22 +2108,6 @@
             "started_at"
           ],
           "isUnique": false
-        },
-        "sync_runs_open_idx": {
-          "name": "sync_runs_open_idx",
-          "columns": [
-            "bank_item_id",
-            "finished_at"
-          ],
-          "isUnique": false
-        },
-        "sync_runs_open_heartbeat_idx": {
-          "name": "sync_runs_open_heartbeat_idx",
-          "columns": [
-            "heartbeat_at"
-          ],
-          "isUnique": false,
-          "where": "\"sync_runs\".\"finished_at\" IS NULL"
         }
       },
       "foreignKeys": {
@@ -2132,10 +2135,6 @@
         "sync_runs_status_ck": {
           "name": "sync_runs_status_ck",
           "value": "\"sync_runs\".\"status\" IS NULL OR \"sync_runs\".\"status\" IN ('ok', 'instavel', 'repetiu', 'erro')"
-        },
-        "sync_runs_retried_ck": {
-          "name": "sync_runs_retried_ck",
-          "value": "\"sync_runs\".\"retried\" IN (0, 1)"
         }
       }
     },
@@ -2564,14 +2563,6 @@
             "cycle_key"
           ],
           "isUnique": false
-        },
-        "transactions_no_cycle_local_date_idx": {
-          "name": "transactions_no_cycle_local_date_idx",
-          "columns": [
-            "local_date"
-          ],
-          "isUnique": false,
-          "where": "\"transactions\".\"cycle_key\" IS NULL AND \"transactions\".\"removed_at\" IS NULL"
         }
       },
       "foreignKeys": {

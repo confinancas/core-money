@@ -20,5 +20,7 @@
       "migrations_dir": "node_modules/@confinancas/core-money/migrations"
     }
   ],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // O cron do despachante (TASK-0303): um Cron Trigger só, como o app declara no próprio wrangler.jsonc.
+  "triggers": { "crons": ["*/5 * * * *"] }
 }

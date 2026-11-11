@@ -20,11 +20,12 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Cron: só despacha as tarefas (uma pesada por execução). Fila: a importação do histórico, uma fatia por vez (TASK-0204).
+  "observability": { "enabled": true },
+  // Um Cron Trigger só, como despachante (plano-gratuito.md). O deploy de medição tira este bloco.
   "triggers": { "crons": ["*/5 * * * *"] },
+  // Fila da importação do histórico, uma fatia por vez (TASK-0204).
   "queues": {
     "producers": [{ "binding": "SYNC_QUEUE", "queue": "matrimoney-sync" }],
     "consumers": [{ "queue": "matrimoney-sync", "max_batch_size": 1, "max_retries": 3, "max_concurrency": 1 }]
-  },
-  "observability": { "enabled": true }
+  }
 }

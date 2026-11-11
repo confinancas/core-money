@@ -1,7 +1,8 @@
 // Tarefas do despachante que são da importação: retomar as execuções paradas (TASK-0204) e atribuir o ciclo às transações
 // que ainda não têm (TASK-0801). Cada uma tem a forma de TarefaDoCron, de despachante.ts. O db chega medido (TASK-0109).
 import { assignCycleKeys } from "../cycle/calendar";
-import type { Db } from "../db/client";
+import { createDb, type Db } from "../db/client";
+import { newMeter } from "../db/metered-d1";
 import type { Env } from "../env";
 import { enqueueSlice } from "../sync/enqueue";
 
@@ -23,7 +24,8 @@ export const SQL_SEM_CICLO = `SELECT id, household_id FROM transactions
 export const retomarImportacoes = {
   nome: "retomar-importacoes",
   pesada: false,
-  async executar(env: Env, agora: Date, db: Db): Promise<boolean> {
+  async executar(env: Env, agora: Date, dbMedido?: Db): Promise<boolean> {
+    const db = dbMedido ?? createDb(env.DB, newMeter());
     const agoraIso = agora.toISOString();
     const limite = new Date(agora.getTime() - LIMITE_DO_HEARTBEAT_MS).toISOString();
     const paradas = await db.$client
@@ -47,11 +49,13 @@ export const retomarImportacoes = {
   },
 };
 
-// Pesada: atribui o ciclo às transações sem ciclo, em lotes de 200 (TASK-0801).
+// Leve: atribui o ciclo às transações sem ciclo, no máximo 200 por execução (TASK-0801). Sem trabalho, lê zero linhas
+// (índice parcial); por isso não ocupa a vaga da pesada do despachante.
 export const atribuirCiclos = {
   nome: "atribuir-ciclos",
-  pesada: true,
-  async executar(_env: Env, _agora: Date, db: Db): Promise<boolean> {
+  pesada: false,
+  async executar(env: Env, _agora: Date, dbMedido?: Db): Promise<boolean> {
+    const db = dbMedido ?? createDb(env.DB, newMeter());
     const linhas = await db.$client.prepare(SQL_SEM_CICLO).all<{ id: string; household_id: string }>();
     const porLar = new Map<string, string[]>();
     for (const linha of linhas.results ?? []) {

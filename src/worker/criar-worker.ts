@@ -29,12 +29,14 @@ export function criarWorker({ marca, versao, rotasDoApp }: CriarWorkerOptions) {
   });
   return {
     fetch: app.fetch,
+    // Um Cron Trigger só: o despachante decide o que roda nesta execução (TASK-0303). O embrulho de medição de uso
+    // (TASK-0109) espera o handler e grava a linha do dia com o db medido.
+    scheduled: meteredScheduled(async (evento, env, _ctx, db) => {
+      await despachar(env, new Date(evento.scheduledTime), db);
+    }),
     // A medição da fila fica no handleSyncBatch: cada mensagem tem o próprio medidor e grava o contador do dia (TASK-0109).
     queue(lote: MessageBatch<SyncMessage>, env: Env) {
       return handleSyncBatch(lote as unknown as LoteDaFila, env);
     },
-    scheduled: meteredScheduled(async (evento, env, _ctx, db) => {
-      await despachar(env, new Date(evento.scheduledTime), db);
-    }),
   } satisfies ExportedHandler<Env, SyncMessage>;
 }

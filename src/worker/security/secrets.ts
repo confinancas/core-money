@@ -22,6 +22,11 @@ export async function saveSecret(db: Db, env: Env, nome: string, valor: string):
     .insert(appSecrets)
     .values({ name: nome, ciphertext, iv, updatedAt: atualizadoEm })
     .onConflictDoUpdate({ target: appSecrets.name, set: { ciphertext, iv, updatedAt: atualizadoEm } });
+  // Chave nova da IA (já validada pela rota) apaga a pausa da categorização (TASK-0303): a fila não espera os 30 minutos.
+  // O nome "claude" é o NOME_DA_PAUSA de categorization/queue.ts.
+  if (nome === "claude_api_key") {
+    await db.$client.prepare("DELETE FROM categorization_pausa WHERE name = 'claude'").run();
+  }
 }
 
 // Nunca lança por causa da cifra: chave mestra trocada, chave ausente ou linha adulterada viram "ilegivel".
