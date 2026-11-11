@@ -47,8 +47,9 @@ export function markBackfillStmt(
     .bind(JSON.stringify(entrada.transactionIds), entrada.householdId);
 }
 
-// Pausa (rodada 1): a fatia lê a linha da pausa no mesmo lote da fila. Enquanto a pausa vale, a limpeza e as leituras
-// da fila não rodam (cláusula NOT EXISTS, que o banco resolve numa vez, sem varrer a fila).
+// Pausa (rodada 2): a fatia lê a linha da pausa e a da chave numa ida pequena, antes de qualquer leitura da fila, e
+// decide em JS. Pausada, para ali: a fila não é lida. Assim a leitura não cresce com a fila (SQLite percorria a fila
+// inteira antes de aplicar um NOT EXISTS no mesmo lote).
 export const pausaLeituraStmt = (db: Db): D1PreparedStatement =>
   db.$client
     .prepare("SELECT pausar_ate AS pausar_ate FROM categorization_pausa WHERE name = ?")
@@ -63,8 +64,6 @@ export function pausaGravarStmt(db: Db, pausarAte: string): D1PreparedStatement 
     .bind(NOME_DA_PAUSA, pausarAte);
 }
 
-const PAUSA_VALE = `NOT EXISTS (SELECT 1 FROM categorization_pausa AS p WHERE p.name = '${NOME_DA_PAUSA}' AND p.pausar_ate > ?)`;
-
 // Linha da fila com os campos da transação, lida pelo cron.
 export type LinhaDaFila = LinhaParaIA & { household_id: string; is_backfill: number; attempts: number };
 
@@ -76,33 +75,31 @@ const SELECT_DA_FILA = `SELECT t.id AS id, t.household_id AS household_id, t.mov
     q.attempts AS attempts
   FROM categorization_queue AS q
   JOIN transactions AS t ON t.id = q.transaction_id
-  WHERE t.removed_at IS NULL AND t.category_id IS NULL AND t.income_kind IS NULL AND ${PAUSA_VALE}`;
+  WHERE t.removed_at IS NULL AND t.category_id IS NULL AND t.income_kind IS NULL`;
 
 // Tira da fila o que já foi resolvido (casal, regra), o que sumiu, o que foi removido e o que não pede mais sugestão
-// (reconferência: a classificação pode ter trocado o movimento depois da importação). Não roda enquanto a pausa vale.
-export function limparFilaStmt(db: Db, agora: string): D1PreparedStatement {
-  return db.$client
-    .prepare(
-      `DELETE FROM categorization_queue WHERE ${PAUSA_VALE} AND transaction_id IN (
+// (reconferência: a classificação pode ter trocado o movimento depois da importação). Só roda sem pausa (a fatia decide).
+export function limparFilaStmt(db: Db): D1PreparedStatement {
+  return db.$client.prepare(
+    `DELETE FROM categorization_queue WHERE transaction_id IN (
         SELECT q.transaction_id FROM categorization_queue AS q LEFT JOIN transactions AS t ON t.id = q.transaction_id
         WHERE t.id IS NULL OR t.removed_at IS NOT NULL OR t.category_id IS NOT NULL OR t.income_kind IS NOT NULL
           OR NOT ((t.category_id IS NULL AND ${NEEDS_CATEGORY_SQL}) OR ${NEEDS_INCOME_SQL}))`,
-    )
-    .bind(agora);
+  );
 }
 
 // Os itens da primeira tentativa, os mais recentes primeiro (até o limite da execução).
-export function frescosStmt(db: Db, limite: number, agora: string): D1PreparedStatement {
+export function frescosStmt(db: Db, limite: number): D1PreparedStatement {
   return db.$client
     .prepare(`${SELECT_DA_FILA} AND q.attempts = 0 ORDER BY t.local_date DESC, t.id LIMIT ?`)
-    .bind(agora, limite);
+    .bind(limite);
 }
 
 // Um item em retentativa (1 ou 2 tentativas), o mais antigo na fila. Vai sozinho num lote.
-export function retentativaStmt(db: Db, agora: string): D1PreparedStatement {
-  return db.$client
-    .prepare(`${SELECT_DA_FILA} AND q.attempts BETWEEN 1 AND 2 ORDER BY q.enqueued_at LIMIT 1`)
-    .bind(agora);
+export function retentativaStmt(db: Db): D1PreparedStatement {
+  return db.$client.prepare(
+    `${SELECT_DA_FILA} AND q.attempts BETWEEN 1 AND 2 ORDER BY q.enqueued_at LIMIT 1`,
+  );
 }
 
 const LIMPEZA_DAS_TENTATIVAS = `DELETE FROM categorization_queue WHERE attempts >= ${TENTATIVAS_MAXIMAS}

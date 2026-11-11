@@ -1,12 +1,13 @@
 // Fatia da categorização no cron (TASK-0303). Cabe em 10 ms de CPU e em 50 chamadas externas: no máximo 5 ida e volta ao
-// D1 (chave, lote da fila com a pausa, contexto e 2 gravações) e 2 chamadas ao Claude. Sem chave, a execução termina
-// numa leitura, sem escrever nada. Com a pausa valendo (depois de um erro do provedor), termina com 2 leituras (chave e
-// pausa), sem escrita e sem chamada. Quem grava category_id é só applyAiSuggestionStmt, pelo histórico.
+// D1 (pausa e chave numa ida pequena, fila, contexto e 2 gravações) e 2 chamadas ao Claude. Sem chave, a execução
+// termina na ida pequena, sem escrever nada. Com a pausa valendo (depois de um erro do provedor), termina na ida
+// pequena: uma leitura, sem fila, sem escrita e sem chamada. Quem grava category_id é só applyAiSuggestionStmt.
 
 import { createDb, type Db } from "../db/client";
 import { type Meter, newMeter } from "../db/metered-d1";
 import type { Env } from "../env";
-import { type LeituraDoSegredo, readSecret } from "../security/secrets";
+import { decryptSecret } from "../security/crypto";
+import type { LeituraDoSegredo } from "../security/secrets";
 import { type ClienteDaIA, createClaudeClient, type ResultadoDaChamada, requestSuggestions } from "./claude";
 import { buildSystemBlocks, type ContextoDeCategorizacao, itemParaIA } from "./context";
 import { loadCategorizationContext } from "./context-repo";
@@ -44,6 +45,26 @@ export type ResultadoDaFatia = {
   semResposta: number;
 };
 
+const NOME_DA_CHAVE = "claude_api_key";
+type LinhaDaChave = { ciphertext: string; iv: string };
+
+const chaveLinhaStmt = (db: Db): D1PreparedStatement =>
+  db.$client.prepare("SELECT ciphertext, iv FROM app_secrets WHERE name = ?").bind(NOME_DA_CHAVE);
+
+// Mesma leitura do readSecret (TASK-0102), a partir da linha já lida numa ida: só em memória, nunca devolvida nem logada.
+async function decifrarChave(env: Env, linha: LinhaDaChave | undefined): Promise<LeituraDoSegredo> {
+  if (!linha) return { status: "ausente" };
+  try {
+    const value = await decryptSecret(env.MASTER_KEY, NOME_DA_CHAVE, {
+      ciphertext: linha.ciphertext,
+      iv: linha.iv,
+    });
+    return { status: "ok", value };
+  } catch {
+    return { status: "ilegivel" };
+  }
+}
+
 // Cada lote: a chamada ao Claude e, depois, uma gravação. Recusa, corte e saída inválida contam tentativa; API fora e
 // chave inválida param a execução sem contar, e deixam uma pausa de 30 minutos.
 export async function runCategorizationSlice(
@@ -55,7 +76,16 @@ export async function runCategorizationSlice(
   const db = deps.db ?? createDb(env.DB, deps.meter ?? newMeter());
   const vazio: ResultadoDaFatia = { situacao: "processada", lotes: 0, ok: 0, semSugestao: 0, semResposta: 0 };
 
-  const chave = await (deps.getApiKey ?? ((d: Db, e: Env) => readSecret(d, e, "claude_api_key")))(db, env);
+  // Ida pequena (rodada 2): a linha da pausa e a da chave, antes de qualquer leitura da fila. Decide em JS; pausada, a
+  // fatia para aqui e a fila não é lida. A chave é lida na mesma ida (sem o embrulho do readSecret, que faria outra).
+  const pequena = await db.$client.batch(
+    deps.getApiKey ? [pausaLeituraStmt(db)] : [pausaLeituraStmt(db), chaveLinhaStmt(db)],
+  );
+  const pausaAte = (pequena[0]?.results?.[0] as { pausar_ate?: string } | undefined)?.pausar_ate ?? null;
+  if (pausaAte !== null && pausaAte > nowIso) return { ...vazio, situacao: "pausada" };
+  const chave = deps.getApiKey
+    ? await deps.getApiKey(db, env)
+    : await decifrarChave(env, pequena[1]?.results?.[0] as LinhaDaChave | undefined);
   if (chave.status === "ausente") return { ...vazio, situacao: "sem_chave" };
   if (chave.status === "ilegivel") {
     console.warn("categorization: chave ilegivel, a fatia para");
@@ -65,16 +95,12 @@ export async function runCategorizationSlice(
     deps.createClient ?? ((apiKey: string) => createClaudeClient(apiKey, env.ANTHROPIC_BASE_URL))
   )(chave.value);
 
-  // Um lote só: a pausa, a limpeza da fila (com a reconferência) e as leituras. Com a pausa valendo, a limpeza e as
-  // leituras não rodam (cláusulas NOT EXISTS), e a fatia para aqui.
-  const [pausaLida, , frescosLidos, retentativaLida] = await db.$client.batch([
-    pausaLeituraStmt(db),
-    limparFilaStmt(db, nowIso),
-    frescosStmt(db, LIMITE_DE_FRESCOS, nowIso),
-    retentativaStmt(db, nowIso),
+  // A fila só é lida depois da decisão: a limpeza (com a reconferência) e as leituras, num lote.
+  const [, frescosLidos, retentativaLida] = await db.$client.batch([
+    limparFilaStmt(db),
+    frescosStmt(db, LIMITE_DE_FRESCOS),
+    retentativaStmt(db),
   ]);
-  const pausaAte = (pausaLida?.results?.[0] as { pausar_ate?: string } | undefined)?.pausar_ate ?? null;
-  if (pausaAte !== null && pausaAte > nowIso) return { ...vazio, situacao: "pausada" };
 
   const frescos = (frescosLidos?.results ?? []) as LinhaDaFila[];
   const retentativa = (retentativaLida?.results ?? []) as LinhaDaFila[];
