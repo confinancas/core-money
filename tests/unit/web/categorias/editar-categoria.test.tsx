@@ -1,0 +1,49 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CategoryDTO } from "../../../../src/shared/categories";
+
+// Editor de categoria (TASK-0305, rodada 1 da avaliação). O PATCH leva só os campos que o editor controla: o tipo
+// padrão é da tela Tipos de gasto (TASK-0802), e mandá-lo como null apagaria o tipo e rederivaria as transações.
+
+const atualizar = vi.fn(async () => ({}));
+vi.mock("@/api/categories", () => ({
+  updateCategory: (...args: unknown[]) => atualizar(...(args as [])),
+}));
+
+import { EditarCategoria } from "@/screens/configuracoes/categorias/EditarCategoria";
+
+const servicos: CategoryDTO = {
+  id: "cat-servicos",
+  name: "Serviços",
+  color: "#1B84F2",
+  parentId: null,
+  defaultSpendType: "fixos",
+  aiHint: null,
+  sort: 0,
+  archived: false,
+};
+
+beforeEach(() => {
+  atualizar.mockClear();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("F1: salvar o editor não mexe no tipo padrão", () => {
+  it("o PATCH leva só nome, cor, mãe e dica; sem defaultSpendType", async () => {
+    render(<EditarCategoria categoria={servicos} todas={[servicos]} aoMudar={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("Nome", { exact: true }), {
+      target: { value: "[TEST] Serviços gerais" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(atualizar).toHaveBeenCalledTimes(1));
+    const [id, corpo] = atualizar.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(id).toBe("cat-servicos");
+    expect(Object.keys(corpo).sort()).toEqual(["aiHint", "color", "name", "parentId"]);
+    expect(corpo).toMatchObject({ name: "[TEST] Serviços gerais", color: "#1B84F2", parentId: null });
+  });
+});

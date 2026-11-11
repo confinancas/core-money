@@ -29,7 +29,14 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
     setErroGeral(null);
     setErroCampos({});
     try {
-      await updateCategory(categoria.id, entrada);
+      // Só os campos do editor: o tipo padrão é da tela Tipos de gasto (TASK-0802). Mandá-lo como nulo apagaria o tipo
+      // e rederivaria as transações da categoria.
+      await updateCategory(categoria.id, {
+        name: entrada.name,
+        color: entrada.color,
+        parentId: entrada.parentId,
+        aiHint: entrada.aiHint,
+      });
       aoMudar();
     } catch (erro) {
       if (erro instanceof ApiError && erro.code === "validacao" && erro.fields) setErroCampos(erro.fields);

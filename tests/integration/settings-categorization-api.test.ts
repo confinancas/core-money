@@ -415,3 +415,24 @@ describe("categorias: arquivada debaixo de subcategoria e a cascata", () => {
     expect(await valorDoBanco("SELECT archived_at FROM categories WHERE id = ?", saude)).toBe(t1);
   });
 });
+
+describe("F1: renomear pela API não muda o tipo padrão nem o das transações", () => {
+  it("PATCH só com o nome deixa default_spend_type e o tipo das transações como estavam", async () => {
+    const lar = await criarLar();
+    const restaurantes = await idDaCategoria(lar, "Restaurantes e delivery");
+    const tipoPadrao = await valorDoBanco("SELECT default_spend_type FROM categories WHERE id = ?", restaurantes);
+    const compra = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -3000,
+      descricao: "[TEST] RESTAURANTE 0305",
+      categoryId: restaurantes,
+      spendType: "prazeres",
+      spendTypeSource: "categoria",
+    });
+    const app = appDoLar(lar);
+    const r = await callApi(app, "PATCH", `/api/categories/${restaurantes}`, { name: "[TEST] Restaurantes 0305" });
+    expect(r.status).toBe(200);
+    expect(await valorDoBanco("SELECT default_spend_type FROM categories WHERE id = ?", restaurantes)).toBe(tipoPadrao);
+    expect(await valorDoBanco("SELECT spend_type FROM transactions WHERE id = ?", compra)).toBe("prazeres");
+  });
+});
