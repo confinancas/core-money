@@ -20,6 +20,8 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [erroCampos, setErroCampos] = useState<CategoryFieldErrors>({});
   const [confirmando, setConfirmando] = useState(false);
+  // Aviso "Salvo" depois de um PATCH que deu certo (N7, TASK-0305 rodada 1).
+  const [salvo, setSalvo] = useState(false);
 
   const temSubcategorias = todas.some((c) => c.parentId === categoria.id && !c.archived);
 
@@ -28,6 +30,7 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
     setEnviando(true);
     setErroGeral(null);
     setErroCampos({});
+    setSalvo(false);
     try {
       // Só os campos do editor: o tipo padrão é da tela Tipos de gasto (TASK-0802). Mandá-lo como nulo apagaria o tipo
       // e rederivaria as transações da categoria.
@@ -37,6 +40,7 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
         parentId: entrada.parentId,
         aiHint: entrada.aiHint,
       });
+      setSalvo(true);
       aoMudar();
     } catch (erro) {
       if (erro instanceof ApiError && erro.code === "validacao" && erro.fields) setErroCampos(erro.fields);
@@ -144,6 +148,11 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
           >
             Arquivar categoria
           </button>
+        )}
+        {salvo && (
+          <p role="status" className="text-center text-[14px] font-semibold text-ink-2">
+            Salvo
+          </p>
         )}
         {erroGeral !== null && (
           <p role="alert" className="text-center text-[13px] text-danger">

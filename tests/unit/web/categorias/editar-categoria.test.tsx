@@ -73,3 +73,12 @@ describe("F5: 'Dentro de' não oferece principal arquivada", () => {
     expect(screen.getByRole("option", { name: "Lazer", exact: true })).toBeTruthy();
   });
 });
+
+describe("N7: depois de salvar, o editor mostra 'Salvo'", () => {
+  it("o aviso aparece quando o PATCH dá certo", async () => {
+    render(<EditarCategoria categoria={servicos} todas={[servicos]} aoMudar={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Nome", { exact: true }), { target: { value: "[TEST] Serviços 2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(await screen.findByText("Salvo")).toBeTruthy();
+  });
+});
