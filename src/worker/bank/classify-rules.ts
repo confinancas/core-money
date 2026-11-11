@@ -108,6 +108,7 @@ export function isCardPayment(linha: LinhaClassificavel): boolean {
     linha.card_id !== null &&
     linha.amount_cents > 0 &&
     (linha.provider_operation_type === "PAGAMENTO_FATURA" ||
+      linha.provider_operation_type === "PAGAMENTO" ||
       linha.provider_category === "Credit card payment")
   );
 }

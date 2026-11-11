@@ -1,4 +1,5 @@
 import { bankNameFromCode } from "../../shared/bank-codes";
+import { daysBetween } from "../../shared/cycle";
 import { establishmentKey } from "../../shared/establishment-key";
 import { toSaoPauloDate } from "../../shared/sao-paulo-date";
 
@@ -314,7 +315,28 @@ function daFechamento(closesOn: string, cartao: CardBillContext): Resolucao | nu
   return { billId: sintetica(cartao.cardId, closesOn), closesOn, futura: true };
 }
 
-// Ordem: (1) fatura do Pluggy conhecida; (2) previsão do mês; (3) data até o fechamento da aberta; (4) próximo fechamento.
+// Teto do fechamento conhecido (TASK-0204, R10): só vale se estiver a até 35 dias da compra. Mais longe, a compra vai para
+// o fechamento calculado do ciclo dela. Sem o teto, as compras de meses sem fatura real caíam todas na primeira fatura
+// conhecida, ou na aberta.
+const DIAS_MAXIMOS_DO_FECHAMENTO_CONHECIDO = 35;
+
+// Primeiro fechamento conhecido (real ou da aberta) que não é antes da data local. null se não há nenhum.
+// Com uma real a cobrir a compra, a releitura não a leva para a aberta de um mês depois (TASK-0202, correção).
+function primeiroFechamentoConhecido(dataLocal: string, cartao: CardBillContext): string | null {
+  const candidatos = cartao.knownBills.map((fatura) => fatura.closes_on);
+  if (cartao.openClosesOn !== null) candidatos.push(cartao.openClosesOn);
+  let menor: string | null = null;
+  for (const fechamento of candidatos) {
+    if (fechamento >= dataLocal && (menor === null || fechamento < menor)) menor = fechamento;
+  }
+  return menor;
+}
+
+// Previsão do Pluggy no formato AAAA-MM. O campo não está na documentação: o que não casa é ignorado.
+const FORMATO_DA_PREVISAO = /^\d{4}-\d{2}$/;
+
+// Ordem: (1) fatura do Pluggy conhecida; (2) previsão do mês; (3) primeiro fechamento conhecido (real ou aberta) a partir
+// da data; (4) sem nenhum, o próximo fechamento calculado.
 function resolverFatura(tx: PluggyTransaction, cartao: CardBillContext): Resolucao | null {
   const conhecida = tx.creditCardMetadata?.billId;
   if (conhecida) {
@@ -323,14 +345,13 @@ function resolverFatura(tx: PluggyTransaction, cartao: CardBillContext): Resoluc
   }
   const dia = diaDeFechamento(cartao);
   const previsao = tx.creditCardMetadata?.billForecastDate;
-  if (previsao && dia !== null) return daFechamento(fechamentoNoMes(previsao, dia), cartao);
+  if (previsao && FORMATO_DA_PREVISAO.test(previsao) && dia !== null) {
+    return daFechamento(fechamentoNoMes(previsao, dia), cartao);
+  }
   const dataLocal = toSaoPauloDate(tx.date);
-  if (cartao.openClosesOn !== null && dataLocal <= cartao.openClosesOn) {
-    return {
-      billId: sintetica(cartao.cardId, cartao.openClosesOn),
-      closesOn: cartao.openClosesOn,
-      futura: false,
-    };
+  const conhecido = primeiroFechamentoConhecido(dataLocal, cartao);
+  if (conhecido !== null && daysBetween(dataLocal, conhecido) <= DIAS_MAXIMOS_DO_FECHAMENTO_CONHECIDO) {
+    return daFechamento(conhecido, cartao);
   }
   if (dia !== null) return daFechamento(proximoFechamento(dataLocal, dia), cartao);
   return null;
@@ -372,7 +393,14 @@ export function mapMovement(tx: PluggyTransaction, kind: "BANK" | "CREDIT"): Mov
 
   if (kind === "CREDIT") {
     if (tx.amount >= 0) return "compra";
-    if (operacao === "PAGAMENTO_FATURA" || tx.category === "Credit card payment") return "pagamento_fatura";
+    // PAGAMENTO (TASK-0207): o valor negativo do cartão com essa operação é pagamento, e não estorno.
+    if (
+      operacao === "PAGAMENTO_FATURA" ||
+      operacao === "PAGAMENTO" ||
+      tx.category === "Credit card payment"
+    ) {
+      return "pagamento_fatura";
+    }
     if (operacao === "ESTORNO") return "estorno";
     if (operacao === "CASHBACK") return "outro";
     return "estorno";

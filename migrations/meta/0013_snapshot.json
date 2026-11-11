@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7a5efb42-2501-422c-b5c3-08bcf30421cb",
+  "id": "f5b4019d-f44c-4708-8c7f-46be8f515a2c",
   "prevId": "ba778bcc-217c-453b-957d-e06b2da10749",
   "tables": {
     "accounts": {
@@ -340,7 +340,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "bank_items_connection_idx": {
+          "name": "bank_items_connection_idx",
+          "columns": [
+            "connection_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "bank_items_connection_id_pluggy_connections_id_fk": {
           "name": "bank_items_connection_id_pluggy_connections_id_fk",
@@ -904,128 +912,6 @@
         }
       }
     },
-    "fixed_income_receipts": {
-      "name": "fixed_income_receipts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fixed_income_id": {
-          "name": "fixed_income_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cycle_key": {
-          "name": "cycle_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "transaction_id": {
-          "name": "transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "amount_cents": {
-          "name": "amount_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "received_on": {
-          "name": "received_on",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fx_rate": {
-          "name": "fx_rate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "fx_date": {
-          "name": "fx_date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "confirmed_by": {
-          "name": "confirmed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "fixed_income_receipts_transaction_uq": {
-          "name": "fixed_income_receipts_transaction_uq",
-          "columns": [
-            "transaction_id"
-          ],
-          "isUnique": true,
-          "where": "\"fixed_income_receipts\".\"transaction_id\" IS NOT NULL"
-        },
-        "fixed_income_receipts_income_cycle_idx": {
-          "name": "fixed_income_receipts_income_cycle_idx",
-          "columns": [
-            "fixed_income_id",
-            "cycle_key"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "fixed_income_receipts_fixed_income_id_fixed_incomes_id_fk": {
-          "name": "fixed_income_receipts_fixed_income_id_fixed_incomes_id_fk",
-          "tableFrom": "fixed_income_receipts",
-          "tableTo": "fixed_incomes",
-          "columnsFrom": [
-            "fixed_income_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fixed_income_receipts_transaction_id_transactions_id_fk": {
-          "name": "fixed_income_receipts_transaction_id_transactions_id_fk",
-          "tableFrom": "fixed_income_receipts",
-          "tableTo": "transactions",
-          "columnsFrom": [
-            "transaction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "fixed_income_receipts_amount_ck": {
-          "name": "fixed_income_receipts_amount_ck",
-          "value": "\"fixed_income_receipts\".\"amount_cents\" >= 0"
-        }
-      }
-    },
     "fixed_incomes": {
       "name": "fixed_incomes",
       "columns": {
@@ -1148,57 +1034,6 @@
         "fixed_incomes_kept_ck": {
           "name": "fixed_incomes_kept_ck",
           "value": "\"fixed_incomes\".\"kept_usd_is_investment\" IN (0, 1)"
-        }
-      }
-    },
-    "fx_rates": {
-      "name": "fx_rates",
-      "columns": {
-        "currency": {
-          "name": "currency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "date": {
-          "name": "date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rate": {
-          "name": "rate",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "fx_rates_currency_date_pk": {
-          "columns": [
-            "currency",
-            "date"
-          ],
-          "name": "fx_rates_currency_date_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "fx_rates_rate_ck": {
-          "name": "fx_rates_rate_ck",
-          "value": "\"fx_rates\".\"rate\" > 0"
         }
       }
     },
@@ -2271,6 +2106,51 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "slices_total": {
+          "name": "slices_total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "slices_done": {
+          "name": "slices_done",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "retried": {
+          "name": "retried",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cursor_json": {
+          "name": "cursor_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "heartbeat_at": {
+          "name": "heartbeat_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2281,6 +2161,22 @@
             "started_at"
           ],
           "isUnique": false
+        },
+        "sync_runs_open_idx": {
+          "name": "sync_runs_open_idx",
+          "columns": [
+            "bank_item_id",
+            "finished_at"
+          ],
+          "isUnique": false
+        },
+        "sync_runs_open_heartbeat_idx": {
+          "name": "sync_runs_open_heartbeat_idx",
+          "columns": [
+            "heartbeat_at"
+          ],
+          "isUnique": false,
+          "where": "\"sync_runs\".\"finished_at\" IS NULL"
         }
       },
       "foreignKeys": {
@@ -2308,6 +2204,10 @@
         "sync_runs_status_ck": {
           "name": "sync_runs_status_ck",
           "value": "\"sync_runs\".\"status\" IS NULL OR \"sync_runs\".\"status\" IN ('ok', 'instavel', 'repetiu', 'erro')"
+        },
+        "sync_runs_retried_ck": {
+          "name": "sync_runs_retried_ck",
+          "value": "\"sync_runs\".\"retried\" IN (0, 1)"
         }
       }
     },
@@ -2736,6 +2636,14 @@
             "cycle_key"
           ],
           "isUnique": false
+        },
+        "transactions_no_cycle_local_date_idx": {
+          "name": "transactions_no_cycle_local_date_idx",
+          "columns": [
+            "local_date"
+          ],
+          "isUnique": false,
+          "where": "\"transactions\".\"cycle_key\" IS NULL AND \"transactions\".\"removed_at\" IS NULL"
         }
       },
       "foreignKeys": {

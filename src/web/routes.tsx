@@ -12,6 +12,7 @@ import { ConectarPluggy } from "./screens/bancos/ConectarPluggy";
 import { Cadastro } from "./screens/Cadastro";
 import { Cartao } from "./screens/Cartao";
 import { Cartoes } from "./screens/Cartoes";
+import { Compra } from "./screens/Compra";
 import { ConfiguracaoInicial } from "./screens/ConfiguracaoInicial";
 import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
 import { NovaCategoria } from "./screens/categorias/NovaCategoria";
@@ -76,7 +77,7 @@ export const ROTAS: RotaDaTabela[] = [
   { path: "/pix/:transactionId", frame: "detail", tab: "inicio", title: "Pix enviado", element: provisoria },
 
   { path: "/cartoes/:cardId", frame: "detail", tab: "cartoes", title: "Cartão", element: <Cartao /> },
-  { path: "/compras/:transactionId", frame: "detail", tab: "cartoes", title: "Compra", element: provisoria },
+  { path: "/compras/:transactionId", frame: "detail", tab: "cartoes", title: "Compra", element: <Compra /> },
 
   {
     path: "/pix-recebido/:transactionId",

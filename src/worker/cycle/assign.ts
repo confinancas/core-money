@@ -25,6 +25,10 @@ const cicloDaData = (data: string, lar: string): string =>
 
 const CHAVE_DA_TRANSACAO = cicloDaData(DATA_DA_TRANSACAO, "t.household_id");
 
+// As partes de transactions leem pela chave (id ou card_id). A lista de ids ou de cartões entra por json_each como
+// laço de fora de uma subconsulta (CROSS JOIN), e o household_id fica dentro dela. No WHERE de fora, o household_id
+// faz o planejador escolher o índice do lar e ler o lar inteiro a cada comando (TASK-0302). Na subconsulta do cartão,
+// o household_id ainda pode levar o planejador ao índice do lar: INDEXED BY fixa o índice do cartão.
 function paresDoEscopo(householdId: string, escopo: EscopoDeCiclo): Par[] {
   if ("all" in escopo) {
     return [
@@ -39,8 +43,8 @@ function paresDoEscopo(householdId: string, escopo: EscopoDeCiclo): Par[] {
     return [
       {
         t: {
-          sql: "t.household_id = ? AND t.card_id IN (SELECT value FROM json_each(?))",
-          params: [householdId, json],
+          sql: "t.id IN (SELECT y.id FROM json_each(?) AS j CROSS JOIN transactions AS y INDEXED BY transactions_card_local_date_idx ON y.card_id = j.value AND y.household_id = ?)",
+          params: [json, householdId],
         },
         b: {
           sql: `b.card_id IN (SELECT value FROM json_each(?)) AND b.card_id IN (${CARTOES_DO_LAR})`,
@@ -49,22 +53,19 @@ function paresDoEscopo(householdId: string, escopo: EscopoDeCiclo): Par[] {
       },
     ];
   }
+  // Só os lançamentos gravados e as faturas em que eles caem. O cartão inteiro não entra aqui: a cada gravação, reler
+  // os lançamentos do cartão custava cerca de 10 leituras por lançamento dele (TASK-0801, item 3). A fatura de um
+  // lançamento só muda de data nas faturas (upsertBillsStmts), e isso a reavaliação do cartão cobre (cardIds).
   const json = JSON.stringify(escopo.ids);
-  const cartoesDosIds =
-    "SELECT x.card_id FROM transactions x WHERE x.id IN (SELECT value FROM json_each(?)) AND x.card_id IS NOT NULL";
   return [
     {
       t: {
-        sql: "t.household_id = ? AND t.id IN (SELECT value FROM json_each(?))",
-        params: [householdId, json],
-      },
-      b: null,
-    },
-    {
-      t: { sql: `t.household_id = ? AND t.card_id IN (${cartoesDosIds})`, params: [householdId, json] },
-      b: {
-        sql: `b.card_id IN (${cartoesDosIds}) AND b.card_id IN (${CARTOES_DO_LAR})`,
+        sql: "t.id IN (SELECT x.id FROM json_each(?) AS j CROSS JOIN transactions AS x ON x.id = j.value AND x.household_id = ?)",
         params: [json, householdId],
+      },
+      b: {
+        sql: `b.id IN (SELECT x.bill_id FROM json_each(?) AS j CROSS JOIN transactions AS x ON x.id = j.value AND x.household_id = ? WHERE x.bill_id IS NOT NULL) AND b.card_id IN (${CARTOES_DO_LAR})`,
+        params: [json, householdId, householdId],
       },
     },
   ];

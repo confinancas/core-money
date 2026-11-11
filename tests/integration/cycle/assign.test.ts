@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { addDays, cycleForDate } from "../../../src/shared/cycle";
+import { reavaliarCartaoInteiro } from "../../../src/worker/bank/after-ingest";
 import type { BillRow, MappedTransaction } from "../../../src/worker/bank/map";
 import { ingestTransactions, upsertBillsStmts, upsertCardsStmts } from "../../../src/worker/bank/repository";
 import { assignCycleKeysStmts } from "../../../src/worker/cycle/assign";
@@ -434,7 +435,7 @@ describe("cycle_key: os cenários de fatura e de cálculo", () => {
     expect(ids.length).toBe(5);
   });
 
-  it("9. fatura sintética vira real: a compra passa para a real, e o cycle_key acompanha na gravação seguinte", async () => {
+  it("9. fatura sintética vira real: a compra passa para a real, e o cycle_key acompanha na reavaliação do cartão", async () => {
     const { householdId, connectionId } = await criarLar(11);
     const itemId = await criarItem(connectionId, "Nubank");
     const db = dbComMedidor();
@@ -477,8 +478,11 @@ describe("cycle_key: os cenários de fatura e de cálculo", () => {
       .bind("[TEST] ext-antes")
       .first<{ bill_id: string }>();
     expect(herdou?.bill_id).toBe(real.id);
-    // Ainda sem gravação nova: a chave ainda é a antiga (a data que decide mudou, mas o passo 2 não rodou).
+    // Ainda sem reavaliação: a chave é a antiga (a data que decide mudou, mas o ciclo ainda não foi refeito).
     expect(await cicloDe("[TEST] ext-antes")).toBe("2026-10");
+    // A reavaliação do cartão, que a fase de faturas roda depois de upsertBillsStmts, refaz o ciclo dele.
+    await reavaliarCartaoInteiro(db, householdId, cartaoId);
+    expect(await cicloDe("[TEST] ext-antes")).toBe("2026-11");
 
     await ingestTransactions(db, {
       householdId,
@@ -541,5 +545,89 @@ describe("cycle_key: os cenários de fatura e de cálculo", () => {
     const dbSegundo = dbComMedidor(segundo);
     await dbSegundo.$client.batch(assignCycleKeysStmts(dbSegundo, householdId, { all: true }));
     expect(segundo.rowsWritten).toBe(0);
+  });
+});
+
+describe("lançamento fora do calendário: a subconsulta dá NULL e a gravação não apaga chave", () => {
+  // Calendário do dia 11 criado de 01/09/2026 a 31/12/2026: começa em 11/08/2026 e termina em 10/01/2027.
+  async function larComCalendario(): Promise<{
+    householdId: string;
+    db: Db;
+    contaId: string;
+    itemId: string;
+  }> {
+    const { householdId, connectionId } = await criarLar(11);
+    const itemId = await criarItem(connectionId);
+    const contaId = await criarConta(itemId);
+    const db = dbComMedidor();
+    await ensureCalendar(db, householdId, "2026-09-01", "2026-12-31");
+    return { householdId, db, contaId, itemId };
+  }
+
+  const linhaDeConta = (
+    lar: { householdId: string; contaId: string; itemId: string },
+    id: string,
+    localDate: string,
+  ): LinhaSemente => ({
+    household: lar.householdId,
+    item: lar.itemId,
+    conta: lar.contaId,
+    cartao: null,
+    fatura: null,
+    movement: "compra",
+    localDate,
+    amount: -100,
+    id,
+  });
+
+  it("(i) lançamento depois do fim do calendário fica com cycle_key NULL, e a gravação não escreve nada", async () => {
+    const lar = await larComCalendario();
+    const id = "[TEST] depois-do-fim";
+    // O último ciclo é de 12/12/2026 a 10/01/2027: 20/01/2027 passa do fim, mas a subconsulta acharia o último ciclo que começa antes.
+    await inserirLinhas(lar.db, [linhaDeConta(lar, id, "2027-01-20")]);
+
+    const medidor = newMeter();
+    const gravador = dbComMedidor(medidor);
+    await gravador.$client.batch(assignCycleKeysStmts(gravador, lar.householdId, { ids: [id] }));
+
+    expect(await cicloDe(id)).toBeNull();
+    expect(medidor.rowsWritten).toBe(0);
+  });
+
+  it("(ii) lançamento antes do começo do calendário também fica com cycle_key NULL, e a gravação não escreve nada", async () => {
+    const lar = await larComCalendario();
+    const id = "[TEST] antes-do-inicio";
+    // O primeiro ciclo começa em 11/08/2026: 20/07/2026 é antes, e nenhum ciclo começa até essa data.
+    await inserirLinhas(lar.db, [linhaDeConta(lar, id, "2026-07-20")]);
+
+    const medidor = newMeter();
+    const gravador = dbComMedidor(medidor);
+    await gravador.$client.batch(assignCycleKeysStmts(gravador, lar.householdId, { ids: [id] }));
+
+    expect(await cicloDe(id)).toBeNull();
+    expect(medidor.rowsWritten).toBe(0);
+  });
+
+  it("(iii) lançamento fora do calendário que já tem chave guarda a chave: a gravação não a troca por NULL", async () => {
+    const lar = await larComCalendario();
+    const depois = "[TEST] fora-depois";
+    const antes = "[TEST] fora-antes";
+    await inserirLinhas(lar.db, [
+      linhaDeConta(lar, depois, "2027-01-20"),
+      linhaDeConta(lar, antes, "2026-07-20"),
+    ]);
+    // Chaves que já estavam gravadas, de um calendário anterior que cobria essas datas.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE transactions SET cycle_key = ? WHERE id = ?").bind("2026-12", depois),
+      env.DB.prepare("UPDATE transactions SET cycle_key = ? WHERE id = ?").bind("2026-08", antes),
+    ]);
+
+    const medidor = newMeter();
+    const gravador = dbComMedidor(medidor);
+    await gravador.$client.batch(assignCycleKeysStmts(gravador, lar.householdId, { ids: [depois, antes] }));
+
+    expect(await cicloDe(depois)).toBe("2026-12");
+    expect(await cicloDe(antes)).toBe("2026-08");
+    expect(medidor.rowsWritten).toBe(0);
   });
 });

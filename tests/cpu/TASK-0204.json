@@ -1,0 +1,25 @@
+{
+  "task": "TASK-0204",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES ('cpu-0204-primeiro-acesso', NULL, 'primeiro_acesso', 'cpu-0204-codigo-ja-usado', '2026-11-10T00:00:00.000Z', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')"
+  ],
+  "requests": [
+    {
+      "name": "POST /api/dev/sync-slice (fatia de transações com 200 linhas, Meu Pluggy falso em memória)",
+      "method": "POST",
+      "path": "/api/dev/sync-slice",
+      "headers": { "cookie": "{sessao}" },
+      "body": { "rows": 200, "fase": "transacoes" }
+    },
+    {
+      "name": "GET /api/sync/status (importação em andamento e recentes)",
+      "method": "GET",
+      "path": "/api/sync/status",
+      "headers": { "cookie": "{sessao}" }
+    }
+  ]
+}

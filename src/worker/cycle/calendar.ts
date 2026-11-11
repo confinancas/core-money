@@ -16,21 +16,31 @@ type LinhaDoCiclo = { key: string; starts_on: string; ends_on: string };
 const SQL_CICLOS = "SELECT key, starts_on, ends_on FROM cycles WHERE household_id = ? ORDER BY starts_on";
 const SQL_DIA_DO_LAR = "SELECT cycle_start_day FROM households WHERE id = ?";
 
-const ciclosDoBanco = (linhas: readonly unknown[]): Ciclo[] =>
+export const ciclosDoBanco = (linhas: readonly unknown[]): Ciclo[] =>
   (linhas as LinhaDoCiclo[]).map((linha) => ({
     key: linha.key,
     startsOn: linha.starts_on,
     endsOn: linha.ends_on,
   }));
 
-function leituraCalendarioStmts(db: Db, householdId: string): D1PreparedStatement[] {
+// Duas leituras (calendário e dia de início do lar) que podem entrar em qualquer db.batch do lar.
+export function leituraCalendarioStmts(db: Db, householdId: string): D1PreparedStatement[] {
   return [
     db.$client.prepare(SQL_CICLOS).bind(householdId),
     db.$client.prepare(SQL_DIA_DO_LAR).bind(householdId),
   ];
 }
 
-function insertCyclesStmts(
+// Interpreta o resultado das duas leituras de leituraCalendarioStmts (na ordem dela).
+export function calendarioDaLeitura(
+  calendario: D1Result<unknown> | undefined,
+  lar: D1Result<unknown> | undefined,
+): { ciclos: Ciclo[]; diaDoLar: number | null } {
+  const linha = lar?.results[0] as { cycle_start_day: number } | undefined;
+  return { ciclos: ciclosDoBanco(calendario?.results ?? []), diaDoLar: linha?.cycle_start_day ?? null };
+}
+
+export function insertCyclesStmts(
   db: Db,
   householdId: string,
   ciclos: readonly Ciclo[],
@@ -50,8 +60,7 @@ async function lerCalendarioEDia(
   householdId: string,
 ): Promise<{ ciclos: Ciclo[]; diaDoLar: number | null }> {
   const [calendario, lar] = await db.$client.batch(leituraCalendarioStmts(db, householdId));
-  const linha = lar?.results[0] as { cycle_start_day: number } | undefined;
-  return { ciclos: ciclosDoBanco(calendario?.results ?? []), diaDoLar: linha?.cycle_start_day ?? null };
+  return calendarioDaLeitura(calendario, lar);
 }
 
 export async function loadCalendar(db: Db, householdId: string): Promise<Ciclo[]> {
@@ -106,23 +115,31 @@ export async function rebuildFutureCalendar(
 }
 
 // Passo 2 do afterIngest: garante o calendário que cobre as datas decididas pelos lançamentos e pelas faturas dos
-// cartões tocados, e atribui o ciclo dos ids. Uma ida ao D1 se o calendário já cobre (leitura e escrita no mesmo
-// batch); duas se precisa criar ciclos. Os UPDATE do primeiro batch são idempotentes e não apagam chaves existentes.
+// ids, e atribui o ciclo deles. Uma ida ao D1 se o calendário já cobre (leitura e escrita no mesmo batch); duas se
+// precisa criar ciclos. Os UPDATE do primeiro batch são idempotentes e não apagam chaves existentes.
 export async function assignCycleKeys(db: Db, householdId: string, ids: readonly string[]): Promise<void> {
   const unicos = [...new Set(ids)];
   if (unicos.length === 0) return;
-  const escopo: EscopoDeCiclo = { ids: unicos };
+  await assignCycleKeysDoEscopo(db, householdId, { ids: unicos });
+}
 
+// O mesmo passo para um escopo qualquer (ids, cartões ou o lar). Quem chama com cardIds é a reavaliação do cartão
+// inteiro (after-ingest.ts), que roda uma vez por execução depois das faturas.
+export async function assignCycleKeysDoEscopo(
+  db: Db,
+  householdId: string,
+  escopo: EscopoDeCiclo,
+): Promise<void> {
   const [calendario, lar, faixa] = await db.$client.batch([
     ...leituraCalendarioStmts(db, householdId),
     faixaDeDatasStmts(db, householdId, escopo),
     ...assignCycleKeysStmts(db, householdId, escopo),
   ]);
   const { minimo, maximo } = (faixa?.results[0] ?? {}) as { minimo?: unknown; maximo?: unknown };
-  const diaDoLar = (lar?.results[0] as { cycle_start_day?: number } | undefined)?.cycle_start_day;
-  if (typeof minimo !== "string" || typeof maximo !== "string" || diaDoLar === undefined) return;
+  const { ciclos, diaDoLar } = calendarioDaLeitura(calendario, lar);
+  if (typeof minimo !== "string" || typeof maximo !== "string" || diaDoLar === null) return;
 
-  const faltam = ciclosQueFaltam(ciclosDoBanco(calendario?.results ?? []), diaDoLar, minimo, maximo);
+  const faltam = ciclosQueFaltam(ciclos, diaDoLar, minimo, maximo);
   if (faltam.length === 0) return;
   await db.$client.batch([
     ...insertCyclesStmts(db, householdId, faltam, true),

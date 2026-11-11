@@ -2,10 +2,13 @@
 // nos quatro passos sai daqui, e o teste de unidade confere cada texto da spec.
 import { brand } from "../../../../shared/brand";
 import { type BankItemDto, type ConnectionDto, connectionLabelSchema } from "../../../../shared/pluggy-api";
+import { ApiError, mensagemDoErro } from "../../../lib/api";
 
 export const TITULOS_DOS_PASSOS = ["Nome da conexão", "Chaves da API", "Escolher bancos", "Pronto"] as const;
 export const TOTAL_DE_PASSOS = 4;
 export type Passo = 1 | 2 | 3 | 4;
+
+export type CamposDasChaves = { clientId: string; clientSecret: string };
 
 // "Passo N de 4 · <nome>", o rótulo do topo e da barra.
 export function legendaDoPasso(passo: Passo): string {
@@ -28,9 +31,43 @@ export function erroDoRotulo(texto: string): string | null {
   return resultado.success ? null : (resultado.error.issues[0]?.message ?? "Confira o nome.");
 }
 
-// "Continuar" do passo 2 só habilita depois do teste; editar um campo desfaz o teste (quem chama zera `testado`).
+// "Continuar" do passo 2 só habilita depois do teste; editar um campo desfaz o teste (TASK-0203).
 export function podeContinuarDasChaves(testado: boolean, enviando: boolean): boolean {
   return testado && !enviando;
+}
+
+// Editar um campo das chaves: o valor novo entra e o teste anterior deixa de valer.
+export function aoEditarChave(
+  atuais: CamposDasChaves,
+  campo: keyof CamposDasChaves,
+  valor: string,
+): { chaves: CamposDasChaves; testado: false } {
+  return { chaves: { ...atuais, [campo]: valor }, testado: false };
+}
+
+// Mensagem de um erro da API para a tela. Com campos (400 validacao), a primeira frase deles, que diz o que corrigir
+// (TASK-0203, achado 2); sem campos, a mensagem da convenção, ou a padrão.
+export function textoDoErroDeConexao(falha: unknown): string {
+  if (falha instanceof ApiError && falha.fields) {
+    const primeira = Object.values(falha.fields)[0];
+    if (primeira) return primeira;
+  }
+  return mensagemDoErro(falha);
+}
+
+// Para onde a tela vai quando um pedido de conexão falha (TASK-0203, achados 2 e 3). "onde" diz em que parte do passo
+// o aviso aparece; "trocar" liga o modo de troca das chaves, só na conta que já existe.
+export type DestinoDoErro = { passo: Passo; trocar: boolean; onde: "nome" | "chaves" | "bancos" };
+
+export function destinoDoErroDeConexao(entrada: { codigo: string; temConexao: boolean }): DestinoDoErro {
+  const { codigo, temConexao } = entrada;
+  if (codigo === "rotulo_em_uso") return { passo: 1, trocar: false, onde: "nome" };
+  // Outro banco com o Meu Pluggy fora: fica nos bancos, com o aviso. As chaves não são o problema.
+  if (codigo === "pluggy_indisponivel" && temConexao) return { passo: 3, trocar: false, onde: "bancos" };
+  if (codigo === "chaves_invalidas" || codigo === "pluggy_indisponivel") {
+    return { passo: 2, trocar: temConexao, onde: "chaves" };
+  }
+  return { passo: 3, trocar: false, onde: "bancos" };
 }
 
 // Rótulo do botão de conectar no passo 3.

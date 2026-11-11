@@ -50,10 +50,15 @@ describe("despachante: uma tarefa pesada por execução", () => {
     expect(erro.mock.calls.map((c) => String(c[0])).join("\n")).toContain("cron pesada-que-falha: falhou");
   });
 
-  it("a instalação roda a cotação (leve, antes) e a categorização (pesada)", () => {
-    expect(TAREFAS_DO_CRON.map((t) => t.nome)).toEqual(["cotacao-dolar", "categorizacao"]);
-    expect(TAREFAS_DO_CRON.filter((t) => t.pesada)).toHaveLength(1);
-    expect(TAREFAS_DO_CRON[0]?.pesada).toBe(false);
+  it("a instalação roda as leves (importação e cotação) antes da categorização, a única tarefa pesada", () => {
+    // A TASK-0204 acrescenta a retomada e a atribuição de ciclos, e a TASK-0902 a cotação do dólar, todas leves.
+    expect(TAREFAS_DO_CRON.map((t) => t.nome)).toEqual([
+      "retomar-importacoes",
+      "atribuir-ciclos",
+      "cotacao-dolar",
+      "categorizacao",
+    ]);
+    expect(TAREFAS_DO_CRON.filter((t) => t.pesada).map((t) => t.nome)).toEqual(["categorizacao"]);
   });
 });
 

@@ -2,11 +2,11 @@
 // da sessão. Cada erro sai pela convenção (apiError). Nenhuma resposta leva Client ID, Client Secret nem apiKey.
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { z } from "zod";
+import type { z } from "zod";
 import {
   connectionLabelSchema,
-  itemDoPedidoSchema,
   itemIdsSchema,
+  itensDoPedidoSchema,
   MENSAGEM_BANCO_JA_CONECTADO,
   MENSAGEM_CHAVES_ILEGIVEIS,
   MENSAGEM_CHAVES_RECUSADAS,
@@ -172,7 +172,7 @@ export function pluggyConnectionsRoutes(
 
     const rotulo = connectionLabelSchema.safeParse(corpo.label);
     const chaves = chavesDoCorpo(corpo);
-    const itens = z.array(itemDoPedidoSchema).min(1).max(5).safeParse(corpo.items);
+    const itens = itensDoPedidoSchema.safeParse(corpo.items);
     const campos: Record<string, string> = {};
     if (!rotulo.success) campos.label = rotulo.error.issues[0]?.message ?? "Confira o nome.";
     if (!chaves.ok) Object.assign(campos, chaves.campos);
@@ -198,7 +198,7 @@ export function pluggyConnectionsRoutes(
   rotas.post("/:id/bank-items", async (c) => {
     const corpo = await lerCorpo(c);
     if (corpo === null) return respondeDadosInvalidos(c);
-    const itens = z.array(itemDoPedidoSchema).min(1).max(5).safeParse(corpo.items);
+    const itens = itensDoPedidoSchema.safeParse(corpo.items);
     if (!itens.success)
       return respondeValidacao(c, { items: itens.error.issues[0]?.message ?? "Escolha de 1 a 5 bancos." });
     if (!chaveMestraValida(c.env.MASTER_KEY)) return respondeChaveMestraAusente(c);

@@ -82,6 +82,10 @@ export type EstadoFalso = {
   migracoesAplicadas: number;
   convites: Invite[];
   membros: Membro[];
+  // Filas que já existem na conta (TASK-0204): `queues info` responde a elas.
+  filas: string[];
+  // O que `queues create` responde: cria, diz que a fila já existe, ou falha de outro jeito.
+  criacaoDaFila: "funciona" | "ja_existe" | "falha";
   chamadas: Chamada[];
 };
 
@@ -99,6 +103,8 @@ export function estadoInicial(parcial: Partial<EstadoFalso> = {}): EstadoFalso {
     migracoesAplicadas: 0,
     convites: [],
     membros: [],
+    filas: [],
+    criacaoDaFila: "funciona",
     chamadas: [],
     ...parcial,
   };
@@ -221,6 +227,19 @@ export function criaCloudflareFalso(estado: EstadoFalso): Execucao {
     if (primeiro === "d1" && segundo === "create") {
       estado.bancos.push({ nome: args[2], uuid: "11111111-2222-3333-4444-555555555555" });
       return resposta(0, "Successfully created DB");
+    }
+    // Fila da importação (TASK-0204): `info` sai com zero só se a fila existe; `create` segue estado.criacaoDaFila.
+    if (primeiro === "queues" && segundo === "info") {
+      if (estado.filas.includes(args[2])) return resposta(0, `Queue ${args[2]}\nQueue ID: fila-de-teste`);
+      return resposta(1, "", `Queue "${args[2]}" not found (código de erro 11000)`);
+    }
+    if (primeiro === "queues" && segundo === "create") {
+      if (estado.criacaoDaFila === "ja_existe") {
+        return resposta(1, "", `A queue with this name already exists (código de erro 11002)`);
+      }
+      if (estado.criacaoDaFila === "falha") return resposta(1, "", "erro simulado ao criar a fila");
+      estado.filas.push(args[2]);
+      return resposta(0, `Created queue ${args[2]}`);
     }
     if (primeiro === "d1" && segundo === "migrations") {
       estado.migracoesAplicadas += 1;
