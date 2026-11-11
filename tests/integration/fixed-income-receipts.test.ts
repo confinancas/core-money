@@ -266,7 +266,7 @@ describe("cenário 12: dólar com 0,00 trazido", () => {
       moeda: "USD",
       valor: 200000,
       forma: "partes",
-      texto: "HIGLOBE",
+      texto: "[TEST] PAGADORA EXTERIOR",
     });
 
     const primeiro = await chamar(app, "POST", `/api/fixed-incomes/${rendaId}/receipts`, {
@@ -317,10 +317,17 @@ describe("cenário 14: recasar pelo texto", () => {
       forma: "partes",
       texto: "OUTRO",
     });
-    const transacao = await entrarPeloExtrato(lar, "HIGLOBE PAGAMENTO", 400000, "2026-11-05");
+    const transacao = await entrarPeloExtrato(
+      lar,
+      "[TEST] PAGADORA EXTERIOR PAGAMENTO",
+      400000,
+      "2026-11-05",
+    );
     expect((await linhaDaTransacao(transacao))?.income_kind).toBeNull();
 
-    const casou = await chamar(app, "PATCH", `/api/fixed-incomes/${rendaId}`, { statementText: "HIGLOBE" });
+    const casou = await chamar(app, "PATCH", `/api/fixed-incomes/${rendaId}`, {
+      statementText: "[TEST] PAGADORA EXTERIOR",
+    });
     expect(casou.status).toBe(200);
     expect(await linhaDaTransacao(transacao)).toMatchObject({
       income_kind: "parte_salario",
@@ -459,5 +466,365 @@ describe("cenário 18: outro lar e sessão", () => {
 
     const semSessao = await chamar(createApp({}), "GET", `/api/cycle/income?cycleKey=${CICLO_DE_HOJE}`);
     expect(semSessao.status).toBe(401);
+  });
+});
+
+// Rodada 2 (TASK-0902): a avaliação da Fable e as decisões do Opus. Cada teste falha sem a correção do item.
+const linhaDoRecebimentoDaTransacao = (transacao: string) =>
+  env.DB.prepare("SELECT COUNT(*) AS total FROM fixed_income_receipts WHERE transaction_id = ?")
+    .bind(transacao)
+    .first<{ total: number }>();
+
+describe("rodada 2: o recasamento não mexe no que uma pessoa ou uma regra confirmou (F2)", () => {
+  it("mudar o texto da renda não apaga a parte confirmada por uma pessoa", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, {
+      nome: "[TEST] Salário",
+      valor: 500000,
+      forma: "auto",
+      texto: "SALARIO",
+    });
+    const transacao = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 200000,
+      descricao: "[TEST] PIX DE AMIGO",
+      localDate: "2026-11-05",
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE transactions SET cycle_key = ?, income_kind = 'parte_salario', fixed_income_id = ?, categorized_by = 'regra' WHERE id = ?",
+      ).bind(CICLO_DE_HOJE, rendaId, transacao),
+      env.DB.prepare(
+        "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, confirmed_by) VALUES (?, ?, ?, ?, 200000, '2026-11-05', 'pessoa')",
+      ).bind(crypto.randomUUID(), rendaId, CICLO_DE_HOJE, transacao),
+    ]);
+
+    const trocou = await chamar(app, "PATCH", `/api/fixed-incomes/${rendaId}`, { statementText: "OUTRO" });
+    expect(trocou.status).toBe(200);
+    expect(await linhaDoRecebimentoDaTransacao(transacao)).toEqual({ total: 1 });
+    expect(await linhaDaTransacao(transacao)).toMatchObject({
+      income_kind: "parte_salario",
+      fixed_income_id: rendaId,
+    });
+  });
+
+  it("excluir a renda não apaga a parte confirmada por uma regra", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, {
+      nome: "[TEST] Salário",
+      valor: 500000,
+      forma: "auto",
+      texto: "SALARIO",
+    });
+    const transacao = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 200000,
+      descricao: "[TEST] PIX DE AMIGO",
+      localDate: "2026-11-05",
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE transactions SET cycle_key = ?, income_kind = 'parte_salario', fixed_income_id = ?, categorized_by = 'regra' WHERE id = ?",
+      ).bind(CICLO_DE_HOJE, rendaId, transacao),
+      env.DB.prepare(
+        "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, confirmed_by) VALUES (?, ?, ?, ?, 200000, '2026-11-05', 'regra')",
+      ).bind(crypto.randomUUID(), rendaId, CICLO_DE_HOJE, transacao),
+    ]);
+
+    expect((await chamar(app, "DELETE", `/api/fixed-incomes/${rendaId}`)).status).toBe(204);
+    expect(await linhaDoRecebimentoDaTransacao(transacao)).toEqual({ total: 1 });
+  });
+});
+
+describe("rodada 2: o recasamento garante o calendário do dia (F3)", () => {
+  it("num lar sem o ciclo de hoje no calendário, mudar o texto casa a entrada do ciclo atual", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, {
+      nome: "[TEST] Salário",
+      valor: 500000,
+      forma: "auto",
+      texto: "SALARI0",
+    });
+    const transacao = await entrarPeloExtrato(lar, "SALARIO EMPRESA X", 500000, "2026-11-05");
+    expect(await linhaDaTransacao(transacao)).toMatchObject({ income_kind: null });
+    await env.DB.prepare("DELETE FROM cycles WHERE household_id = ? AND key = ?")
+      .bind(lar.householdId, CICLO_DE_HOJE)
+      .run();
+
+    const trocou = await chamar(app, "PATCH", `/api/fixed-incomes/${rendaId}`, { statementText: "SALARIO" });
+    expect(trocou.status).toBe(200);
+    expect(await linhaDaTransacao(transacao)).toMatchObject({
+      income_kind: "parte_salario",
+      fixed_income_id: rendaId,
+    });
+  });
+});
+
+describe("rodada 2: a entrada casada não entra em pendentes nem na fila da IA (F6)", () => {
+  it("processNewTransactions tira a entrada casada de pending e não a enfileira", async () => {
+    const lar = await criarLar();
+    await criarRenda(lar, { nome: "[TEST] Salário", valor: 500000, forma: "auto", texto: "SALARIO" });
+    const transacao = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 500000,
+      descricao: "SALARIO EMPRESA X",
+      localDate: "2026-11-05",
+    });
+    await env.DB.prepare("UPDATE transactions SET cycle_key = ? WHERE id = ?")
+      .bind(CICLO_DE_HOJE, transacao)
+      .run();
+
+    const resultado = await processNewTransactions(
+      createDb(env.DB, newMeter()),
+      lar.householdId,
+      [transacao],
+      AGORA,
+    );
+    expect(resultado.pending).not.toContain(transacao);
+    expect(await linhaDaTransacao(transacao)).toMatchObject({ income_kind: "parte_salario" });
+    expect(
+      await contar("SELECT COUNT(*) AS total FROM categorization_queue WHERE transaction_id = ?", transacao),
+    ).toBe(0);
+  });
+});
+
+describe("rodada 2: um lar não mexe no recebimento de outro (F6, cenário 18)", () => {
+  it("o DELETE de recebimento manual do lar A, pelo lar B, dá 404 e a linha fica; o lar B não soma nada do lar A", async () => {
+    const lar = await criarLar();
+    const outro = await criarOutroLar();
+    const rendaId = await criarRenda(lar, { nome: "[TEST] Pró-labore", valor: 500000, forma: "manual" });
+    const criado = await chamar(appDoLar(lar), "POST", `/api/fixed-incomes/${rendaId}/receipts`, {
+      receivedOn: "2026-11-05",
+      amountCents: 500000,
+    });
+    expect(criado.status).toBe(201);
+    const receitaId = criado.corpo.receipt.id as string;
+
+    const apagado = await chamar(
+      appDoLar(outro),
+      "DELETE",
+      `/api/fixed-incomes/${rendaId}/receipts/${receitaId}`,
+    );
+    expect(apagado.status).toBe(404);
+    expect(await contar("SELECT COUNT(*) AS total FROM fixed_income_receipts WHERE id = ?", receitaId)).toBe(
+      1,
+    );
+
+    const visto = await chamar(appDoLar(outro), "GET", `/api/cycle/income?cycleKey=${CICLO_DE_HOJE}`);
+    expect(visto.corpo.brazilSalariesCents).toBe(0);
+    expect(visto.corpo.fixedIncomes).toEqual([]);
+  });
+});
+
+describe("rodada 2: a janela do recasamento é o ciclo atual e o anterior (F6)", () => {
+  it("mudar o texto solta a parte do ciclo anterior e deixa a de dois ciclos atrás", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, {
+      nome: "[TEST] Salário",
+      valor: 500000,
+      forma: "auto",
+      texto: "SALARIO",
+    });
+    // Ciclo anterior (2026-09): a entrada de 05/10.
+    const anterior = await entrarPeloExtrato(lar, "SALARIO EMPRESA X", 300000, "2026-10-05");
+    // Dois ciclos atrás (2026-08): uma entrada ligada à renda pelo extrato, de 05/09.
+    const antigo = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 200000,
+      descricao: "SALARIO ANTIGO",
+      localDate: "2026-09-05",
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE transactions SET cycle_key = '2026-08', income_kind = 'parte_salario', fixed_income_id = ?, categorized_by = 'regra' WHERE id = ?",
+      ).bind(rendaId, antigo),
+      env.DB.prepare(
+        "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, confirmed_by) VALUES (?, ?, '2026-08', ?, 200000, '2026-09-05', 'extrato')",
+      ).bind(crypto.randomUUID(), rendaId, antigo),
+    ]);
+
+    const trocou = await chamar(app, "PATCH", `/api/fixed-incomes/${rendaId}`, { statementText: "OUTRO" });
+    expect(trocou.status).toBe(200);
+    expect(await linhaDaTransacao(anterior)).toEqual({
+      income_kind: null,
+      fixed_income_id: null,
+      categorized_by: null,
+    });
+    expect(await linhaDoRecebimentoDaTransacao(antigo)).toEqual({ total: 1 });
+  });
+});
+
+describe("rodada 2: entrada oculta ou de saída não casa (F6)", () => {
+  it("uma entrada oculta e um valor negativo com o texto da renda não viram recebimento", async () => {
+    const lar = await criarLar();
+    await criarRenda(lar, { nome: "[TEST] Salário", valor: 500000, forma: "auto", texto: "SALARIO" });
+    const oculta = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 500000,
+      descricao: "SALARIO OCULTO",
+      localDate: "2026-11-05",
+    });
+    await env.DB.prepare("UPDATE transactions SET hidden = 1 WHERE id = ?").bind(oculta).run();
+    const saida = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: -500000,
+      descricao: "SALARIO NEGATIVO",
+      localDate: "2026-11-05",
+    });
+    await afterIngest(createDb(env.DB, newMeter()), {
+      householdId: lar.householdId,
+      bankItemId: lar.bankItemId,
+      insertedIds: [oculta, saida],
+      updatedIds: [],
+      now: AGORA,
+    });
+    expect(await linhaDaTransacao(oculta)).toMatchObject({ income_kind: null, fixed_income_id: null });
+    expect(await linhaDaTransacao(saida)).toMatchObject({ income_kind: null, fixed_income_id: null });
+    expect(await contar("SELECT COUNT(*) AS total FROM fixed_income_receipts")).toBe(0);
+  });
+});
+
+describe("rodada 2: a variável não soma transação oculta (F6)", () => {
+  it("um rendimento oculto fica fora da variável do ciclo", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const id = await inserirTransacao(lar, {
+      movement: "rendimento",
+      amountCents: 56870,
+      descricao: "[TEST] RENDIMENTO OCULTO",
+      localDate: "2026-11-05",
+    });
+    await afterIngest(createDb(env.DB, newMeter()), {
+      householdId: lar.householdId,
+      bankItemId: lar.bankItemId,
+      insertedIds: [id],
+      updatedIds: [],
+      now: AGORA,
+    });
+    await env.DB.prepare("UPDATE transactions SET hidden = 1 WHERE id = ?").bind(id).run();
+    const renda = await chamar(app, "GET", `/api/cycle/income?cycleKey=${CICLO_DE_HOJE}`);
+    expect(renda.corpo.variableCents).toBe(0);
+  });
+});
+
+describe("rodada 2: a renda do ciclo segue a transação (item 7)", () => {
+  it("uma parte cuja transação está oculta ou removida sai da renda do ciclo", async () => {
+    const lar = await criarLar();
+    await criarRenda(lar, { nome: "[TEST] Salário", valor: 500000, forma: "auto", texto: "SALARIO" });
+    const transacao = await entrarPeloExtrato(lar, "SALARIO EMPRESA X", 500000, "2026-11-05");
+    const brasil = async () =>
+      (await computeCycleIncome(createDb(env.DB, newMeter()), lar.householdId, CICLO_DE_HOJE))
+        ?.brazilSalariesCents;
+    expect(await brasil()).toBe(500000);
+
+    await env.DB.prepare("UPDATE transactions SET hidden = 1 WHERE id = ?").bind(transacao).run();
+    expect(await brasil()).toBe(0);
+
+    await env.DB.prepare("UPDATE transactions SET hidden = 0, removed_at = ? WHERE id = ?")
+      .bind(AGORA, transacao)
+      .run();
+    expect(await brasil()).toBe(0);
+  });
+
+  it("a renda do ciclo mostra o valor atual da transação, corrigido pelo banco", async () => {
+    const lar = await criarLar();
+    await criarRenda(lar, { nome: "[TEST] Salário", valor: 500000, forma: "auto", texto: "SALARIO" });
+    const transacao = await entrarPeloExtrato(lar, "SALARIO EMPRESA X", 500000, "2026-11-05");
+    await env.DB.prepare("UPDATE transactions SET amount_cents = 450000 WHERE id = ?").bind(transacao).run();
+    const renda = await computeCycleIncome(createDb(env.DB, newMeter()), lar.householdId, CICLO_DE_HOJE);
+    expect(renda?.brazilSalariesCents).toBe(450000);
+  });
+});
+
+describe("rodada 2: o recebimento manual tem o teto da renda fixa (item 8)", () => {
+  it("acima de 100 milhões em reais é recusado com 422; no teto, entra", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, { nome: "[TEST] Pró-labore", valor: 500000, forma: "manual" });
+    const acima = await chamar(app, "POST", `/api/fixed-incomes/${rendaId}/receipts`, {
+      receivedOn: "2026-11-05",
+      amountCents: 10_000_000_001,
+    });
+    expect(acima).toMatchObject({
+      status: 422,
+      corpo: { fields: { amountCents: "Informe quanto entrou." } },
+    });
+    const noTeto = await chamar(app, "POST", `/api/fixed-incomes/${rendaId}/receipts`, {
+      receivedOn: "2026-11-05",
+      amountCents: 10_000_000_000,
+    });
+    expect(noTeto.status).toBe(201);
+  });
+});
+
+describe("rodada 2: o DELETE de recebimento manual só no ciclo atual e no anterior (item 9)", () => {
+  it("um recebimento de dois ciclos atrás dá 422 e fica; o do ciclo anterior se apaga", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, { nome: "[TEST] Pró-labore", valor: 500000, forma: "manual" });
+    const antigo = crypto.randomUUID();
+    const doAnterior = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, confirmed_by) VALUES (?, ?, '2026-08', NULL, 300000, '2026-08-15', 'pessoa')",
+      ).bind(antigo, rendaId),
+      env.DB.prepare(
+        "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, confirmed_by) VALUES (?, ?, '2026-09', NULL, 300000, '2026-10-05', 'pessoa')",
+      ).bind(doAnterior, rendaId),
+    ]);
+
+    const recusado = await chamar(app, "DELETE", `/api/fixed-incomes/${rendaId}/receipts/${antigo}`);
+    expect(recusado.status).toBe(422);
+    expect(await contar("SELECT COUNT(*) AS total FROM fixed_income_receipts WHERE id = ?", antigo)).toBe(1);
+
+    const apagado = await chamar(app, "DELETE", `/api/fixed-incomes/${rendaId}/receipts/${doAnterior}`);
+    expect(apagado.status).toBe(204);
+  });
+});
+
+describe("rodada 2: a parte nova copia a cotação do ciclo (F6)", () => {
+  it("uma parte casada no mesmo ciclo de uma parte com cotação recebe a mesma cotação", async () => {
+    const lar = await criarLar();
+    await criarRenda(lar, { nome: "[TEST] Salário", valor: 500000, forma: "auto", texto: "SALARIO" });
+    const primeira = await entrarPeloExtrato(lar, "SALARIO EMPRESA X", 400000, "2026-11-05");
+    await env.DB.prepare(
+      "UPDATE fixed_income_receipts SET fx_rate = 55000, fx_date = '2026-11-05' WHERE transaction_id = ?",
+    )
+      .bind(primeira)
+      .run();
+    const segunda = await entrarPeloExtrato(lar, "SALARIO EMPRESA X", 200000, "2026-11-06");
+    const linha = await env.DB.prepare(
+      "SELECT fx_rate, fx_date FROM fixed_income_receipts WHERE transaction_id = ?",
+    )
+      .bind(segunda)
+      .first();
+    expect(linha).toEqual({ fx_rate: 55000, fx_date: "2026-11-05" });
+  });
+});
+
+describe("rodada 2: lastFx é a cotação do dia de referência mais novo (F6)", () => {
+  it("entre duas cotações da renda, a da data mais nova", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, {
+      nome: "[TEST] Salário em dólar",
+      moeda: "USD",
+      valor: 200000,
+      forma: "partes",
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, fx_rate, fx_date, confirmed_by) VALUES (?, ?, '2026-09', NULL, 100000, '2026-10-05', 55000, '2026-10-05', 'pessoa')",
+      ).bind(crypto.randomUUID(), rendaId),
+      env.DB.prepare(
+        "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, fx_rate, fx_date, confirmed_by) VALUES (?, ?, '2026-09', NULL, 100000, '2026-10-06', 56000, '2026-10-06', 'pessoa')",
+      ).bind(crypto.randomUUID(), rendaId),
+    ]);
+    const tela = await chamar(app, "GET", "/api/fixed-incomes");
+    expect(tela.corpo.fixedIncomes[0].lastFx).toEqual({ rateE4: 56000, rate: "5,60", date: "2026-10-06" });
   });
 });

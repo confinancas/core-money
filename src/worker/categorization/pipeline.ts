@@ -1,4 +1,4 @@
-import { needsCategory, needsIncome } from "../../shared/categorization";
+import { INCOME_CANDIDATE_MOVEMENTS, needsCategory, needsIncome } from "../../shared/categorization";
 import { COUNTERPARTY_KEY_SQL, chaveVazia, type RuleScope } from "../../shared/rule-match";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { Db } from "../db/client";
@@ -85,13 +85,12 @@ const SQL_LINHAS = `SELECT t.id, t.movement, t.amount_cents, t.card_id, t.catego
 
 // Entrada que pode casar com uma renda pelo extrato: sem renda, visível, não removida e de entrada (TASK-0902). Lê as
 // colunas da própria leitura de linhas, sem outra consulta ao lote.
-const MOVIMENTOS_DE_ENTRADA = ["pix_recebido", "ted_recebida", "outro"];
 const ehCandidataDeEntrada = (linha: LinhaDaImportacao): boolean =>
   linha.amount_cents > 0 &&
   linha.hidden === 0 &&
   linha.removed_at === null &&
   linha.income_kind === null &&
-  MOVIMENTOS_DE_ENTRADA.includes(linha.movement);
+  INCOME_CANDIDATE_MOVEMENTS.includes(linha.movement as (typeof INCOME_CANDIDATE_MOVEMENTS)[number]);
 
 // O ciclo anterior ao de hoje (em São Paulo): o último com ends_on antes de hoje. Uma linha, pela chave do lar.
 const SQL_CICLO_ANTERIOR = `SELECT c.key AS key FROM cycles AS c WHERE c.household_id = ? AND c.ends_on < ?

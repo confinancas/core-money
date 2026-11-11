@@ -17,7 +17,8 @@ const SQL_RENDAS = `SELECT f.id AS id, f.name AS name, f.currency AS currency, f
   ORDER BY f.name COLLATE NOCASE`;
 
 const SQL_RECEBIMENTOS = `SELECT r.id AS id, r.fixed_income_id AS fixed_income_id, r.received_on AS received_on,
-    r.amount_cents AS amount_cents, r.transaction_id AS transaction_id, r.confirmed_by AS confirmed_by,
+    CASE WHEN r.transaction_id IS NULL THEN r.amount_cents ELSE t.amount_cents END AS amount_cents,
+    r.transaction_id AS transaction_id, r.confirmed_by AS confirmed_by,
     r.fx_rate AS fx_rate, r.fx_date AS fx_date, t.movement AS movement, t.custom_name AS custom_name,
     t.counterparty_name AS counterparty_name, bi.institution_name AS card_institution
   FROM fixed_income_receipts AS r
@@ -26,6 +27,7 @@ const SQL_RECEBIMENTOS = `SELECT r.id AS id, r.fixed_income_id AS fixed_income_i
   LEFT JOIN cards AS c ON c.id = t.card_id
   LEFT JOIN bank_items AS bi ON bi.id = c.bank_item_id
   WHERE r.cycle_key = ?
+    AND (r.transaction_id IS NULL OR (t.hidden = 0 AND t.removed_at IS NULL))
   ORDER BY r.received_on, r.id`;
 
 const SQL_VARIAVEL = `SELECT COALESCE(SUM(amount_cents), 0) AS total FROM transactions

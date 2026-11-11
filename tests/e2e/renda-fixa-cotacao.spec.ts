@@ -26,7 +26,7 @@ function semeiaCotacao(): void {
       `DELETE FROM fixed_income_receipts WHERE fixed_income_id IN (SELECT id FROM fixed_incomes WHERE household_id = ${q(LAR)})`,
       `DELETE FROM fixed_incomes WHERE household_id = ${q(LAR)}`,
       `INSERT INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text, kept_usd_is_investment, archived_at) VALUES ('e2e-rfc-clt', ${q(LAR)}, '[TEST] Salário CLT', 'BRL', 500000, 5, 'auto', 'SALARIO', 0, NULL)`,
-      `INSERT INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text, kept_usd_is_investment, archived_at) VALUES ('e2e-rfc-dolar', ${q(LAR)}, '[TEST] Salário em dólar', 'USD', 200000, 5, 'partes', 'HIGLOBE', 1, NULL)`,
+      `INSERT INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text, kept_usd_is_investment, archived_at) VALUES ('e2e-rfc-dolar', ${q(LAR)}, '[TEST] Salário em dólar', 'USD', 200000, 5, 'partes', '[TEST] PAGADORA EXTERIOR', 1, NULL)`,
       `INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, fx_rate, fx_date, confirmed_by) VALUES ('e2e-rfc-r1', 'e2e-rfc-dolar', '2026-09', NULL, 400000, '2026-10-05', 55000, '2026-10-05', 'pessoa')`,
     ].join("; "),
   );
@@ -57,11 +57,18 @@ test.afterAll(() => {
 const previstoGrande = (page: Page) =>
   page.getByText("Previsto por ciclo", { exact: true }).locator("xpath=..").getByRole("img").first();
 
+// Espera a caixa do elemento: depois de trocar a largura, a página se reorganiza por alguns instantes.
 async function caixaDe(alvo: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
   await expect(alvo).toBeVisible();
-  const caixa = await alvo.boundingBox();
-  if (!caixa) throw new Error("O elemento não tem caixa na página.");
-  return caixa;
+  const medida: { caixa: { x: number; y: number; width: number; height: number } | null } = { caixa: null };
+  await expect
+    .poll(async () => {
+      medida.caixa = await alvo.boundingBox();
+      return medida.caixa !== null;
+    })
+    .toBe(true);
+  if (!medida.caixa) throw new Error("O elemento não tem caixa na página.");
+  return medida.caixa;
 }
 
 // A cor do texto é clara (branca, com transparência) quando está sobre o verde. Lê o RGB calculado do navegador.
@@ -117,6 +124,12 @@ for (const { nome, largura } of LARGURAS) {
         exact: true,
       });
       await expect(texto).toBeVisible();
+      await expect(texto.locator("[data-v]")).toHaveCount(2);
+      await expect(texto.locator(".mm-cents")).toHaveCount(2);
+      await page.getByRole("button", { name: "Ocultar valores" }).click();
+      await expect(texto.locator("[data-v]").first()).toHaveCSS("filter", /blur/);
+      await expect(texto).toHaveCSS("filter", "none");
+      await page.getByRole("button", { name: "Mostrar valores" }).click();
       const caixaDoTexto = await caixaDe(texto);
       const caixaDaLinhaSeguinte = await caixaDe(page.getByText("Costuma cair", { exact: true }));
       // A linha de "Costuma cair" começa depois do fim do texto da cotação.
@@ -142,12 +155,26 @@ test("as colunas: celular com o editor abaixo, tablet e desktop com a lista à e
   const titulo = page.getByRole("heading", { name: "Editar", exact: true });
 
   await page.setViewportSize({ width: 390, height: 900 });
+  await expect
+    .poll(async () => {
+      const lista = await caixaDe(botaoDaLista);
+      const editor = await caixaDe(titulo);
+      return editor.y >= lista.y + lista.height - 1;
+    })
+    .toBe(true);
   const listaCelular = await caixaDe(botaoDaLista);
   const editorCelular = await caixaDe(titulo);
   expect(editorCelular.y).toBeGreaterThanOrEqual(listaCelular.y + listaCelular.height - 1);
 
   for (const largura of [834, 1440]) {
     await page.setViewportSize({ width: largura, height: 900 });
+    await expect
+      .poll(async () => {
+        const lista = await caixaDe(botaoDaLista);
+        const editor = await caixaDe(titulo);
+        return editor.x > lista.x + lista.width - 1 && Math.abs(editor.y - lista.y) < 120;
+      })
+      .toBe(true);
     const lista = await caixaDe(botaoDaLista);
     const editor = await caixaDe(titulo);
     expect(editor.x, `editor à direita em ${largura} px`).toBeGreaterThan(lista.x + lista.width - 1);

@@ -116,8 +116,8 @@ const linhasDeCotacao = async (data: string) =>
 describe("cenário 2: dólar em partes com o depósito de 4.000,00", () => {
   it("o cron busca a PTAX de 05/10 (5,50): previsto 11.000,00, trazido 4.000,00, ficou 7.000,00", async () => {
     const lar = await criarLar();
-    await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "HIGLOBE");
-    await entrarPeloExtrato(lar, "HIGLOBE PAGAMENTO", 400000, "2026-10-05");
+    await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PAGAMENTO", 400000, "2026-10-05");
 
     const bcb = bcbFalso(() => ptax([["2026-10-05", 5.5]]));
     const resultado = await fillPendingFxRates(env, deps(bcb.fetch));
@@ -142,9 +142,9 @@ describe("cenário 2: dólar em partes com o depósito de 4.000,00", () => {
 
   it("com o Pix de 2.000,00 ligado à renda: trazido 6.000,00 e ficou 5.000,00", async () => {
     const lar = await criarLar();
-    await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "HIGLOBE");
-    await entrarPeloExtrato(lar, "HIGLOBE PAGAMENTO", 400000, "2026-10-05");
-    await entrarPeloExtrato(lar, "HIGLOBE PIX AMIGO", 200000, "2026-10-06");
+    await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PAGAMENTO", 400000, "2026-10-05");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PIX AMIGO", 200000, "2026-10-06");
     await fillPendingFxRates(env, deps(bcbFalso(() => ptax([["2026-10-05", 5.5]])).fetch));
     const ciclo = await computeCycleIncome(createDb(env.DB, newMeter()), lar.householdId, "2026-09");
     expect(ciclo?.fixedIncomes[0]).toMatchObject({ broughtCents: 600000, keptCents: 500000 });
@@ -155,7 +155,7 @@ describe("cenário 2: dólar em partes com o depósito de 4.000,00", () => {
 describe("cenário 3: fim de semana", () => {
   it("domingo 01/11 usa a cotação de sexta 30/10", async () => {
     const lar = await criarLar();
-    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "HIGLOBE");
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
     const dom = await chamar(appDoLar(lar), "POST", `/api/fixed-incomes/${rendaId}/receipts`, {
       receivedOn: "2026-11-01",
       amountCents: 400000,
@@ -172,7 +172,7 @@ describe("cenário 3: fim de semana", () => {
 describe("cenário 4: antes das 13h", () => {
   it("hoje sem PTAX não grava nada; depois da publicação, grava", async () => {
     const lar = await criarLar();
-    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "HIGLOBE");
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
     await chamar(appDoLar(lar), "POST", `/api/fixed-incomes/${rendaId}/receipts`, {
       receivedOn: "2026-11-10",
       amountCents: 400000,
@@ -193,8 +193,8 @@ describe("cenário 4: antes das 13h", () => {
 describe("cenário 5: Banco Central fora", () => {
   it("erro, timeout ou JSON inválido não gravam nada; a renda conta o trazido; a execução seguinte tenta de novo", async () => {
     const lar = await criarLar();
-    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "HIGLOBE");
-    await entrarPeloExtrato(lar, "HIGLOBE PAGAMENTO", 400000, "2026-10-05");
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PAGAMENTO", 400000, "2026-10-05");
 
     const erro = await fillPendingFxRates(env, deps(bcbFalso(() => new Response("", { status: 500 })).fetch));
     expect(erro.preenchidos).toBe(0);
@@ -224,8 +224,8 @@ describe("cenário 5: Banco Central fora", () => {
 describe("cenário 6: cotação guardada", () => {
   it("com a cotação de 05/10 já em fx_rates, não há chamada ao Banco Central", async () => {
     const lar = await criarLar();
-    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "HIGLOBE");
-    await entrarPeloExtrato(lar, "HIGLOBE PAGAMENTO", 400000, "2026-10-05");
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PAGAMENTO", 400000, "2026-10-05");
     await env.DB.prepare(
       "INSERT INTO fx_rates (currency, date, rate, source) VALUES ('USD', '2026-10-05', 55000, 'bcb_ptax')",
     ).run();
@@ -241,10 +241,10 @@ describe("cenário 6: cotação guardada", () => {
 });
 
 describe("cenário 7: a referência muda", () => {
-  it("um recebimento manual em 03/10 e depois o HIGLOBE de 05/10: a cotação é refeita para 05/10", async () => {
+  it("um recebimento manual em 03/10 e depois o [TEST] PAGADORA EXTERIOR de 05/10: a cotação é refeita para 05/10", async () => {
     const lar = await criarLar();
     const app = appDoLar(lar);
-    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "HIGLOBE");
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
     await chamar(app, "POST", `/api/fixed-incomes/${rendaId}/receipts`, {
       receivedOn: "2026-10-03",
       amountCents: 100000,
@@ -252,7 +252,7 @@ describe("cenário 7: a referência muda", () => {
     await fillPendingFxRates(env, deps(bcbFalso(() => ptax([["2026-10-03", 5.4]])).fetch));
     expect((await cotacoesDoPar(rendaId, "2026-09")).results[0]).toMatchObject({ fx_date: "2026-10-03" });
 
-    await entrarPeloExtrato(lar, "HIGLOBE PAGAMENTO", 400000, "2026-10-05");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PAGAMENTO", 400000, "2026-10-05");
     const bcb = bcbFalso(() => ptax([["2026-10-05", 5.5]]));
     await fillPendingFxRates(env, deps(bcb.fetch));
     const linhas = await cotacoesDoPar(rendaId, "2026-09");
@@ -288,5 +288,99 @@ describe("limite de buscas", () => {
     const resultado = await fillPendingFxRates(env, deps(bcb.fetch));
     expect(resultado).toMatchObject({ pendentes: 3, buscas: 2, preenchidos: 2 });
     expect(bcb.chamadas).toHaveLength(2);
+  });
+});
+
+// Rodada 2 (TASK-0902): o cron lê o par inteiro, só aceita a resposta de sucesso, não busca dia futuro e conta no
+// medidor de quem o chama. O Banco Central é falso.
+describe("rodada 2: o cron lê o par inteiro (F1)", () => {
+  it("um par com uma parte fora da janela de 100 dias não é buscado nem regravado", async () => {
+    const lar = await criarLar();
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PARTE 1", 400000, "2026-10-13");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PARTE 2", 200000, "2026-10-27");
+    // O dia de referência (13/10) já está nas duas partes, com a cotação dele.
+    await env.DB.prepare(
+      "UPDATE fixed_income_receipts SET fx_rate = 55000, fx_date = '2026-10-13' WHERE fixed_income_id = ?",
+    )
+      .bind(rendaId)
+      .run();
+
+    // 22/01/2027: 13/10 saiu da janela de 100 dias; 27/10 ainda está nela.
+    const bcb = bcbFalso(() => ptax([["2026-10-27", 5.8]]));
+    const resultado = await fillPendingFxRates(env, deps(bcb.fetch, new Date("2027-01-22T12:00:00Z")));
+
+    expect(resultado.pendentes).toBe(0);
+    expect(bcb.chamadas).toEqual([]);
+    expect((await cotacoesDoPar(rendaId, "2026-10")).results).toEqual([
+      { fx_rate: 55000, fx_date: "2026-10-13" },
+      { fx_rate: 55000, fx_date: "2026-10-13" },
+    ]);
+  });
+});
+
+describe("rodada 2: a resposta do Banco Central só vale com status 200 (F6)", () => {
+  it("status 404 com um corpo válido não grava cotação", async () => {
+    const lar = await criarLar();
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PAGAMENTO", 400000, "2026-10-05");
+    const bcb = bcbFalso(
+      () =>
+        new Response(
+          JSON.stringify({ value: [{ cotacaoVenda: 5.5, dataHoraCotacao: "2026-10-05 13:00:00.000" }] }),
+          {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+
+    const resultado = await fillPendingFxRates(env, deps(bcb.fetch));
+
+    expect(resultado.preenchidos).toBe(0);
+    expect(await linhasDeCotacao("2026-10-05")).toEqual([]);
+    expect((await cotacoesDoPar(rendaId, "2026-09")).results).toEqual([{ fx_rate: null, fx_date: null }]);
+  });
+});
+
+describe("rodada 2: um recebimento com dia futuro não é buscado (F6)", () => {
+  it("não há par a buscar e o Banco Central não é chamado", async () => {
+    const lar = await criarLar();
+    const rendaId = await criarRendaEmDolar(lar, "[TEST] Salário em dólar", null);
+    await env.DB.prepare(
+      "INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, confirmed_by) VALUES (?, ?, '2026-10', NULL, 400000, '2026-11-11', 'pessoa')",
+    )
+      .bind(crypto.randomUUID(), rendaId)
+      .run();
+
+    const bcb = bcbFalso(() => ptax([["2026-11-11", 5.5]]));
+    const resultado = await fillPendingFxRates(env, deps(bcb.fetch));
+
+    expect(resultado.pendentes).toBe(0);
+    expect(bcb.chamadas).toEqual([]);
+  });
+});
+
+describe("rodada 2: a cotação usa o medidor de quem a chama, com 2 idas ao D1 (F6)", () => {
+  it("com um par pendente são 2 idas: a leitura e a escrita", async () => {
+    const lar = await criarLar();
+    await criarRendaEmDolar(lar, "[TEST] Salário em dólar", "[TEST] PAGADORA EXTERIOR");
+    await entrarPeloExtrato(lar, "[TEST] PAGADORA EXTERIOR PAGAMENTO", 400000, "2026-10-05");
+    const medidor = newMeter();
+    const bcb = bcbFalso(() => ptax([["2026-10-05", 5.5]]));
+
+    await fillPendingFxRates(env, { ...deps(bcb.fetch), db: createDb(env.DB, medidor) });
+
+    expect(medidor.calls).toBe(2);
+  });
+
+  it("sem nada pendente, é 1 ida: só a leitura", async () => {
+    const medidor = newMeter();
+    const bcb = bcbFalso(() => ptax([]));
+
+    await fillPendingFxRates(env, { ...deps(bcb.fetch), db: createDb(env.DB, medidor) });
+
+    expect(bcb.chamadas).toEqual([]);
+    expect(medidor.calls).toBe(1);
   });
 });

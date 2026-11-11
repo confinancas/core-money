@@ -16,12 +16,11 @@ import {
   type FixedIncomeField,
   validateFixedIncomeInput,
 } from "../../../shared/fixed-incomes";
-import { formatFxDate, usdToBrlCents } from "../../../shared/income";
-import { formatMoney } from "../../../shared/money";
 import { formatMoneyInput, parseMoneyInput } from "../../../shared/money-input";
 import { createFixedIncome, deleteFixedIncome, updateFixedIncome } from "../../api/fixed-incomes";
 import { MoneyInput } from "../../components/MoneyInput";
 import { ApiError } from "../../lib/api";
+import { UltimaCotacaoFrase } from "./UltimaCotacaoFrase";
 
 // Editor de uma renda fixa (TASK-0901): a renda nova (renda null) ou a que está selecionada na lista. O pai põe uma
 // chave por renda, então cada seleção começa com os valores dela. A validação é a da shared; o servidor confere de novo.
@@ -181,13 +180,7 @@ export function FixedIncomeEditor({ renda, existentes, aoSalvar, aoExcluir, aoNa
             <p className="mt-1 text-[13px] leading-normal text-ink-2">
               Usa a cotação do dia em que o salário cair. É só referência.
             </p>
-            {renda?.lastFx && renda.currency === "USD" && (
-              <p className="mt-2 text-[13px] leading-normal font-semibold text-ink">
-                Última: {renda.lastFx.rate} em {formatFxDate(renda.lastFx.date)}, então{" "}
-                {formatMoney(renda.amountCents)} dólares ≈{" "}
-                {formatMoney(usdToBrlCents(renda.amountCents, renda.lastFx.rateE4))} reais.
-              </p>
-            )}
+            {renda && <UltimaCotacaoFrase renda={renda} />}
           </div>
         )}
 

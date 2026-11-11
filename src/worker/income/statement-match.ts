@@ -1,4 +1,7 @@
+import { INCOME_CANDIDATE_MOVEMENTS } from "../../shared/categorization";
+import { addDays } from "../../shared/cycle";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
+import { ensureCalendar } from "../cycle/calendar";
 import type { Db } from "../db/client";
 import { type Casamento, casamentosDoExtrato, casaRendaPeloExtrato } from "./casamento-puro";
 import { addTransactionReceiptStmts, removeTransactionReceiptStmt } from "./receipts";
@@ -38,12 +41,15 @@ const SQL_EXTRATO_DA_RENDA = `SELECT r.transaction_id AS transaction_id, r.cycle
     t.original_description AS description, t.local_date AS received_on, t.amount_cents AS amount_cents
   FROM fixed_income_receipts AS r
   JOIN transactions AS t ON t.id = r.transaction_id AND t.household_id = ?
-  WHERE r.fixed_income_id = ? AND r.transaction_id IS NOT NULL`;
+  WHERE r.fixed_income_id = ? AND r.transaction_id IS NOT NULL AND r.confirmed_by = 'extrato'`;
 // Só o que pode mudar de renda: sem renda, ainda, nos últimos 120 dias (o ciclo atual e o anterior cabem nisso).
+// Movimentos de entrada, como a lista compartilhada da classificação (INCOME_CANDIDATE_MOVEMENTS).
+const MOVIMENTOS_SQL = INCOME_CANDIDATE_MOVEMENTS.map((movimento) => `'${movimento}'`).join(", ");
+
 const SQL_NAO_CLASSIFICADAS = `SELECT id, original_description AS description, local_date AS received_on, cycle_key,
     amount_cents FROM transactions
   WHERE household_id = ? AND hidden = 0 AND removed_at IS NULL AND income_kind IS NULL AND amount_cents > 0
-    AND movement IN ('pix_recebido', 'ted_recebida', 'outro') AND local_date >= date(?, '-120 days')`;
+    AND movement IN (${MOVIMENTOS_SQL}) AND local_date >= date(?, '-120 days')`;
 
 type LinhaDeCiclo = { key: string; starts_on: string; ends_on: string };
 type LinhaDoRecebimento = {
@@ -70,6 +76,8 @@ export async function rematchFixedIncome(
   agora: Date,
 ): Promise<void> {
   const hoje = todayInSaoPaulo(agora);
+  // O calendário do dia precisa existir para achar o ciclo atual; num lar que ainda não importou, cria os ciclos.
+  await ensureCalendar(db, householdId, addDays(hoje, -120), hoje);
   const [ciclosLidos, rendasLidas, extratoLido, candidatasLidas] = await db.$client.batch([
     db.$client.prepare(SQL_CICLOS).bind(householdId),
     db.$client.prepare(SQL_RENDAS_DO_EXTRATO).bind(householdId),

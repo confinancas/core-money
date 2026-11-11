@@ -132,7 +132,7 @@ export async function addManualReceipt(
   return "ja_confirmada";
 }
 
-export type ResultadoDaRemocao = "removido" | "extrato" | "nao_encontrada";
+export type ResultadoDaRemocao = "removido" | "extrato" | "nao_encontrada" | "fora_do_ciclo";
 
 // Apaga um recebimento lançado à mão, da renda ativa do lar. O do extrato não se apaga por aqui (muda-se pelo Pix).
 export async function removeManualReceipt(
@@ -140,17 +140,19 @@ export async function removeManualReceipt(
   householdId: string,
   fixedIncomeId: string,
   receiptId: string,
+  ciclosAceitos: readonly string[],
 ): Promise<ResultadoDaRemocao> {
   const linha = await db.$client
     .prepare(
-      `SELECT r.transaction_id AS transaction_id FROM fixed_income_receipts AS r
+      `SELECT r.transaction_id AS transaction_id, r.cycle_key AS cycle_key FROM fixed_income_receipts AS r
          JOIN fixed_incomes AS f ON f.id = r.fixed_income_id
        WHERE r.id = ? AND r.fixed_income_id = ? AND f.household_id = ? AND f.archived_at IS NULL`,
     )
     .bind(receiptId, fixedIncomeId, householdId)
-    .first<{ transaction_id: string | null }>();
+    .first<{ transaction_id: string | null; cycle_key: string }>();
   if (!linha) return "nao_encontrada";
   if (linha.transaction_id !== null) return "extrato";
+  if (!ciclosAceitos.includes(linha.cycle_key)) return "fora_do_ciclo";
 
   const apagada = await db.$client
     .prepare(

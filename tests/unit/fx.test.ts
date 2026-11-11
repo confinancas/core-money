@@ -92,3 +92,16 @@ describe("escolheCotacao (a data)", () => {
     expect(escolheCotacao("2026-11-01", "2026-11-10", new Map([["2026-10-20", 54000]]), true)).toBeNull();
   });
 });
+
+describe("rodada 2: a escolha da cotação nunca usa um dia depois do de referência (F6)", () => {
+  it("na janela de um dia passado, a cotação posterior ao dia de referência não é escolhida", () => {
+    const cotacoes = new Map<string, number>([
+      ["2026-10-30", 54212],
+      ["2026-11-02", 60000],
+    ]);
+    expect(escolheCotacao("2026-11-01", "2026-11-10", cotacoes, true)).toEqual({
+      date: "2026-10-30",
+      rateE4: 54212,
+    });
+  });
+});

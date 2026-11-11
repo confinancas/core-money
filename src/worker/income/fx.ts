@@ -71,7 +71,9 @@ export async function fillPendingFxRates(env: { DB: D1Database }, deps: FxDeps):
            r.confirmed_by AS confirmed_by, r.fx_rate AS fx_rate, r.fx_date AS fx_date
          FROM fixed_income_receipts AS r
          JOIN fixed_incomes AS f ON f.id = r.fixed_income_id AND f.currency = 'USD'
-         WHERE r.received_on >= date(?, '-${HORIZONTE_DE_DIAS} days')`,
+         WHERE (r.fixed_income_id, r.cycle_key) IN (
+           SELECT r2.fixed_income_id, r2.cycle_key FROM fixed_income_receipts AS r2
+           WHERE r2.received_on >= date(?, '-${HORIZONTE_DE_DIAS} days'))`,
       )
       .bind(hoje),
     db.$client

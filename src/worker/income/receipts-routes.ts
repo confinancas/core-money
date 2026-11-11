@@ -1,8 +1,10 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { addDays, cycleForDate, isYmd } from "../../shared/cycle";
+import { FIXED_INCOME_LIMITS } from "../../shared/fixed-incomes";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import { ensureCalendar, loadCalendar } from "../cycle/calendar";
+import type { Db } from "../db/client";
 import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
@@ -32,6 +34,14 @@ async function lerCorpo(c: Context<AppEnv>): Promise<Record<string, unknown> | u
   if (typeof corpo !== "object" || corpo === null || Array.isArray(corpo)) return undefined;
   if (Object.keys(corpo).some((chave) => !CAMPOS_DO_RECEBIMENTO.includes(chave))) return undefined;
   return corpo as Record<string, unknown>;
+}
+
+// Os ciclos que um recebimento manual pode ter: o de hoje e o anterior, pelo calendário já garantido.
+async function ciclosAceitos(db: Db, householdId: string, hoje: string): Promise<string[]> {
+  const calendario = await loadCalendar(db, householdId);
+  const atual = cycleForDate(hoje, calendario);
+  const anterior = atual ? cycleForDate(addDays(atual.startsOn, -1), calendario) : null;
+  return [atual?.key, anterior?.key].filter((chave): chave is string => chave !== undefined);
 }
 
 export function receiptsRoutes(
@@ -87,6 +97,7 @@ export function receiptsRoutes(
       typeof valor === "number" &&
       Number.isSafeInteger(valor) &&
       valor >= 0 &&
+      valor <= FIXED_INCOME_LIMITS.valorMaxCents &&
       (renda.currency !== "BRL" || valor > 0);
     if (!valorValido) campos.amountCents = MENSAGEM_DO_VALOR;
     if (Object.keys(campos).length > 0) return apiError(c, 422, "validacao", undefined, { fields: campos });
@@ -132,13 +143,19 @@ export function receiptsRoutes(
 
   rotas.delete("/fixed-incomes/:id/receipts/:receiptId", requireHousehold(resolveSession), async (c) => {
     const { householdId } = getSession(c);
+    const hoje = todayInSaoPaulo(agora());
+    await ensureCalendar(c.var.db, householdId, addDays(hoje, -DIAS_PARA_TRAS), hoje);
     const resultado = await removeManualReceipt(
       c.var.db,
       householdId,
       c.req.param("id"),
       c.req.param("receiptId"),
+      await ciclosAceitos(c.var.db, householdId, hoje),
     );
     if (resultado === "nao_encontrada") return apiError(c, 404, "nao_encontrada");
+    if (resultado === "fora_do_ciclo") {
+      return apiError(c, 422, "validacao", "Só dá para apagar recebimento deste ciclo ou do anterior.");
+    }
     if (resultado === "extrato") return apiError(c, 409, "recebimento_do_extrato");
     return c.body(null, 204);
   });
