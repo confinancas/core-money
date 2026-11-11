@@ -222,6 +222,9 @@ export function criaCloudflareFalso(estado: EstadoFalso): Execucao {
       estado.bancos.push({ nome: args[2], uuid: "11111111-2222-3333-4444-555555555555" });
       return resposta(0, "Successfully created DB");
     }
+    // Fila da importação (TASK-0204): a lista começa vazia; criar responde com sucesso (o instalador cria se não existe).
+    if (primeiro === "queues" && segundo === "list") return resposta(0, "[]");
+    if (primeiro === "queues" && segundo === "create") return resposta(0, `Created queue ${args[2]}`);
     if (primeiro === "d1" && segundo === "migrations") {
       estado.migracoesAplicadas += 1;
       return resposta(0, "Migrations applied");

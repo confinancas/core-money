@@ -32,7 +32,16 @@ import {
   textoDoBancoJaConectado,
 } from "./conectar/view-model";
 
-type Resultado = { rotulo: string; quantidade: number };
+type Resultado = { rotulo: string; quantidade: number; bancoIds: string[] };
+
+// Mensagem de um erro da API: quando vem com campos (validação), a primeira frase de cada campo (TASK-0203, achado 2).
+function textoDoErro(falha: unknown): string {
+  if (falha instanceof ApiError && falha.fields) {
+    const primeira = Object.values(falha.fields)[0];
+    if (primeira) return primeira;
+  }
+  return mensagemDoErro(falha);
+}
 
 const CHAVES_VAZIAS: ChavesDaTela = { clientId: "", clientSecret: "" };
 const AVISO_DAS_CHAVES_TROCADAS = "Chaves trocadas.";
@@ -224,26 +233,33 @@ export function ConectarPluggy() {
     try {
       if (conexao !== null) {
         await adicionarBancos(conexao.id, itens);
-        setResultado({ rotulo: conexao.label, quantidade: itens.length });
+        setResultado({
+          rotulo: conexao.label,
+          quantidade: itens.length,
+          bancoIds: itens.map((i) => i.itemId),
+        });
       } else {
         await criarConexao({ label: nome.trim(), chaves: chavesLimpas, items: itens });
-        setResultado({ rotulo: nome.trim(), quantidade: itens.length });
+        setResultado({ rotulo: nome.trim(), quantidade: itens.length, bancoIds: itens.map((i) => i.itemId) });
       }
       setPasso(4);
     } catch (falha) {
       const codigo = falha instanceof ApiError ? falha.code : "";
       if (codigo === "rotulo_em_uso") {
-        setErroNome(mensagemDoErro(falha));
+        setErroNome(textoDoErro(falha));
         setPasso(1);
+      } else if (codigo === "pluggy_indisponivel" && conexao !== null) {
+        // Outro banco com o Meu Pluggy fora: fica no passo 3, com o aviso. As chaves não são o problema (achado 3).
+        setErroGeral(textoDoErro(falha));
       } else if (codigo === "chaves_invalidas" || codigo === "pluggy_indisponivel") {
-        setErroChaves(mensagemDoErro(falha));
+        setErroChaves(textoDoErro(falha));
         setTestado(false);
         if (conexao !== null) setTrocando(true);
         setPasso(2);
       } else if (codigo === "banco_ja_conectado") {
         setErroGeral(textoDoBancoJaConectado());
       } else {
-        setErroGeral(mensagemDoErro(falha));
+        setErroGeral(textoDoErro(falha));
       }
     } finally {
       travado.current = false;
@@ -364,6 +380,7 @@ export function ConectarPluggy() {
             <StepPronto
               rotulo={resultado.rotulo}
               quantidade={resultado.quantidade}
+              bancoIds={resultado.bancoIds}
               aoIrParaInicio={() => navegar("/inicio")}
               aoVerEmConfiguracoes={() => navegar("/configuracoes")}
             />

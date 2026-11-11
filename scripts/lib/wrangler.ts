@@ -173,6 +173,7 @@ export type Wrangler = {
   criaBancoD1(nome: string): Promise<void>;
   executaSql(banco: string, sql: string, config?: string): Promise<Linha[]>;
   aplicaMigracoes(banco: string, config: string): Promise<void>;
+  criaFilaSeNaoExiste(nome: string): Promise<void>;
   deploy(config: string, nome: string): Promise<string>;
   listaSegredos(config: string): Promise<string[]>;
   gravaSegredo(nome: string, valor: string, config: string): Promise<void>;
@@ -215,6 +216,16 @@ export function criaWrangler(execucao: Execucao): Wrangler {
     async aplicaMigracoes(banco, config) {
       const resultado = await execucao(["d1", "migrations", "apply", banco, "--remote", "--config", config]);
       if (resultado.codigo !== 0) throw falhaDoComando("d1 migrations apply", resultado);
+    },
+
+    // A fila da importação (TASK-0204): cria se não existe. Antes do deploy, porque o Worker a liga como consumidor.
+    async criaFilaSeNaoExiste(nome) {
+      const lista = await execucao(["queues", "list", "--json"]);
+      if (lista.codigo === 0 && lista.stdout.includes(`"${nome}"`)) return;
+      const criada = await execucao(["queues", "create", nome]);
+      if (criada.codigo !== 0 && !/already exists|já existe/i.test(`${criada.stdout}${criada.stderr}`)) {
+        throw falhaDoComando("queues create", criada);
+      }
     },
 
     async deploy(config, nome) {

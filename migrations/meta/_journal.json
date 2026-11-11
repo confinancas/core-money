@@ -78,6 +78,13 @@
       "when": 1794355891815,
       "tag": "0010_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794373694272,
+      "tag": "0011_sync-queue",
+      "breakpoints": true
     }
   ]
 }

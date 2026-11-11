@@ -100,7 +100,7 @@ export const bankItems = sqliteTable(
   (t) => [check("bank_items_status_ck", sql`${t.status} IN ('ativo', 'instavel', 'acao_necessaria')`)],
 );
 
-// Histórico de atualizações. As colunas da fila (slices, cursor, heartbeat) são da TASK-0204.
+// Histórico de atualizações. As colunas da fila (fatias, cursor, heartbeat, código do erro) são da TASK-0204.
 export const syncRuns = sqliteTable(
   "sync_runs",
   {
@@ -114,6 +114,12 @@ export const syncRuns = sqliteTable(
     status: text("status"),
     newTransactions: integer("new_transactions").notNull().default(0),
     progressPct: integer("progress_pct").notNull().default(0),
+    slicesTotal: integer("slices_total").notNull().default(0),
+    slicesDone: integer("slices_done").notNull().default(0),
+    retried: integer("retried").notNull().default(0),
+    errorCode: text("error_code"),
+    cursorJson: text("cursor_json"),
+    heartbeatAt: text("heartbeat_at"),
   },
   (t) => [
     check("sync_runs_kind_ck", sql`${t.kind} IN ('historico', 'diaria', 'manual')`),
@@ -121,7 +127,9 @@ export const syncRuns = sqliteTable(
       "sync_runs_status_ck",
       sql`${t.status} IS NULL OR ${t.status} IN ('ok', 'instavel', 'repetiu', 'erro')`,
     ),
+    check("sync_runs_retried_ck", sql`${t.retried} IN (0, 1)`),
     index("sync_runs_bank_item_started_idx").on(t.bankItemId, t.startedAt),
+    index("sync_runs_open_idx").on(t.bankItemId, t.finishedAt),
   ],
 );
 
