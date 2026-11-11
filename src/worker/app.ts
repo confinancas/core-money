@@ -7,6 +7,7 @@ import { verificadorReal, type WebAuthnLoginVerifier, type WebAuthnVerifier } fr
 import { categoriesRoutes } from "./categories/routes";
 import { createDb } from "./db/client";
 import { type Meter, newMeter } from "./db/metered-d1";
+import { devRoutes } from "./dev/routes";
 import type { AppEnv } from "./env";
 import type { SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
@@ -31,6 +32,7 @@ import { planoPagoRoutes, usageRoutes } from "./routes/usage";
 import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
 import { regrasAutomaticasRoutes, tiposDeGastoRoutes } from "./spend-types/routes";
+import { syncRoutes } from "./sync/routes";
 import { isD1DailyLimitError } from "./usage/d1-limit-errors";
 
 export type AppOptions = {
@@ -89,6 +91,14 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
     options.onMeter?.(meter, c);
   });
 
+  // Rotas de medição (TASK-0204): só com DEV_ROUTES = "1". Sem a flag, 404 antes de qualquer outra regra.
+  app.use(async (c, next) => {
+    if (c.req.path.startsWith("/api/dev/") && c.env.DEV_ROUTES !== "1") {
+      return apiError(c, 404, "rota_inexistente", "Rota não encontrada.");
+    }
+    return next();
+  });
+
   // Logo depois do medidor: fora do modo pronto, só a configuração inicial responde (TASK-0102).
   app.use(setupGate());
 
@@ -125,6 +135,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
     "/pluggy-connections",
     pluggyConnectionsRoutes(resolverDaSessao, { agora: options.agora, fetch: options.pluggyFetch }),
   );
+  app.route("/sync", syncRoutes(resolverDaSessao, options.agora));
+  app.route("/dev", devRoutes(resolverDaSessao, { fetch: options.pluggyFetch }));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/", recoveryRoutes(webauthn, resolverDaSessao, options.agora));

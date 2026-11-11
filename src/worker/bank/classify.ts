@@ -1,5 +1,6 @@
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { Db } from "../db/client";
+import { temTipoPadrao } from "../spend-types/derive";
 import {
   type ContextoClassificacao,
   classify,
@@ -30,10 +31,13 @@ const SQL_BANCOS_COM_CARTAO = `SELECT DISTINCT bi.institution_name AS nome FROM 
   JOIN pluggy_connections pc ON pc.id = bi.connection_id
   WHERE pc.household_id = ?`;
 
-// Só movement, a marca de renda e a categoria mudam. movement_original guarda o anterior na primeira mudança.
+// Movement, a marca de renda e a categoria mudam. movement_original guarda o anterior na primeira mudança. O tipo padrão
+// (o que a gravação põe numa saída) sai quando o movimento novo não tem tipo; o flag (0 ou 1) é o da atualizacaoDe.
 const SQL_ATUALIZA_LINHA = `UPDATE transactions SET movement = ?,
   movement_original = CASE WHEN movement = ? THEN movement_original ELSE COALESCE(movement_original, movement) END,
-  income_kind = ?, income_subtype = ?, categorized_by = ?, categorized_at = ?
+  income_kind = ?, income_subtype = ?, categorized_by = ?, categorized_at = ?,
+  spend_type = CASE WHEN ? = 1 AND spend_type_source = 'padrao' THEN NULL ELSE spend_type END,
+  spend_type_source = CASE WHEN ? = 1 AND spend_type_source = 'padrao' THEN NULL ELSE spend_type_source END
   WHERE id = ? AND household_id = ?`;
 
 type Janela = { tipo: "ids"; ids: string[] } | { tipo: "faixa"; de: string; ate: string };
@@ -104,6 +108,8 @@ function atualizacaoDe(linha: LinhaClassificavel, decisao: Decisao, agora: strin
     categorizadoPor = decisao.income_kind === null ? null : "regra";
     categorizadoEm = decisao.income_kind === null ? null : agora;
   }
+  // Sem tipo no movimento novo, o tipo padrão da gravação sai (flag 1); com tipo, fica como está (flag 0).
+  const semTipo = temTipoPadrao(decisao.movement, linha.amount_cents) ? 0 : 1;
   return [
     decisao.movement,
     decisao.movement,
@@ -111,6 +117,8 @@ function atualizacaoDe(linha: LinhaClassificavel, decisao: Decisao, agora: strin
     decisao.income_subtype,
     categorizadoPor,
     categorizadoEm,
+    semTipo,
+    semTipo,
   ];
 }
 
@@ -171,26 +179,29 @@ export async function classifyMovements(
   return classificarEGravar(db, householdId, leitura, todayInSaoPaulo(now), now, escrevivel);
 }
 
-// Conciliação das linhas dos últimos 15 dias do lar (fim da atualização, TASK-0204/0205): é o que faz uma entrada de
-// fatura sem par virar pagamento por terceiro depois de 5 dias. Até 2 idas ao D1.
+// Conciliação das linhas de uma janela de 15 dias do lar (fim da atualização, TASK-0204/0205): é o que faz uma entrada
+// de fatura sem par virar pagamento por terceiro depois de 5 dias. `hoje` é o dia real (a regra dos 5 dias conta a
+// partir dele); `fimDaJanela` é o último dia que esta chamada escreve (hoje menos 15 vezes a janela). Sem fimDaJanela,
+// a janela termina em hoje. Até 2 idas ao D1.
 export async function reconcileHousehold(
   db: Db,
   householdId: string,
-  today: string,
+  hoje: string,
   now: string,
+  fimDaJanela: string = hoje,
 ): Promise<number> {
   const leitura = await lerPool(db, householdId, [
     {
       tipo: "faixa",
-      de: somaDias(today, -(DIAS_CONCILIACAO + MARGEM_PAR)),
-      ate: somaDias(today, MARGEM_PAR),
+      de: somaDias(fimDaJanela, -(DIAS_CONCILIACAO + MARGEM_PAR)),
+      ate: somaDias(fimDaJanela, MARGEM_PAR),
     },
   ]);
-  const primeiro = diaNumero(today) - DIAS_CONCILIACAO;
-  const ultimo = diaNumero(today);
+  const primeiro = diaNumero(fimDaJanela) - DIAS_CONCILIACAO;
+  const ultimo = diaNumero(fimDaJanela);
   const escrevivel = (linha: LinhaClassificavel): boolean => {
     const dia = diaNumero(linha.local_date);
     return dia >= primeiro && dia <= ultimo;
   };
-  return classificarEGravar(db, householdId, leitura, today, now, escrevivel);
+  return classificarEGravar(db, householdId, leitura, hoje, now, escrevivel);
 }

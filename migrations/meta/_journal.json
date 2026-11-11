@@ -92,6 +92,13 @@
       "when": 1794381411027,
       "tag": "0012_categorization",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1794400111302,
+      "tag": "0013_sync-queue",
+      "breakpoints": true
     }
   ]
 }

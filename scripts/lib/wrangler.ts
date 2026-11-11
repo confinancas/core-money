@@ -173,6 +173,7 @@ export type Wrangler = {
   criaBancoD1(nome: string): Promise<void>;
   executaSql(banco: string, sql: string, config?: string): Promise<Linha[]>;
   aplicaMigracoes(banco: string, config: string): Promise<void>;
+  criaFilaSeNaoExiste(nome: string): Promise<void>;
   deploy(config: string, nome: string): Promise<string>;
   listaSegredos(config: string): Promise<string[]>;
   gravaSegredo(nome: string, valor: string, config: string): Promise<void>;
@@ -215,6 +216,18 @@ export function criaWrangler(execucao: Execucao): Wrangler {
     async aplicaMigracoes(banco, config) {
       const resultado = await execucao(["d1", "migrations", "apply", banco, "--remote", "--config", config]);
       if (resultado.codigo !== 0) throw falhaDoComando("d1 migrations apply", resultado);
+    },
+
+    // A fila da importação (TASK-0204): cria se não existe. Antes do deploy, porque o Worker a liga como consumidor.
+    // `queues info` sai com código zero só quando a fila existe (o wrangler 4 não tem `queues list --json`). Se a
+    // criação responde que a fila já existe, é sucesso: o instalador roda de novo sem erro.
+    async criaFilaSeNaoExiste(nome) {
+      const info = await execucao(["queues", "info", nome]);
+      if (info.codigo === 0) return;
+      const criada = await execucao(["queues", "create", nome]);
+      if (criada.codigo === 0) return;
+      if (/already exists|já existe/i.test(`${criada.stdout}\n${criada.stderr}`)) return;
+      throw falhaDoComando("queues create", criada);
     },
 
     async deploy(config, nome) {

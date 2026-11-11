@@ -1,10 +1,11 @@
-// Despachante do cron (TASK-0303). Um Cron Trigger só, a cada 5 minutos (plano gratuito). Cada execução roda as tarefas
-// na ordem de prioridade e para na primeira tarefa pesada: a CPU não se mede dentro do Worker, então uma por vez.
-// Hoje a única tarefa é a categorização; a importação e a sincronização acrescentam as suas aqui, antes dela.
+// Despachante do cron (TASK-0303, com as tarefas da importação da TASK-0204). Um Cron Trigger só, a cada 5 minutos (plano
+// gratuito). Cada execução roda as tarefas na ordem de prioridade e para na primeira tarefa pesada: a CPU não se mede
+// dentro do Worker, então uma pesada por vez. As leves vêm antes da pesada na lista; a importação vem antes da categorização.
 
 import { runCategorizationSlice } from "../categorization/cron";
 import type { Db } from "../db/client";
 import type { Env } from "../env";
+import { atribuirCiclos, retomarImportacoes } from "./tarefas";
 
 export type TarefaDoCron = {
   nome: string;
@@ -12,7 +13,11 @@ export type TarefaDoCron = {
   executar: (env: Env, agora: Date, db?: Db) => Promise<unknown>;
 };
 
+// Ordem de prioridade: retomada da importação (leve), atribuição de ciclos (leve, lê zero linhas sem trabalho e no máximo
+// 200 com trabalho), e a categorização (a única pesada).
 export const TAREFAS_DO_CRON: readonly TarefaDoCron[] = [
+  retomarImportacoes,
+  atribuirCiclos,
   {
     nome: "categorizacao",
     pesada: true,

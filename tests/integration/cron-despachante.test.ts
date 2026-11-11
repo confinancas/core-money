@@ -50,9 +50,14 @@ describe("despachante: uma tarefa pesada por execução", () => {
     expect(erro.mock.calls.map((c) => String(c[0])).join("\n")).toContain("cron pesada-que-falha: falhou");
   });
 
-  it("a instalação roda a categorização como a única tarefa pesada", () => {
-    expect(TAREFAS_DO_CRON.map((t) => t.nome)).toEqual(["categorizacao"]);
-    expect(TAREFAS_DO_CRON.filter((t) => t.pesada)).toHaveLength(1);
+  it("a instalação roda a importação (leve) antes da categorização, a única tarefa pesada", () => {
+    // A TASK-0204 acrescenta a retomada e a atribuição de ciclos antes da categorização (ambas leves).
+    expect(TAREFAS_DO_CRON.map((t) => t.nome)).toEqual([
+      "retomar-importacoes",
+      "atribuir-ciclos",
+      "categorizacao",
+    ]);
+    expect(TAREFAS_DO_CRON.filter((t) => t.pesada).map((t) => t.nome)).toEqual(["categorizacao"]);
   });
 });
 

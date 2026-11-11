@@ -56,7 +56,7 @@ describe("datas de calendário", () => {
   });
 
   it("dia de início fora de 1 a 28 é RangeError", () => {
-    for (const dia of [0, 29, 11.5, Number.NaN]) {
+    for (const dia of [0, 29, 31, 11.5, Number.NaN]) {
       expect(() => standardCycle("2026-11-10", dia)).toThrow(RangeError);
       expect(() => cycleAfter("2026-11-10", dia)).toThrow(RangeError);
       expect(() => cycleBefore("2026-11-11", dia)).toThrow(RangeError);
@@ -287,6 +287,53 @@ describe("transições do dia de início", () => {
   });
 });
 
+describe("cycleBefore: mínimo de 15 dias também para trás (decisão de 2026-11-07)", () => {
+  it('cycleBefore("2026-11-01", 28) começa em 28/09 (34 dias), e não em 28/10 (que daria 4 dias)', () => {
+    expect(cycleBefore("2026-11-01", 28)).toEqual({
+      key: "2026-09",
+      startsOn: "2026-09-28",
+      endsOn: "2026-10-31",
+    });
+    expect(totalDays(cycleBefore("2026-11-01", 28))).toBe(34);
+  });
+
+  it("na fronteira: 15 dias fica como está; 14 dias começa um mês antes, no mesmo dia", () => {
+    expect(cycleBefore("2026-11-12", 28)).toEqual({
+      key: "2026-10",
+      startsOn: "2026-10-28",
+      endsOn: "2026-11-11",
+    });
+    expect(totalDays(cycleBefore("2026-11-12", 28))).toBe(15);
+    expect(cycleBefore("2026-11-11", 28)).toEqual({
+      key: "2026-09",
+      startsOn: "2026-09-28",
+      endsOn: "2026-11-10",
+    });
+    expect(totalDays(cycleBefore("2026-11-11", 28))).toBe(44);
+  });
+
+  it("para dia de início de 1, 11 e 28, e todo início seguinte de 2025 a 2029 (as datas varridas incluem os dias 31): dura 15 dias ou mais, termina no dia antes do início seguinte e começa no dia de início", () => {
+    const falhas: string[] = [];
+    for (const dia of [1, 11, 28]) {
+      const diaTexto = String(dia).padStart(2, "0");
+      let inicioSeguinte = INICIO;
+      while (inicioSeguinte <= FIM) {
+        const ciclo = cycleBefore(inicioSeguinte, dia);
+        const dura = totalDays(ciclo);
+        if (dura < 15) falhas.push(`${dia} ${inicioSeguinte}: dura ${dura}`);
+        if (ciclo.endsOn !== addDays(inicioSeguinte, -1))
+          falhas.push(`${dia} ${inicioSeguinte}: fim ${ciclo.endsOn}`);
+        if (ciclo.startsOn.slice(8) !== diaTexto)
+          falhas.push(`${dia} ${inicioSeguinte}: início ${ciclo.startsOn}`);
+        if (ciclo.key !== ciclo.startsOn.slice(0, 7))
+          falhas.push(`${dia} ${inicioSeguinte}: chave ${ciclo.key}`);
+        inicioSeguinte = addDays(inicioSeguinte, 1);
+      }
+    }
+    expect(falhas).toEqual([]);
+  });
+});
+
 const mesmoCiclo = (a: Ciclo, b: Ciclo): boolean =>
   a.key === b.key && a.startsOn === b.startsOn && a.endsOn === b.endsOn;
 
@@ -365,6 +412,40 @@ describe("calendário: busca e falta", () => {
     expect(faltam[1]?.endsOn).toBe("2026-10-10");
     expect(faltam[2]?.startsOn).toBe("2027-01-11");
     expect(() => ciclosQueFaltam(calendario, 11, "2026-12-20", "2026-12-01")).toThrow(RangeError);
+  });
+});
+
+describe("histórico antes do calendário: o dia é o do primeiro ciclo gravado, não o do lar", () => {
+  it("calendário que começa em 11/11 com o lar mudado para 28: os ciclos para trás são contíguos, nenhum tem menos de 15 dias, e todos começam no dia 11", () => {
+    const calendario = encadeados(standardCycle("2026-11-11", 11), 11, "2027-02-28");
+    const faltam = ciclosQueFaltam(calendario, 28, "2026-06-01", "2026-11-30");
+    expect(faltam.map((c) => c.key)).toEqual([
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+    ]);
+    expect(faltam.at(-1)?.endsOn).toBe("2026-11-10");
+    const todos = [...faltam, ...calendario];
+    for (let i = 1; i < todos.length; i++) {
+      expect(todos[i]?.startsOn).toBe(addDays(todos[i - 1]?.endsOn ?? "", 1));
+    }
+    for (const ciclo of faltam) {
+      expect(ciclo.startsOn.slice(8)).toBe("11");
+      expect(totalDays(ciclo)).toBeGreaterThanOrEqual(15);
+    }
+  });
+
+  it("o mesmo vale ao contrário: calendário que começa em 28/11 com o lar em 11 volta com o dia 28", () => {
+    const calendario = encadeados(standardCycle("2026-11-28", 28), 28, "2027-02-28");
+    const faltam = ciclosQueFaltam(calendario, 11, "2026-09-01", "2026-11-30");
+    expect(faltam).toEqual([
+      { key: "2026-08", startsOn: "2026-08-28", endsOn: "2026-09-27" },
+      { key: "2026-09", startsOn: "2026-09-28", endsOn: "2026-10-27" },
+      { key: "2026-10", startsOn: "2026-10-28", endsOn: "2026-11-27" },
+    ]);
   });
 });
 
