@@ -1,6 +1,7 @@
 // Fila Para categorizar (TASK-0304): textos e caminhos puros, compartilhados entre o servidor (que monta o item da
 // API) e a tela. Nada aqui lê o banco. Os textos seguem o protótipo ParaCategorizar.dc.html e a spec da task.
 
+import { type AiConfidence, suggestionText } from "./categorization";
 export const FILTROS_DA_FILA = ["todos", "pix", "cartao", "entradas"] as const;
 export type FiltroDaFila = (typeof FILTROS_DA_FILA)[number];
 
@@ -90,4 +91,47 @@ export const OPCAO_DA_RENDA: Record<string, string> = {
 
 export function rotuloDaOpcaoDeRenda(opcao: string): string | null {
   return ROTULO_DA_OPCAO[opcao] ?? null;
+}
+
+// Subtipo de uma entrada sugerida (sem renda fixa): o rótulo que a tela mostra depois da opção.
+const ROTULO_DO_SUBTIPO: Record<string, string> = {
+  venda: "Venda",
+  rendimento: "Rendimento",
+  cashback: "Cashback",
+  outro: "Outro",
+};
+
+// Texto da sugestão de uma entrada (TASK-0304): "Parte do salário · Salário em dólar · certeza média". A renda fixa
+// (ou o subtipo) vem depois da opção; a certeza, pelo texto da TASK-0303. Sem certeza, não há sugestão.
+export function textoDaSugestaoDeEntrada(entrada: {
+  option: string | null;
+  fixedIncomeName: string | null;
+  incomeSubtype: string | null;
+  confidence: string | null;
+  reason: string | null;
+}): string | null {
+  const opcao = rotuloDaOpcaoDeRenda(entrada.option ?? "");
+  if (opcao === null) return null;
+  const detalhe = entrada.fixedIncomeName?.trim() || ROTULO_DO_SUBTIPO[entrada.incomeSubtype ?? ""] || null;
+  const certeza = suggestionText(entrada.confidence as AiConfidence | null, entrada.reason);
+  return [opcao, detalhe, certeza]
+    .filter((parte): parte is string => parte !== null && parte !== "")
+    .join(" · ");
+}
+
+// Cartão da IA (TASK-0304): sem chave do Claude, a tela só oferece colar a chave; com chave, conta as sugestões.
+export function cartaoDaIA(entrada: {
+  iaAtiva: boolean;
+  sugeridas: number;
+  total: number;
+}): { modo: "sem_ia" } | { modo: "com_ia"; titulo: string; podeAceitar: boolean } {
+  if (!entrada.iaAtiva) return { modo: "sem_ia" };
+  if (entrada.sugeridas > 0) {
+    return {
+      modo: "com_ia",
+      titulo: `A IA sugeriu ${entrada.sugeridas} de ${entrada.total}`,
+      podeAceitar: true,
+    };
+  }
+  return { modo: "com_ia", titulo: "Sem sugestões pendentes", podeAceitar: false };
 }

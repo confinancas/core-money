@@ -140,6 +140,418 @@
           "cpu-pc-100"
         ]
       }
+    },
+    {
+      "name": "POST /api/categorization/undo (100 itens, sem categoria gravada: caminho de skipped)",
+      "method": "POST",
+      "path": "/api/categorization/undo",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "body": {
+        "items": [
+          {
+            "transactionId": "cpu-pc-1",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-2",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-3",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-4",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-5",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-6",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-7",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-8",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-9",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-10",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-11",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-12",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-13",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-14",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-15",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-16",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-17",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-18",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-19",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-20",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-21",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-22",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-23",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-24",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-25",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-26",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-27",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-28",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-29",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-30",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-31",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-32",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-33",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-34",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-35",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-36",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-37",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-38",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-39",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-40",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-41",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-42",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-43",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-44",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-45",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-46",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-47",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-48",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-49",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-50",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-51",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-52",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-53",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-54",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-55",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-56",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-57",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-58",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-59",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-60",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-61",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-62",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-63",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-64",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-65",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-66",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-67",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-68",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-69",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-70",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-71",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-72",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-73",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-74",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-75",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-76",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-77",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-78",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-79",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-80",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-81",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-82",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-83",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-84",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-85",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-86",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-87",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-88",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-89",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-90",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-91",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-92",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-93",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-94",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-95",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-96",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-97",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-98",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-99",
+            "categoryId": "cpu-categoria"
+          },
+          {
+            "transactionId": "cpu-pc-100",
+            "categoryId": "cpu-categoria"
+          }
+        ]
+      }
     }
   ]
 }

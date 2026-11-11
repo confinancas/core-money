@@ -299,6 +299,95 @@ describe("POST /api/categorization/accept", () => {
     expect(linha?.category_id).toBe(LAZER(lar));
   });
 
+  it("cenário 25: entrada com renda ativa conta como sugestão; com a renda excluída, sem sugestão", async () => {
+    const lar = await criarLar();
+    const rendaAtiva = crypto.randomUUID();
+    const rendaExcluida = crypto.randomUUID();
+    for (const [id, nome, arquivada] of [
+      [rendaAtiva, "[TEST] Salário em dólar", null],
+      [rendaExcluida, "[TEST] Renda antiga", AGORA],
+    ] as const) {
+      await env.DB.prepare(
+        "INSERT INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text, kept_usd_is_investment, archived_at) VALUES (?, ?, ?, 'USD', 500000, 5, 'partes', NULL, 1, ?)",
+      )
+        .bind(id, lar.householdId, nome, arquivada)
+        .run();
+    }
+    await pendente(lar, "[TEST] SALARIO DOLAR", {
+      id: "ent-ativa",
+      movement: "pix_recebido",
+      amountCents: 500000,
+      descricao: "[TEST] SALARIO DOLAR",
+    });
+    await pendente(lar, "[TEST] RENDA ANTIGA", {
+      id: "ent-excluida",
+      movement: "pix_recebido",
+      amountCents: 300000,
+      descricao: "[TEST] RENDA ANTIGA",
+    });
+    await env.DB.prepare(
+      "UPDATE transactions SET ai_income_kind = 'parte_salario', ai_income_subtype = NULL, ai_fixed_income_id = ?, ai_confidence = 'media' WHERE id = 'ent-ativa'",
+    )
+      .bind(rendaAtiva)
+      .run();
+    await env.DB.prepare(
+      "UPDATE transactions SET ai_income_kind = 'parte_salario', ai_income_subtype = NULL, ai_fixed_income_id = ?, ai_confidence = 'media' WHERE id = 'ent-excluida'",
+    )
+      .bind(rendaExcluida)
+      .run();
+    const r = await chamar(appDoLar(lar), "GET", "/api/categorization/queue?filtro=entradas");
+    expect((r.corpo.counts as Record<string, number>).entradas).toBe(2);
+    expect((r.corpo.suggested as Record<string, number>).entradas).toBe(1);
+    const itens = r.corpo.items as {
+      transactionId: string;
+      suggestion: { option: string; fixedIncomeName: string } | null;
+    }[];
+    const ativa = itens.find((i) => i.transactionId === "ent-ativa");
+    expect(ativa?.suggestion).toMatchObject({
+      option: "salario",
+      fixedIncomeName: "[TEST] Salário em dólar",
+    });
+    expect(itens.find((i) => i.transactionId === "ent-excluida")?.suggestion).toBeNull();
+  });
+
+  it("desempate da regra em massa: a compra mais recente manda; na mesma data, o maior id", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const chave = establishmentKey("[TEST] DESEMPATE") ?? "";
+    await pendente(lar, "[TEST] DESEMPATE", {
+      id: "tb-antiga",
+      aiCategoryId: SERVICOS(lar),
+      localDate: "2026-11-08",
+    });
+    await pendente(lar, "[TEST] DESEMPATE", {
+      id: "tb-nova",
+      aiCategoryId: LAZER(lar),
+      localDate: "2026-11-10",
+    });
+    await chamar(app, "POST", "/api/categorization/accept", { transactionIds: ["tb-antiga", "tb-nova"] });
+    const porDatas = await env.DB.prepare(
+      "SELECT set_category_id FROM rules WHERE household_id = ? AND match_value = ? AND disabled_at IS NULL",
+    )
+      .bind(lar.householdId, chave)
+      .first<{ set_category_id: string }>();
+    expect(porDatas?.set_category_id).toBe(LAZER(lar));
+
+    const chaveDois = establishmentKey("[TEST] EMPATE") ?? "";
+    await pendente(lar, "[TEST] EMPATE", {
+      id: "te-1",
+      aiCategoryId: SERVICOS(lar),
+      localDate: "2026-11-09",
+    });
+    await pendente(lar, "[TEST] EMPATE", { id: "te-2", aiCategoryId: LAZER(lar), localDate: "2026-11-09" });
+    await chamar(app, "POST", "/api/categorization/accept", { transactionIds: ["te-1", "te-2"] });
+    const porId = await env.DB.prepare(
+      "SELECT set_category_id FROM rules WHERE household_id = ? AND match_value = ? AND disabled_at IS NULL",
+    )
+      .bind(lar.householdId, chaveDois)
+      .first<{ set_category_id: string }>();
+    expect(porId?.set_category_id).toBe(LAZER(lar));
+  });
+
   it("cenário 22: saída sem chave não cria regra e ruleId é nulo", async () => {
     const lar = await criarLar();
     const a = await pendente(lar, "", { aiCategoryId: SERVICOS(lar), movement: "outro", amountCents: -300 });

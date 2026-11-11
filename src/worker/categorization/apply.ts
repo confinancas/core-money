@@ -404,7 +404,11 @@ const cteAceitas = (): string => `aceitas AS (
     WHERE t.household_id = ? AND t.categorized_by = ? AND t.categorized_at = ? AND t.category_id IS NOT NULL
       AND t.movement IN ${MOVIMENTOS_COM_REGRA} AND ${CHAVE_DA_LINHA} IS NOT NULL AND ${CHAVE_DA_LINHA} NOT IN ('', '|')
   ), mais_recente AS (
-    SELECT escopo, chave, categoria, MAX(local_date) AS data FROM aceitas GROUP BY escopo, chave
+    SELECT escopo, chave, categoria, local_date AS data FROM (
+      SELECT escopo, chave, categoria, local_date,
+        ROW_NUMBER() OVER (PARTITION BY escopo, chave ORDER BY local_date DESC, id DESC) AS posicao
+      FROM aceitas
+    ) WHERE posicao = 1
   )`;
 
 // A categoria e a regra de cada linha: a regra ativa da chave da linha (a subconsulta lê o escopo e a chave dela).

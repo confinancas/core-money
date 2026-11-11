@@ -112,3 +112,50 @@ describe("textos de sugestão", () => {
     expect(rotuloDaOpcaoDeRenda("transferencia")).toBe("Transferência entre vocês");
   });
 });
+
+import { cartaoDaIA, textoDaSugestaoDeEntrada } from "../../src/shared/para-categorizar";
+
+describe("sugestão de entrada (cenário 25)", () => {
+  const base = { confidence: "media", reason: null, incomeSubtype: null, fixedIncomeName: null };
+  it("parte do salário com a renda fixa", () => {
+    expect(
+      textoDaSugestaoDeEntrada({ ...base, option: "salario", fixedIncomeName: "Salário em dólar" }),
+    ).toBe("Parte do salário · Salário em dólar · certeza média");
+  });
+  it("renda variável com subtipo venda", () => {
+    expect(textoDaSugestaoDeEntrada({ ...base, option: "variavel", incomeSubtype: "venda" })).toBe(
+      "Renda variável · Venda · certeza média",
+    );
+  });
+  it("reembolso e transferência, sem detalhe", () => {
+    expect(textoDaSugestaoDeEntrada({ ...base, option: "reembolso" })).toBe(
+      "Reembolso de terceiros · certeza média",
+    );
+    expect(textoDaSugestaoDeEntrada({ ...base, option: "transferencia" })).toBe(
+      "Transferência entre vocês · certeza média",
+    );
+  });
+  it("sem opção reconhecida, sem texto", () => {
+    expect(textoDaSugestaoDeEntrada({ ...base, option: "nada" })).toBeNull();
+  });
+});
+
+describe("cartão da IA (cenário 26 e a contagem)", () => {
+  it("sem chave: oferece a chave, sem Aceitar", () => {
+    expect(cartaoDaIA({ iaAtiva: false, sugeridas: 3, total: 5 })).toEqual({ modo: "sem_ia" });
+  });
+  it("com chave e sugestões: conta e permite aceitar", () => {
+    expect(cartaoDaIA({ iaAtiva: true, sugeridas: 5, total: 8 })).toEqual({
+      modo: "com_ia",
+      titulo: "A IA sugeriu 5 de 8",
+      podeAceitar: true,
+    });
+  });
+  it("com chave e sem sugestão pendente", () => {
+    expect(cartaoDaIA({ iaAtiva: true, sugeridas: 0, total: 2 })).toEqual({
+      modo: "com_ia",
+      titulo: "Sem sugestões pendentes",
+      podeAceitar: false,
+    });
+  });
+});

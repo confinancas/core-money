@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
-import { suggestionText } from "../../../shared/categorization";
-import { FILTROS_DA_FILA, type FiltroDaFila, rotuloDaOpcaoDeRenda } from "../../../shared/para-categorizar";
+import { Link, useNavigate } from "react-router";
+import { type AiConfidence, suggestionText } from "../../../shared/categorization";
+import {
+  cartaoDaIA,
+  FILTROS_DA_FILA,
+  type FiltroDaFila,
+  textoDaSugestaoDeEntrada,
+} from "../../../shared/para-categorizar";
 import {
   acceptSuggestions,
   fetchQueue,
@@ -9,6 +14,7 @@ import {
   type RespostaDaFila,
   undoCategorization,
 } from "../../api/categorization";
+import { useFeatures } from "../../app/features";
 import { ErrorState } from "../../components/ui/error-state";
 
 // Tela Para categorizar (TASK-0304). Celular: uma coluna. Tablet e desktop: a mesma lista, com o cartão da IA e os
@@ -46,18 +52,23 @@ function textoDaSugestao(linha: LinhaDaFila): { texto: string; cor: string | nul
   if (!s) return null;
   if ("categoryName" in s) {
     return {
-      texto: `${s.categoryName ?? ""} · ${suggestionText(s.confidence as never, s.reason) ?? ""}`,
+      texto: `${s.categoryName ?? ""} · ${suggestionText(s.confidence as AiConfidence | null, s.reason) ?? ""}`,
       cor: s.categoryColor,
     };
   }
-  const opcao = rotuloDaOpcaoDeRenda(s.option ?? "") ?? "";
-  const partes = [opcao, s.fixedIncomeName].filter(Boolean);
-  const certeza = suggestionText(s.confidence as never, s.reason);
-  return { texto: [...partes, certeza].filter(Boolean).join(" · "), cor: null };
+  const texto = textoDaSugestaoDeEntrada({
+    option: s.option,
+    fixedIncomeName: s.fixedIncomeName,
+    incomeSubtype: s.incomeSubtype,
+    confidence: s.confidence,
+    reason: s.reason,
+  });
+  return texto === null ? null : { texto, cor: null };
 }
 
 export function ParaCategorizar() {
   const navigate = useNavigate();
+  const features = useFeatures();
   const [filtro, setFiltro] = useState<FiltroDaFila>("todos");
   const [dados, setDados] = useState<RespostaDaFila | null>(null);
   const [linhas, setLinhas] = useState<LinhaDaFila[]>([]);
@@ -164,6 +175,11 @@ export function ParaCategorizar() {
 
   const contagens = dados?.counts;
   const sugeridas = dados?.suggested;
+  const cartao = cartaoDaIA({
+    iaAtiva: features.ia,
+    sugeridas: sugeridas?.[filtro] ?? 0,
+    total: contagens?.[filtro] ?? 0,
+  });
   const faltam = contagens?.todos ?? 0;
   const feitas = Math.max(0, (total ?? 0) - faltam);
   const percentual = total ? Math.min(100, Math.round((feitas / total) * 100)) : 0;
@@ -200,26 +216,36 @@ export function ParaCategorizar() {
       </header>
 
       <div className="mt-4 grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr]">
-        <aside className="flex flex-col gap-4">
-          {sugeridas && contagens && (
+        <aside className="flex flex-col gap-4" data-testid="filtros">
+          {contagens && sugeridas && cartao.modo === "sem_ia" && (
             <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="Sugestões da IA">
-              <p className="text-sm font-semibold text-[#3D4943]">
-                {sugeridas[filtro] > 0
-                  ? `A IA sugeriu ${sugeridas[filtro]} de ${contagens[filtro]}`
-                  : "Sem sugestões pendentes"}
-              </p>
+              <p className="text-sm font-semibold text-[#3D4943]">Sem IA: vocês escolhem cada um.</p>
+              <p className="mt-1 text-xs text-[#5B6B63]">Com a chave do Claude, o app sugere sozinho.</p>
+              <Link
+                to="/configuracoes/claude"
+                className="mt-3 inline-flex min-h-11 items-center font-bold text-[#0A7D50] underline"
+              >
+                Colar a chave
+              </Link>
+            </section>
+          )}
+          {contagens && sugeridas && cartao.modo === "com_ia" && (
+            <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="Sugestões da IA">
+              <p className="text-sm font-semibold text-[#3D4943]">{cartao.titulo}</p>
               <p className="mt-1 text-xs text-[#5B6B63]">
                 Confira as sugestões abaixo antes de aceitar. O que vocês confirmarem entra sozinho nas
                 próximas vezes.
               </p>
-              <button
-                type="button"
-                onClick={aceitarTodas}
-                disabled={ocupado || linhas.every((l) => l.kind === "entrada" || !l.suggestion)}
-                className="mt-3 min-h-11 w-full rounded-xl bg-[#0E9A63] px-4 font-bold text-white disabled:opacity-50"
-              >
-                Aceitar
-              </button>
+              {cartao.podeAceitar && (
+                <button
+                  type="button"
+                  onClick={aceitarTodas}
+                  disabled={ocupado || linhas.every((l) => l.kind === "entrada" || !l.suggestion)}
+                  className="mt-3 min-h-11 w-full rounded-xl bg-[#0A7D50] px-4 font-bold text-white disabled:opacity-50"
+                >
+                  Aceitar
+                </button>
+              )}
             </section>
           )}
           <nav className="flex gap-2 overflow-x-auto" aria-label="Filtros">
@@ -229,7 +255,7 @@ export function ParaCategorizar() {
                 type="button"
                 aria-pressed={filtro === f}
                 onClick={() => setFiltro(f)}
-                className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold ${filtro === f ? "bg-[#0E9A63] text-white" : "bg-white text-[#3D4943]"}`}
+                className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold ${filtro === f ? "bg-[#0A7D50] text-white" : "bg-white text-[#3D4943]"}`}
               >
                 {ROTULO_DO_FILTRO[f]} {contagens ? contagens[f] : ""}
               </button>
@@ -237,7 +263,7 @@ export function ParaCategorizar() {
           </nav>
         </aside>
 
-        <section aria-label="Lista">
+        <section aria-label="Lista" data-testid="lista">
           {falhou && (
             <ErrorState
               title="Não deu para carregar a fila."
