@@ -245,7 +245,9 @@ describe("importação inteira de um banco: conta e cartão, 2.000 transações 
     console.info(
       `[medicao-b1-2-importacao] lidas=${medidor.rowsRead} escritas=${medidor.rowsWritten} chamadas=${medidor.calls} linhas=${linhas.length}`,
     );
-    expect(medidor.rowsWritten / linhas.length).toBeLessThanOrEqual(13.5);
+    // Teto de 17,5 (decisão do Opus, merge da 0303): o custo inclui a fila de categorização, por onde cada transação
+    // importada também passa (TASK-0303). Medido depois do merge: 16,88.
+    expect(medidor.rowsWritten / linhas.length).toBeLessThanOrEqual(17.5);
     expect(medidor.rowsRead / linhas.length).toBeLessThanOrEqual(45);
   }, 120_000);
 });

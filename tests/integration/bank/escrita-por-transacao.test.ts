@@ -14,7 +14,9 @@ import { newMeter } from "../../../src/worker/db/metered-d1";
 
 const AGORA = "2026-11-10T12:00:00.000Z";
 const HOJE = "2026-11-10";
-const TETO_DE_ESCRITAS_POR_TRANSACAO = 13.6;
+// Teto de 17,5 (decisão do Opus, merge da 0303). O custo medido inclui a fila de categorização: cada transação importada
+// entra também na fila de categorização da TASK-0303. Medido depois do merge: 16,63.
+const TETO_DE_ESCRITAS_POR_TRANSACAO = 17.5;
 
 async function criarLar(): Promise<{ householdId: string; connectionId: string }> {
   const householdId = crypto.randomUUID();
