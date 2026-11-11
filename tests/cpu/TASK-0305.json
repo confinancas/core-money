@@ -1,0 +1,42 @@
+{
+  "task": "TASK-0305",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-11T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-11T00:00:00.000Z')",
+    "INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-1', 'cpu-membro-1', 'CPU-SEM-LOGIN-0305', 0, NULL, 'CPU Chromium', 'cadastro', '2026-11-11T00:00:00.000Z', NULL)",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 800) INSERT INTO rules (id, household_id, scope, match_value, set_custom_name, set_category_id, set_spend_type, set_income_kind, set_income_subtype, set_fixed_income_id, set_movement, created_from, created_by, created_at, disabled_at) SELECT 'cpu-regra-' || i, 'cpu-lar', 'estabelecimento', 'TEST LOJA ' || i, '[TEST] Loja ' || i, NULL, NULL, NULL, NULL, NULL, NULL, 'lembrar', 'cpu-membro-1', '2026-11-10T00:00:00.000Z', NULL FROM n",
+    "INSERT INTO ai_rules_document (household_id, text, updated_at) VALUES ('cpu-lar', '[TEST] Documento de medição', '2026-11-10T00:00:00.000Z')"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/rules (800 regras ativas do lar, 50 por página)",
+      "method": "GET",
+      "path": "/api/rules",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "GET /api/ai-rules-document",
+      "method": "GET",
+      "path": "/api/ai-rules-document",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "PUT /api/ai-rules-document (base atual)",
+      "method": "PUT",
+      "path": "/api/ai-rules-document",
+      "headers": { "cookie": "{sessao}" },
+      "body": {
+        "text": "[TEST] Documento de medição, nova versão",
+        "baseUpdatedAt": "2026-11-10T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "GET /api/categorization/status",
+      "method": "GET",
+      "path": "/api/categorization/status",
+      "headers": { "cookie": "{sessao}" }
+    }
+  ]
+}

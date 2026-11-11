@@ -112,7 +112,15 @@ describe("colunas por largura", () => {
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["falsa-de-teste", "renda-fixa", "categorias-e-ia", "notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
+      [
+        "falsa-de-teste",
+        "renda-fixa",
+        "categorias-e-ia",
+        "notificacoes",
+        "sincronizacao",
+        "plano-cloudflare",
+        "dados",
+      ],
     ]);
     expect(colunasDasSecoes(registro, "desktop").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
