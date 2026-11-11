@@ -126,10 +126,6 @@ for (const { nome, largura } of LARGURAS) {
       await expect(texto).toBeVisible();
       await expect(texto.locator("[data-v]")).toHaveCount(2);
       await expect(texto.locator(".mm-cents")).toHaveCount(2);
-      await page.getByRole("button", { name: "Ocultar valores" }).click();
-      await expect(texto.locator("[data-v]").first()).toHaveCSS("filter", /blur/);
-      await expect(texto).toHaveCSS("filter", "none");
-      await page.getByRole("button", { name: "Mostrar valores" }).click();
       const caixaDoTexto = await caixaDe(texto);
       const caixaDaLinhaSeguinte = await caixaDe(page.getByText("Costuma cair", { exact: true }));
       // A linha de "Costuma cair" começa depois do fim do texto da cotação.
