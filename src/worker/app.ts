@@ -92,7 +92,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
 
   // Rotas de medição (TASK-0204): só com DEV_ROUTES = "1". Sem a flag, 404 antes de qualquer outra regra.
   app.use(async (c, next) => {
-    if (false) {
+    if (c.req.path.startsWith("/api/dev/") && c.env.DEV_ROUTES !== "1") {
       return apiError(c, 404, "rota_inexistente", "Rota não encontrada.");
     }
     return next();
