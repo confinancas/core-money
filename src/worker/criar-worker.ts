@@ -1,8 +1,10 @@
 import type { ExportedHandler } from "@cloudflare/workers-types";
 import type { BrandConfig } from "../shared/brand/types";
 import { type AppOptions, createApp } from "./app";
+import { despachar } from "./cron/despachante";
 import type { Env } from "./env";
 import { flushUsage } from "./usage/flush";
+import { meteredScheduled } from "./usage/scheduled";
 
 export type CriarWorkerOptions = {
   marca: BrandConfig;
@@ -21,5 +23,12 @@ export function criarWorker({ marca, versao, rotasDoApp }: CriarWorkerOptions) {
       c.executionCtx.waitUntil(flushUsage(c.env.DB, meter));
     },
   });
-  return { fetch: app.fetch } satisfies ExportedHandler<Env>;
+  return {
+    fetch: app.fetch,
+    // Um Cron Trigger só: o despachante decide o que roda nesta execução (TASK-0303). O embrulho de medição de uso
+    // (TASK-0109) espera o handler e grava a linha do dia com o db medido.
+    scheduled: meteredScheduled(async (evento, env, _ctx, db) => {
+      await despachar(env, new Date(evento.scheduledTime), db);
+    }),
+  } satisfies ExportedHandler<Env>;
 }

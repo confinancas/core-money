@@ -156,8 +156,22 @@ function bancoProntoFalso() {
   return { prepare: () => declaracao(), batch: async () => [] };
 }
 
+// O cron (TASK-0303) só roda se a configuração do app tem o Cron Trigger; o Worker precisa exportar o scheduled. Sem
+// um dos dois, a categorização fica desligada numa instalação, sem erro. A fixture declara o cron como o app declara.
+function conferirCronDoApp(app) {
+  const configuracao = readFileSync(join(app, "wrangler.jsonc"), "utf8");
+  if (!configuracao.includes('"*/5 * * * *"')) {
+    falhar(
+      'a configuração do app não tem o Cron Trigger "*/5 * * * *" (sem ele a categorização nunca roda).',
+    );
+  }
+}
+
 async function conferirRotasDoWorker(arquivo, versaoDoApp) {
   const { default: worker } = await import(pathToFileURL(arquivo).href);
+  if (typeof worker.scheduled !== "function") {
+    falhar("o Worker do app não exporta scheduled (o cron não tem para onde ir).");
+  }
   const ambienteDoWorker = { DB: bancoProntoFalso() };
   const contexto = { waitUntil() {}, passThroughOnException() {} };
 
@@ -228,6 +242,7 @@ async function main() {
     );
     const workerGerado = arquivoDoWorker(app);
     conferirTextoDoWorker(workerGerado);
+    conferirCronDoApp(app);
     await conferirRotasDoWorker(workerGerado, versaoDoApp);
 
     console.log(

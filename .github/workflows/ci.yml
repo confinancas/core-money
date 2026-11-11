@@ -44,7 +44,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # Se o espelho apt do runner falhar (já aconteceu duas vezes seguidas), instala só o Chromium:
+      # a imagem ubuntu do GitHub já traz o Google Chrome e as bibliotecas de sistema que ele usa.
+      - run: npx playwright install --with-deps chromium || npx playwright install chromium
       - run: npm run test:e2e
       - if: failure()
         uses: actions/upload-artifact@v7
