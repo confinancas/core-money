@@ -24,14 +24,17 @@ import {
 import { PluggyError } from "../pluggy/errors";
 import type { PluggyAccount, PluggyItem } from "../pluggy/types";
 import {
+  DIAS_DA_CONCILIACAO,
   futureWindow,
   historyWindows,
+  JANELAS_DE_CONCILIACAO,
   lerCursor,
   MESES,
   progressPct,
   type SyncAccount,
   type SyncCursor,
   type SyncMessage,
+  somaDias,
   totalDeFatias,
 } from "./plan";
 import {
@@ -224,8 +227,9 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
   const conta = contas[cursor.a];
   const janela = conta?.windows[cursor.w];
   if (!conta || !janela) {
-    const proximo: SyncCursor = { ...cursor, seq: dep.seq + 1, phase: "fim" };
-    return { proximo, total: run.slices_total, feitas: run.slices_done };
+    // Sem conta nem janela: não há transações; a conciliação entra no total e começa na janela 0.
+    const proximo: SyncCursor = { ...cursor, seq: dep.seq + 1, phase: "conciliar", w: 0 };
+    return { proximo, total: run.slices_total + JANELAS_DE_CONCILIACAO, feitas: run.slices_done };
   }
 
   const client = await clientForConnection(
@@ -279,17 +283,33 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
   proximo.offset = 0;
   if (cursor.w + 1 < conta.windows.length) {
     proximo.w = cursor.w + 1;
-  } else {
-    proximo.a = cursor.a + 1;
-    proximo.w = 0;
-    if (proximo.a >= contas.length) proximo.phase = "fim";
+    return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
   }
+  proximo.a = cursor.a + 1;
+  proximo.w = 0;
+  if (proximo.a < contas.length) return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
+  // Fim das transações: a conciliação entra no total (uma fatia por janela) e começa na janela 0.
+  proximo.phase = "conciliar";
+  return { proximo, total: run.slices_total + JANELAS_DE_CONCILIACAO, feitas: run.slices_done + 1 };
+}
+
+// Fase conciliar: uma janela de 15 dias por fatia, da de hoje (w = 0) para a mais antiga (w = 24). Cada janela
+// concilia as linhas que terminam em hoje menos 15 * w dias. Depois da última, a fase passa a fim.
+async function faseConciliar(db: Db, run: LinhaDaExecucao, cursor: SyncCursor, dep: Dependencias) {
+  const hoje = todayInSaoPaulo(dep.agora);
+  await reconcileHousehold(db, run.household_id, somaDias(hoje, -DIAS_DA_CONCILIACAO * cursor.w), dep.nowIso);
+  const proximoW = cursor.w + 1;
+  const proximo: SyncCursor = {
+    ...cursor,
+    seq: dep.seq + 1,
+    phase: proximoW < JANELAS_DE_CONCILIACAO ? "conciliar" : "fim",
+    w: proximoW,
+  };
   return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
 }
 
-// Fase fim: conciliação dos últimos 15 dias do lar e a execução encerra como ok ou repetiu.
-async function faseFim(db: Db, run: LinhaDaExecucao, agora: Date, nowIso: string): Promise<ResultadoDaFatia> {
-  await reconcileHousehold(db, run.household_id, todayInSaoPaulo(agora), nowIso);
+// Fase fim: a execução encerra como ok ou repetiu. A conciliação da janela de hoje já foi feita pela fase conciliar.
+async function faseFim(db: Db, run: LinhaDaExecucao, nowIso: string): Promise<ResultadoDaFatia> {
   const status = run.retried === 1 ? "repetiu" : "ok";
   await db.$client.batch(
     finishRunStmts(db, {
@@ -385,7 +405,7 @@ export async function runSyncSlice(
   const agora = new Date(now);
   const nowIso = agora.toISOString();
   try {
-    if (cursor.phase === "fim") return await faseFim(db, run, agora, nowIso);
+    if (cursor.phase === "fim") return await faseFim(db, run, nowIso);
 
     const dep: Dependencias = { fetch: deps.fetch, agora, nowIso, seq: entrada.seq };
     const resultado =
@@ -393,7 +413,9 @@ export async function runSyncSlice(
         ? await faseInicio(db, env, run, cursor, dep)
         : cursor.phase === "faturas"
           ? await faseFaturas(db, env, run, cursor, dep)
-          : await faseTransacoes(db, env, run, cursor, dep);
+          : cursor.phase === "transacoes"
+            ? await faseTransacoes(db, env, run, cursor, dep)
+            : await faseConciliar(db, run, cursor, dep);
 
     const gravou = await saveCursorStmt(db, {
       runId: run.id,

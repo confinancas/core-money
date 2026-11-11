@@ -7,8 +7,12 @@ export const MESES = 12;
 export const DIAS_DA_JANELA = 30;
 // Parcelas futuras do cartão: amanhã até +400 dias.
 export const DIAS_DO_FUTURO = 400;
+// Conciliação dos 12 meses: uma janela de 15 dias por fatia, da de hoje para a mais antiga. São 25 janelas (375 dias),
+// que cobrem os 12 meses do histórico.
+export const DIAS_DA_CONCILIACAO = 15;
+export const JANELAS_DE_CONCILIACAO = 25;
 
-export type SyncPhase = "inicio" | "faturas" | "transacoes" | "fim";
+export type SyncPhase = "inicio" | "faturas" | "transacoes" | "conciliar" | "fim";
 export type SyncWindow = { from: string; to: string };
 
 // Uma conta do cursor. Cartões trazem a fatura aberta (já lida) e o intervalo de vencimento (gap, em dias).
@@ -92,7 +96,8 @@ export function fatiasDeFaturas(cartoes: number): number {
   return Math.max(1, Math.ceil(cartoes / 3));
 }
 
-// Total de fatias: inicio + faturas + uma por janela. O fim não conta (grava 100).
+// Total de fatias da importação: inicio + faturas + uma por janela. As fatias de conciliação (JANELAS_DE_CONCILIACAO)
+// entram no total quando a fase transacoes termina; o fim não conta (grava 100).
 export function totalDeFatias(cartoes: number, janelas: number): number {
   return 1 + fatiasDeFaturas(cartoes) + janelas;
 }

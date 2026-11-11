@@ -5,6 +5,7 @@ import type {
   CreatedConnectionResponse,
   PreviewItemsResponse,
 } from "../../../src/shared/pluggy-api";
+import { nomeDaChave } from "../../../src/worker/pluggy/connections";
 import { decryptSecret } from "../../../src/worker/security/crypto";
 import { COOKIE_DO_CONJUGE, COOKIE_DO_TITULAR, criaLarDeDuas, criaOutroLar } from "../helpers/aparelhos";
 import { callApi, semearPronto } from "../helpers/app";
@@ -19,6 +20,7 @@ import {
   ITEM_D,
   ITEM_INEXISTENTE,
   ITEM_SEM_BANCO,
+  type PluggyFalso,
   pluggyFalso,
   SEGREDO_NOVO,
   SEGREDO_VALIDO,
@@ -116,9 +118,16 @@ describe("Meu Pluggy: caminho feliz e a cifra (cenário 1)", () => {
     )
       .bind(corpo.connection.id)
       .first<{ client_id_enc: string; iv: string; client_secret_enc: string; client_secret_iv: string }>();
+    expect(linha?.client_id_enc).toBeTruthy();
+    expect(linha?.client_id_enc).not.toBe(CLIENT_ID_VALIDO);
     expect(linha?.client_secret_enc).toBeTruthy();
     expect(linha?.client_secret_enc).not.toBe(SEGREDO_VALIDO);
     expect(linha?.client_secret_iv).not.toBe(linha?.iv);
+    const abertoId = await decryptSecret(env.MASTER_KEY, nomeDaChave(corpo.connection.id, "client_id"), {
+      ciphertext: linha?.client_id_enc ?? "",
+      iv: linha?.iv ?? "",
+    });
+    expect(abertoId).toBe(CLIENT_ID_VALIDO);
     const abertoSecret = await decryptSecret(env.MASTER_KEY, `pluggy:${corpo.connection.id}:client_secret`, {
       ciphertext: linha?.client_secret_enc ?? "",
       iv: linha?.client_secret_iv ?? "",
@@ -247,6 +256,59 @@ describe("Meu Pluggy: id errado e banco sem nome (cenários 4 e 5)", () => {
   });
 });
 
+// Meu Pluggy falso que responde `status` em todo GET /items/:id, como o real faz com um id cortado (400) ou de outra
+// conta (403). O resto segue o falso padrão.
+function pluggyComItemRecusado(status: 400 | 403): PluggyFalso {
+  const base = pluggyFalso();
+  const comItemRecusado = (async (entrada: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(entrada));
+    if ((init?.method ?? "GET") === "GET" && url.pathname.startsWith("/items/")) {
+      base.chamadas.push({ metodo: "GET", caminho: url.pathname, query: url.search });
+      return new Response(JSON.stringify({ code: status, codeDescription: "TEST_ITEM_RECUSADO" }), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return base.fetch(entrada, init);
+  }) as typeof fetch;
+  return { fetch: comItemRecusado, chamadas: base.chamadas };
+}
+
+describe("Meu Pluggy: id cortado ou de outra conta (TASK-0203, achado 4)", () => {
+  // Id cortado (o Pluggy responde 400) e id de outra conta (403): ambos viram "não achamos", sem 502.
+  it.each<[400 | 403, string]>([
+    [400, ITEM_A.slice(0, -4)],
+    [403, ITEM_A],
+  ])(
+    "GET /items/:id com %i: a prévia marca nao_encontrado e a criação responde 422 sem gravar",
+    async (status, id) => {
+      const falso = pluggyComItemRecusado(status);
+      const app = appComPluggy(falso);
+
+      const previa = await pedir(app, "POST", "/api/pluggy-connections/preview-items", {
+        ...CHAVES,
+        itemIds: [id],
+      });
+      expect(previa.status).toBe(200);
+      expect((previa.corpo as PreviewItemsResponse).items).toEqual([{ itemId: id, error: "nao_encontrado" }]);
+      expect(falso.chamadas.some((chamada) => chamada.caminho === `/items/${id}`)).toBe(true);
+
+      const criada = await pedir(app, "POST", "/api/pluggy-connections", {
+        label: "[TEST] Conta A",
+        ...CHAVES,
+        items: [{ itemId: id }],
+      });
+      expect(criada.status).toBe(422);
+      expect(criada.corpo).toMatchObject({
+        error: "item_nao_encontrado",
+        message: "Não achamos este id no Meu Pluggy. Confira se copiou o id inteiro.",
+      });
+      expect(await contagem("SELECT COUNT(*) AS n FROM pluggy_connections")).toBe(0);
+      expect(await contagem("SELECT COUNT(*) AS n FROM bank_items")).toBe(0);
+    },
+  );
+});
+
 describe("Meu Pluggy: rótulo e banco repetidos (cenários 6 e 7)", () => {
   it("rótulo repetido vira 409; rótulo genérico vira 400 com a mensagem do campo", async () => {
     const app = appComPluggy(pluggyFalso());
@@ -305,6 +367,20 @@ describe("Meu Pluggy: rótulo e banco repetidos (cenários 6 e 7)", () => {
   });
 });
 
+// Conexão [TEST] Conta A com quatro bancos ativos (A, B, C e D). O nome vai junto: o falso não deduz o de todos.
+async function criaConexaoComQuatroBancos(app: ReturnType<typeof appComPluggy>): Promise<string> {
+  const criada = await pedir(app, "POST", "/api/pluggy-connections", {
+    label: "[TEST] Conta A",
+    ...CHAVES,
+    items: [ITEM_A, ITEM_B, ITEM_C, ITEM_D].map((itemId) => ({
+      itemId,
+      institutionName: "[TEST] Banco Teste",
+    })),
+  });
+  expect(criada.status).toBe(201);
+  return (criada.corpo as CreatedConnectionResponse).connection.id;
+}
+
 describe("Meu Pluggy: outro banco da mesma conta, o limite e a prévia pela conexão (cenário 8)", () => {
   it("adiciona outro banco na mesma conexão e respeita o limite de 5 bancos ativos", async () => {
     const app = appComPluggy(pluggyFalso());
@@ -352,6 +428,55 @@ describe("Meu Pluggy: outro banco da mesma conta, o limite e a prévia pela cone
       error: "limite_meu_pluggy",
       message: "O Meu Pluggy gratuito aceita até 5 bancos por conta.",
     });
+  });
+
+  it("com 4 ativos, o 5º banco entra (o limite é 5, e o 5º cabe); o 6º é recusado antes de consultar o Pluggy", async () => {
+    const falso = pluggyFalso();
+    const app = appComPluggy(falso);
+    const conexao = await criaConexaoComQuatroBancos(app);
+
+    const quinto = await pedir(app, "POST", `/api/pluggy-connections/${conexao}/bank-items`, {
+      items: [{ itemId: ITEM_SEM_BANCO, institutionName: "[TEST] Banco Teste" }],
+    });
+    expect(quinto.status).toBe(201);
+    expect(
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL",
+        conexao,
+      ),
+    ).toBe(5);
+
+    const chamadasAntes = falso.chamadas.length;
+    const sexto = await pedir(app, "POST", `/api/pluggy-connections/${conexao}/bank-items`, {
+      items: [{ itemId: ITEM_INEXISTENTE }],
+    });
+    expect(sexto.status).toBe(422);
+    expect(sexto.corpo).toMatchObject({ error: "limite_meu_pluggy" });
+    // O limite é conferido antes do Pluggy: o 6º nem chega a ser consultado.
+    expect(falso.chamadas).toHaveLength(chamadasAntes);
+    expect(await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ?", conexao)).toBe(5);
+  });
+
+  it("um banco desconectado não conta no limite: com 4 ativos e 1 desconectado (5 linhas), o 5º ativo entra", async () => {
+    const app = appComPluggy(pluggyFalso());
+    const conexao = await criaConexaoComQuatroBancos(app);
+    const agora = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO bank_items (id, connection_id, institution_name, status, disconnected_at, created_at) VALUES ('lim-desligado', ?, 'Limite', 'ativo', ?, ?)",
+    )
+      .bind(conexao, agora, agora)
+      .run();
+
+    const quinto = await pedir(app, "POST", `/api/pluggy-connections/${conexao}/bank-items`, {
+      items: [{ itemId: ITEM_SEM_BANCO, institutionName: "[TEST] Banco Teste" }],
+    });
+    expect(quinto.status).toBe(201);
+    expect(
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL",
+        conexao,
+      ),
+    ).toBe(5);
   });
 
   it("a prévia pela conexão só lê o que é desta conta: 404 para outro lar", async () => {
@@ -473,6 +598,56 @@ describe("Meu Pluggy: trocar chaves (cenários 9, 13 e 14)", () => {
     expect(adicionado.status).toBe(201);
   });
 
+  it("a troca só devolve a ativo o banco com ação necessária desta conexão: instável, outra conexão e outro lar ficam", async () => {
+    const app = appComPluggy(pluggyFalso());
+    const conexao = await criaConexaoA(app);
+    const adicionado = await pedir(app, "POST", `/api/pluggy-connections/${conexao}/bank-items`, {
+      items: [{ itemId: ITEM_C, institutionName: "[TEST] Poupança" }],
+    });
+    expect(adicionado.status).toBe(201);
+    const outraConexao = await pedir(app, "POST", "/api/pluggy-connections", {
+      label: "[TEST] Conta B",
+      ...CHAVES,
+      items: [{ itemId: ITEM_B }],
+    });
+    expect(outraConexao.status).toBe(201);
+    const doOutroLar = await criaOutroLar();
+    const deOutroLar = await pedir(
+      app,
+      "POST",
+      "/api/pluggy-connections",
+      {
+        label: "[TEST] Conta do outro lar",
+        ...CHAVES,
+        items: [{ itemId: ITEM_D, institutionName: "[TEST] Banco Teste" }],
+      },
+      `mm_sess=${doOutroLar.token}`,
+    );
+    expect(deOutroLar.status).toBe(201);
+
+    await env.DB.prepare("UPDATE bank_items SET status = 'acao_necessaria' WHERE id = ?").bind(ITEM_A).run();
+    await env.DB.prepare("UPDATE bank_items SET status = 'instavel' WHERE id = ?").bind(ITEM_C).run();
+    await env.DB.prepare("UPDATE bank_items SET status = 'acao_necessaria' WHERE id = ?").bind(ITEM_B).run();
+    await env.DB.prepare("UPDATE bank_items SET status = 'acao_necessaria' WHERE id = ?").bind(ITEM_D).run();
+
+    const troca = await pedir(app, "PUT", `/api/pluggy-connections/${conexao}/keys`, {
+      clientId: CLIENT_ID_NOVO,
+      clientSecret: SEGREDO_NOVO,
+    });
+    expect(troca.status).toBe(200);
+
+    const statusDo = async (id: string) =>
+      (
+        await env.DB.prepare("SELECT status FROM bank_items WHERE id = ?")
+          .bind(id)
+          .first<{ status: string }>()
+      )?.status;
+    expect(await statusDo(ITEM_A)).toBe("ativo");
+    expect(await statusDo(ITEM_C)).toBe("instavel");
+    expect(await statusDo(ITEM_B)).toBe("acao_necessaria");
+    expect(await statusDo(ITEM_D)).toBe("acao_necessaria");
+  });
+
   it("cifra que não abre (chave mestra diferente): 409 chaves_ilegiveis na prévia", async () => {
     const app = appComPluggy(pluggyFalso());
     const conexao = await criaConexaoA(app);
@@ -487,6 +662,31 @@ describe("Meu Pluggy: trocar chaves (cenários 9, 13 e 14)", () => {
     );
     expect(previa.status).toBe(409);
     expect(previa.corpo).toMatchObject({ error: "chaves_ilegiveis" });
+  });
+});
+
+describe("Meu Pluggy: ordem da lista", () => {
+  it("com duas conexões, a lista segue a data de criação (a mais antiga primeiro), e não o rótulo nem a ordem do pedido", async () => {
+    const app = appComPluggy(pluggyFalso());
+    const primeira = await criaConexaoA(app);
+    const segunda = await pedir(app, "POST", "/api/pluggy-connections", {
+      label: "[TEST] Conta B",
+      ...CHAVES,
+      items: [{ itemId: ITEM_B }],
+    });
+    expect(segunda.status).toBe(201);
+    const idDaSegunda = (segunda.corpo as CreatedConnectionResponse).connection.id;
+
+    // A conta "B" foi criada por último, mas com a data mais antiga: a lista tem de seguir a data, não o rótulo.
+    await env.DB.prepare("UPDATE pluggy_connections SET created_at = ? WHERE id = ?")
+      .bind("2026-11-01T10:00:00.000Z", idDaSegunda)
+      .run();
+    await env.DB.prepare("UPDATE pluggy_connections SET created_at = ? WHERE id = ?")
+      .bind("2026-11-02T10:00:00.000Z", primeira)
+      .run();
+
+    const lista = (await pedir(app, "GET", "/api/pluggy-connections")).corpo as ConnectionsResponse;
+    expect(lista.connections.map((conexao) => conexao.label)).toEqual(["[TEST] Conta B", "[TEST] Conta A"]);
   });
 });
 

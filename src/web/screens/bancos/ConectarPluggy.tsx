@@ -16,13 +16,15 @@ import {
   trocarChaves,
 } from "../../api/pluggy";
 import { IconeSeta } from "../../components/icons";
-import { ApiError, mensagemDoErro } from "../../lib/api";
+import { ApiError } from "../../lib/api";
 import { useSession } from "../../session/SessionProvider";
 import { type CartaoDeBanco, StepBancos } from "./conectar/StepBancos";
 import { type ChavesDaTela, StepChaves } from "./conectar/StepChaves";
 import { StepNome } from "./conectar/StepNome";
 import { StepPronto } from "./conectar/StepPronto";
 import {
+  aoEditarChave,
+  destinoDoErroDeConexao,
   erroDoRotulo,
   nomeSugerido,
   type Passo,
@@ -30,18 +32,10 @@ import {
   TITULOS_DOS_PASSOS,
   TOTAL_DE_PASSOS,
   textoDoBancoJaConectado,
+  textoDoErroDeConexao,
 } from "./conectar/view-model";
 
 type Resultado = { rotulo: string; quantidade: number; bancoIds: string[] };
-
-// Mensagem de um erro da API: quando vem com campos (validação), a primeira frase de cada campo (TASK-0203, achado 2).
-function textoDoErro(falha: unknown): string {
-  if (falha instanceof ApiError && falha.fields) {
-    const primeira = Object.values(falha.fields)[0];
-    if (primeira) return primeira;
-  }
-  return mensagemDoErro(falha);
-}
 
 const CHAVES_VAZIAS: ChavesDaTela = { clientId: "", clientSecret: "" };
 const AVISO_DAS_CHAVES_TROCADAS = "Chaves trocadas.";
@@ -120,8 +114,9 @@ export function ConectarPluggy() {
   }, [carregar]);
 
   function mudarChave(campo: keyof ChavesDaTela, valor: string) {
-    setChaves((atual) => ({ ...atual, [campo]: valor }));
-    setTestado(false);
+    const proximo = aoEditarChave(chaves, campo, valor);
+    setChaves(proximo.chaves);
+    setTestado(proximo.testado);
     setErroChaves(null);
   }
 
@@ -135,7 +130,7 @@ export function ConectarPluggy() {
       setTestado(true);
     } catch (falha) {
       setTestado(false);
-      setErroChaves(mensagemDoErro(falha));
+      setErroChaves(textoDoErroDeConexao(falha));
     } finally {
       travado.current = false;
       setTestando(false);
@@ -151,7 +146,7 @@ export function ConectarPluggy() {
       await trocarChaves(conexao.id, chavesLimpas);
       navegar("/configuracoes", { state: { aviso: AVISO_DAS_CHAVES_TROCADAS } });
     } catch (falha) {
-      setErroChaves(mensagemDoErro(falha));
+      setErroChaves(textoDoErroDeConexao(falha));
     } finally {
       travado.current = false;
       setSalvandoChaves(false);
@@ -196,7 +191,7 @@ export function ConectarPluggy() {
         },
       ]);
     } catch (falha) {
-      setErroDoId(mensagemDoErro(falha));
+      setErroDoId(textoDoErroDeConexao(falha));
       if (falha instanceof ApiError && falha.code === "chaves_invalidas") setTestado(false);
     } finally {
       travado.current = false;
@@ -245,22 +240,18 @@ export function ConectarPluggy() {
       setPasso(4);
     } catch (falha) {
       const codigo = falha instanceof ApiError ? falha.code : "";
-      if (codigo === "rotulo_em_uso") {
-        setErroNome(textoDoErro(falha));
-        setPasso(1);
-      } else if (codigo === "pluggy_indisponivel" && conexao !== null) {
-        // Outro banco com o Meu Pluggy fora: fica no passo 3, com o aviso. As chaves não são o problema (achado 3).
-        setErroGeral(textoDoErro(falha));
-      } else if (codigo === "chaves_invalidas" || codigo === "pluggy_indisponivel") {
-        setErroChaves(textoDoErro(falha));
+      const destino = destinoDoErroDeConexao({ codigo, temConexao: conexao !== null });
+      const texto = codigo === "banco_ja_conectado" ? textoDoBancoJaConectado() : textoDoErroDeConexao(falha);
+      if (destino.onde === "nome") {
+        setErroNome(texto);
+      } else if (destino.onde === "chaves") {
+        setErroChaves(texto);
         setTestado(false);
-        if (conexao !== null) setTrocando(true);
-        setPasso(2);
-      } else if (codigo === "banco_ja_conectado") {
-        setErroGeral(textoDoBancoJaConectado());
+        if (destino.trocar) setTrocando(true);
       } else {
-        setErroGeral(textoDoErro(falha));
+        setErroGeral(texto);
       }
+      setPasso(destino.passo);
     } finally {
       travado.current = false;
       setConectando(false);

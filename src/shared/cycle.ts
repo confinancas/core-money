@@ -115,13 +115,19 @@ export function cycleAfter(fimAnterior: string, dia: number): Ciclo {
 }
 
 // Ciclo anterior ao que começa em `inicioSeguinte`: termina no dia antes dele e começa no dia `dia` do mês anterior.
-// Com o dia padrão, é o ciclo padrão; com o dia de início anterior ao corte, é um ciclo de transição.
+// Com o dia padrão, é o ciclo padrão; com o dia de início anterior ao corte, é um ciclo de transição. Mínimo de 15
+// dias também para trás (decisão de 2026-11-07): se o mês anterior daria menos, começa um mês antes, no mesmo dia.
+// Um mês antes basta: o início do mês anterior ao anterior fica pelo menos 28 dias antes do mês anterior, então esse
+// ciclo passa de 28 dias.
 export function cycleBefore(inicioSeguinte: string, dia: number): Ciclo {
   exigeData(inicioSeguinte);
   exigeDiaDeInicio(dia);
   const [ano, mes] = partes(inicioSeguinte);
-  const inicio = ymd(ano, mes - 1, dia);
-  return { key: inicio.slice(0, 7), startsOn: inicio, endsOn: addDays(inicioSeguinte, -1) };
+  const fim = addDays(inicioSeguinte, -1);
+  const inicioDoMesAnterior = ymd(ano, mes - 1, dia);
+  const curto = daysBetween(inicioDoMesAnterior, fim) + 1 < 15;
+  const inicio = curto ? ymd(ano, mes - 2, dia) : inicioDoMesAnterior;
+  return { key: inicio.slice(0, 7), startsOn: inicio, endsOn: fim };
 }
 
 // Ciclo do calendário que contém a data, ou null quando o calendário não a cobre. O calendário é ordenado por startsOn.
@@ -178,7 +184,8 @@ const ordenados = (lista: readonly Ciclo[]): Ciclo[] =>
   [...lista].sort((x, y) => (x.startsOn < y.startsOn ? -1 : x.startsOn > y.startsOn ? 1 : 0));
 
 // Ciclos que faltam para o calendário cobrir [de, ate]. Sem nenhum, começa no ciclo padrão que contém `de`.
-// Para trás, cada ciclo novo termina no dia antes do primeiro existente; para a frente, depois do último.
+// Para trás, cada ciclo novo termina no dia antes do primeiro existente e começa no dia de início do primeiro
+// existente (o histórico segue o calendário gravado, não o dia atual do lar); para a frente, depois do último e com `dia`.
 export function ciclosQueFaltam(existentes: readonly Ciclo[], dia: number, de: string, ate: string): Ciclo[] {
   exigeData(de);
   exigeData(ate);
@@ -196,8 +203,9 @@ export function ciclosQueFaltam(existentes: readonly Ciclo[], dia: number, de: s
 
   const antes: Ciclo[] = [];
   let primeiro = calendario[0];
+  const diaDoPrimeiro = Number(primeiro?.startsOn.slice(8, 10));
   while (primeiro && de < primeiro.startsOn) {
-    const anterior = cycleBefore(primeiro.startsOn, dia);
+    const anterior = cycleBefore(primeiro.startsOn, diaDoPrimeiro);
     antes.unshift(anterior);
     primeiro = anterior;
   }

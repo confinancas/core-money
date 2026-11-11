@@ -40,12 +40,28 @@ export const itemIdSchema = z
 export const MAXIMO_DE_BANCOS_POR_PEDIDO = 5;
 export const MAXIMO_DE_BANCOS_ATIVOS = 5;
 
+// As mensagens dos campos saem para a tela (fields), então sem o inglês do zod: o nome e a quantidade de bancos.
+export const MENSAGEM_NOME_DO_BANCO = "Diga qual é o banco.";
+export const MENSAGEM_NOME_DO_BANCO_LONGO = "O nome do banco tem até 60 caracteres.";
+export const MENSAGEM_ESCOLHA_DE_BANCOS = "Escolha de 1 a 5 bancos.";
+
 export const itemDoPedidoSchema = z.object({
   itemId: itemIdSchema,
-  institutionName: z.string().trim().min(1).max(60).optional(),
+  institutionName: z
+    .string()
+    .trim()
+    .min(1, MENSAGEM_NOME_DO_BANCO)
+    .max(60, MENSAGEM_NOME_DO_BANCO_LONGO)
+    .optional(),
 });
 
 export type ItemDoPedido = z.infer<typeof itemDoPedidoSchema>;
+
+// Os bancos de um pedido de criação ou de outro banco: de 1 a 5.
+export const itensDoPedidoSchema = z
+  .array(itemDoPedidoSchema)
+  .min(1, MENSAGEM_ESCOLHA_DE_BANCOS)
+  .max(MAXIMO_DE_BANCOS_POR_PEDIDO, MENSAGEM_ESCOLHA_DE_BANCOS);
 
 export const itemIdsSchema = z.array(itemIdSchema).min(1).max(MAXIMO_DE_BANCOS_POR_PEDIDO);
 
@@ -98,7 +114,6 @@ export const MENSAGEM_ITEM_NAO_ENCONTRADO =
 // Sem o nome da marca na API (o teste brand-literals confere): a tela põe o nome do app na frase.
 export const MENSAGEM_BANCO_JA_CONECTADO = "Este banco já está conectado.";
 export const MENSAGEM_ROTULO_EM_USO = "Já existe uma conexão com este nome.";
-export const MENSAGEM_NOME_DO_BANCO = "Diga qual é o banco.";
 export const MENSAGEM_LIMITE_DO_PLUGGY = "O Meu Pluggy gratuito aceita até 5 bancos por conta.";
 export const MENSAGEM_SEM_CHAVES = "Cole as chaves desta conta antes de autorizar outro banco.";
 export const MENSAGEM_CHAVES_ILEGIVEIS = "As chaves desta conta não abrem nesta instalação. Cole de novo.";

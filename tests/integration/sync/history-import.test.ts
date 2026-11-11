@@ -8,7 +8,7 @@ import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch"
 import type { Env } from "../../../src/worker/env";
 import { nomeDaChave } from "../../../src/worker/pluggy/connections";
 import { encryptSecret } from "../../../src/worker/security/crypto";
-import type { SyncMessage } from "../../../src/worker/sync/plan";
+import { type SyncMessage, somaDias } from "../../../src/worker/sync/plan";
 import { handleSyncBatch, type LoteDaFila, type MensagemDaFila } from "../../../src/worker/sync/queue";
 import { startRun } from "../../../src/worker/sync/runs";
 import { type ResultadoDaFatia, runSyncSlice } from "../../../src/worker/sync/slice";
@@ -109,6 +109,30 @@ const contaDeTransacoes = async (bankItemId: string): Promise<number> => {
     .bind(bankItemId)
     .first<{ n: number }>();
   return linha?.n ?? 0;
+};
+
+// Fase, janela e totais que o D1 guarda agora. Leitura direta (fora do medidor): é a verificação do teste.
+async function cursorDaExecucao(runId: string) {
+  const linha = await env.DB.prepare(
+    "SELECT cursor_json, slices_total, slices_done FROM sync_runs WHERE id = ?",
+  )
+    .bind(runId)
+    .first<{ cursor_json: string; slices_total: number; slices_done: number }>();
+  const cursor = JSON.parse(linha?.cursor_json ?? "{}") as { seq?: number; phase?: string; w?: number };
+  return {
+    seq: cursor.seq ?? 0,
+    phase: cursor.phase ?? "inicio",
+    w: cursor.w ?? 0,
+    slices_total: linha?.slices_total ?? 0,
+    slices_done: linha?.slices_done ?? 0,
+  };
+}
+
+const movimentoDe = async (transacaoId: string): Promise<string | null> => {
+  const linha = await env.DB.prepare("SELECT movement FROM transactions WHERE id = ?")
+    .bind(transacaoId)
+    .first<{ movement: string }>();
+  return linha?.movement ?? null;
 };
 
 describe("importação: caminho feliz (cenário 1) e mais nova primeiro (cenário 2)", () => {
@@ -294,6 +318,40 @@ describe("importação: paginação, página grande e idempotência (cenários 3
     await rodar(segunda, fetch);
     expect(await contaDeTransacoes(banco.itemId)).toBe(depois);
     expect((await execucao(segunda))?.new_transactions).toBe(0);
+  });
+});
+
+describe("guarda da mensagem repetida (seq de runSyncSlice)", () => {
+  it("mensagem de seq antigo (cursor já em seq 3) é pulada: nenhuma chamada ao Pluggy e no máximo 1 ida ao D1", async () => {
+    const banco = await semearBanco();
+    const runId = (await startRun(db(), banco.itemId, "historico", AGORA)) as string;
+    const base = pluggyFalsoEmMemoria(2);
+    let chamadasAoPluggy = 0;
+    const fetch: Busca = async (entrada, init) => {
+      chamadasAoPluggy += 1;
+      return base(entrada, init);
+    };
+    // inicio (seq 0), faturas (seq 1) e a primeira fatia de transações (seq 2) passam normalmente.
+    for (const seq of [0, 1, 2]) {
+      expect(await runSyncSlice(AMBIENTE, { db: db(), fetch }, { runId, seq, tentativa: 1 }, AGORA)).toEqual({
+        tipo: "continua",
+      });
+    }
+    expect((await cursorDaExecucao(runId)).seq).toBe(3);
+
+    // A mensagem de seq 2 chega de novo: o cursor já está em seq 3, então a fatia não pode trabalhar.
+    const chamadasAntes = chamadasAoPluggy;
+    const medidor = newMeter();
+    const repetida = await runSyncSlice(
+      AMBIENTE,
+      { db: createDb(env.DB, medidor), fetch },
+      { runId, seq: 2, tentativa: 1 },
+      AGORA,
+    );
+    expect(repetida).toEqual({ tipo: "pulou" });
+    expect(chamadasAoPluggy - chamadasAntes).toBe(0);
+    expect(medidor.calls).toBeLessThanOrEqual(1);
+    expect((await cursorDaExecucao(runId)).seq).toBe(3);
   });
 });
 
@@ -496,6 +554,115 @@ describe("importação: fila, cron e dois bancos (cenários 10 a 12)", () => {
     }
     expect((await execucao(runA))?.status).toBe("ok");
     expect((await execucao(runB))?.status).toBe("ok");
+  });
+});
+
+type Leitura = {
+  fase: string;
+  w: number;
+  totalAntes: number;
+  feitasAntes: number;
+  idasAoD1: number;
+  chamadasAoPluggy: number;
+  movimentoApos: string | null;
+};
+
+describe("importação: conciliação em 25 janelas depois das transações (fase conciliar)", () => {
+  it("25 fatias de conciliação (w de 0 a 24) depois das transações; a fim é a última; o total cresce em 25", async () => {
+    const banco = await semearBanco();
+    const runId = (await startRun(db(), banco.itemId, "historico", AGORA)) as string;
+    const base = pluggyFalsoEmMemoria(2);
+    let chamadasAoPluggy = 0;
+    const fetch: Busca = async (entrada, init) => {
+      chamadasAoPluggy += 1;
+      return base(entrada, init);
+    };
+
+    // inicio (seq 0) grava o cartão. Depois, uma entrada de fatura de 370 dias: só a janela de w = 24 (que cobre de 360 a
+    // 375 dias) a concilia. Antes dela, a linha fica como pagamento de fatura.
+    expect(await runSyncSlice(AMBIENTE, { db: db(), fetch }, { runId, seq: 0, tentativa: 1 }, AGORA)).toEqual(
+      {
+        tipo: "continua",
+      },
+    );
+    const idAntiga = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO transactions (id, household_id, external_id, bank_item_id, card_id, movement, occurred_at, local_date,
+         amount_cents, original_description, last_seen_at, provider_operation_type)
+       VALUES (?, ?, ?, ?, ?, 'pagamento_fatura', ?, ?, 25000, '[TEST] PAGAMENTO FATURA ANTIGA', ?, 'PAGAMENTO_FATURA')`,
+    )
+      .bind(
+        idAntiga,
+        banco.householdId,
+        `[TEST] antiga-${idAntiga}`,
+        banco.itemId,
+        `${banco.itemId}-cartao`,
+        `${somaDias(HOJE, -370)}T12:00:00.000Z`,
+        somaDias(HOJE, -370),
+        AGORA,
+      )
+      .run();
+
+    const leituras: Leitura[] = [];
+    let resultado: ResultadoDaFatia = { tipo: "continua" };
+    let seq = 1;
+    for (let i = 0; i < 400 && resultado.tipo === "continua"; i++) {
+      const antes = await cursorDaExecucao(runId);
+      const medidor = newMeter();
+      const pluggyAntes = chamadasAoPluggy;
+      resultado = await runSyncSlice(
+        AMBIENTE,
+        { db: createDb(env.DB, medidor), fetch },
+        { runId, seq, tentativa: 1 },
+        AGORA,
+      );
+      leituras.push({
+        fase: antes.phase,
+        w: antes.w,
+        totalAntes: antes.slices_total,
+        feitasAntes: antes.slices_done,
+        idasAoD1: medidor.calls,
+        chamadasAoPluggy: chamadasAoPluggy - pluggyAntes,
+        movimentoApos: await movimentoDe(idAntiga),
+      });
+      seq += 1;
+    }
+    expect(resultado).toEqual({ tipo: "encerrou", status: "ok", codigo: null });
+
+    const fases = leituras.map((leitura) => leitura.fase);
+    expect(fases.at(-1)).toBe("fim");
+    expect(fases.filter((fase) => fase === "fim")).toHaveLength(1);
+
+    const conciliacoes = leituras.filter((leitura) => leitura.fase === "conciliar");
+    expect(conciliacoes.map((leitura) => leitura.w)).toEqual(Array.from({ length: 25 }, (_, k) => k));
+    // As 25 fatias são contíguas, depois das transações e antes da fim.
+    expect(fases.indexOf("fim") - fases.indexOf("conciliar")).toBe(25);
+    expect(fases.lastIndexOf("transacoes")).toBeLessThan(fases.indexOf("conciliar"));
+    // Nenhuma fatia de conciliação chama o Pluggy; cada uma faz poucas idas ao D1 (ler a execução, conciliar, gravar o cursor).
+    expect(Math.max(...conciliacoes.map((leitura) => leitura.chamadasAoPluggy))).toBe(0);
+    expect(Math.max(...conciliacoes.map((leitura) => leitura.idasAoD1))).toBeLessThanOrEqual(4);
+
+    // O total cresce em 25 quando a fase transacoes acaba: a última fatia de transações é a que vê o total de importação.
+    const ultimaDeTransacoes = leituras.filter((leitura) => leitura.fase === "transacoes").at(-1);
+    const totalDaImportacao = ultimaDeTransacoes?.totalAntes ?? -1;
+    expect(conciliacoes[0]?.totalAntes).toBe(totalDaImportacao + 25);
+    expect(conciliacoes[0]?.feitasAntes).toBe(totalDaImportacao);
+
+    // A janela mais antiga (w = 24) é a que muda a linha de 370 dias; as janelas antes dela não tocam nela.
+    const indiceDaJanelaMaisAntiga = leituras.findIndex(
+      (leitura) => leitura.fase === "conciliar" && leitura.w === 24,
+    );
+    expect(
+      leituras
+        .slice(0, indiceDaJanelaMaisAntiga)
+        .every((leitura) => leitura.movimentoApos === "pagamento_fatura"),
+    ).toBe(true);
+    expect(leituras[indiceDaJanelaMaisAntiga]?.movimentoApos).toBe("pix_recebido");
+
+    const run = await execucao(runId);
+    expect(run).toMatchObject({ status: "ok", progress_pct: 100, retried: 0 });
+    expect(run?.slices_total).toBe(totalDaImportacao + 25);
+    expect(run?.slices_done).toBe(run?.slices_total);
   });
 });
 
