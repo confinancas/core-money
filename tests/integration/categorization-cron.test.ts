@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
-import { APIError, AuthenticationError } from "@anthropic-ai/sdk";
+import { APIError, AuthenticationError, RateLimitError } from "@anthropic-ai/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import migracao from "../../migrations/0011_categorization.sql?raw";
+import migracao from "../../migrations/0012_categorization.sql?raw";
 import { establishmentKey } from "../../src/shared/establishment-key";
 import type { ClienteDaIA } from "../../src/worker/categorization/claude";
 import { loadCategorizationContext } from "../../src/worker/categorization/context-repo";
@@ -574,6 +574,37 @@ describe("limites, logs e a migração", () => {
     expect(saida).toContain("categorization: lote=2");
     expect(saida).not.toContain("LOG UM");
     expect(saida).not.toContain(CHAVE_FALSA);
+  });
+
+  it("erro do provedor com 'quota' na mensagem: a fatia para como indisponível, sem lançar e sem limite do banco (stub)", async () => {
+    const lar = await criarLar();
+    await comChave();
+    const id = await compra(lar, "COTA DO PROVEDOR");
+    await importar(lar, [id]);
+    // Stub da Anthropic: a classe de limite do SDK, com a palavra "quota" na mensagem do provedor.
+    const cliente: ClienteDaIA = {
+      messages: {
+        create: async () => {
+          throw new RateLimitError(
+            429,
+            undefined,
+            "Your organization has exceeded its monthly quota",
+            new Headers(),
+          );
+        },
+      },
+    };
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const resultado = await runCategorizationSlice(ambiente, {
+      now: () => new Date(AGORA),
+      createClient: () => cliente,
+    });
+    expect(resultado.situacao).toBe("parada");
+    expect(await fila(id)).toEqual({ attempts: 0, last_error: "indisponivel" });
+    const saida = info.mock.calls.map((c) => c.join(" ")).join("\n");
+    expect(saida).toContain("erro=indisponivel status=429");
+    expect(saida).not.toMatch(/quota/i);
+    expect(saida).not.toContain("limite_d1");
   });
 
   it("a carga inicial da migração põe na fila as saídas e entradas sem resolver e sem sugestão", async () => {

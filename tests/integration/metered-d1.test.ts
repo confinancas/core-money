@@ -11,7 +11,7 @@ beforeEach(async () => {
 });
 
 describe("meteredD1", () => {
-  it("raw() de um join devolve os dois ids certos e conta uma ida sem linhas medidas", async () => {
+  it("raw() de um join devolve os dois ids certos e conta as linhas devolvidas como estimativa", async () => {
     await env.DB.batch([
       env.DB.prepare("INSERT INTO t_casais (id, nome) VALUES (1, '[TEST] Casal A')"),
       env.DB.prepare("INSERT INTO t_contas (id, casal_id, nome) VALUES (2, 1, '[TEST] Conta A')"),
@@ -26,7 +26,33 @@ describe("meteredD1", () => {
       .raw();
 
     expect(linhas).toEqual([[1, 2]]);
-    expect(meter).toMatchObject({ calls: 1, statements: 1, unmeteredStatements: 1 });
+    // Uma linha devolvida por raw(): conta em rowsRead e em estimatedRows (o D1 não manda meta em raw()).
+    expect(meter).toMatchObject({
+      calls: 1,
+      statements: 1,
+      rowsRead: 1,
+      estimatedRows: 1,
+      unmeteredStatements: 0,
+    });
+  });
+
+  it("raw() com columnNames não conta o cabeçalho como linha", async () => {
+    const meter = newMeter();
+    const db = meteredD1(env.DB, meter);
+
+    const linhas = await db.prepare("SELECT id FROM t_casais WHERE id = 999").raw({ columnNames: true });
+
+    expect(linhas).toEqual([["id"]]);
+    expect(meter).toMatchObject({ calls: 1, statements: 1, rowsRead: 0, estimatedRows: 0 });
+  });
+
+  it("exec() não conta linhas: entra em calls, statements e unmeteredStatements", async () => {
+    const meter = newMeter();
+    const db = meteredD1(env.DB, meter);
+
+    await db.exec("SELECT 1");
+
+    expect(meter).toMatchObject({ calls: 1, statements: 1, unmeteredStatements: 1, rowsRead: 0 });
   });
 
   it("all() soma as linhas lidas", async () => {
