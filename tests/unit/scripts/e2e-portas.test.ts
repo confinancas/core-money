@@ -8,6 +8,7 @@ describe("portasDoE2E", () => {
       instalacaoPronta: 8788,
       stub: 8789,
       configuracao: 8790,
+      pluggy: 8791,
       inspecaoInstalacaoPronta: 8792,
       inspecaoConfiguracao: 8793,
     });
@@ -19,15 +20,25 @@ describe("portasDoE2E", () => {
       instalacaoPronta: 20080,
       stub: 20081,
       configuracao: 20082,
+      pluggy: 20083,
       inspecaoInstalacaoPronta: 20084,
       inspecaoConfiguracao: 20085,
     });
-    expect(portasDoE2E("33080")).toMatchObject({ instalacaoPronta: 33080, stub: 33081, configuracao: 33082 });
+    expect(portasDoE2E("33080")).toMatchObject({
+      instalacaoPronta: 33080,
+      stub: 33081,
+      configuracao: 33082,
+      pluggy: 33083,
+    });
   });
 
   it("aceita 1024 e 49142, e a maior base deixa o bloco inteiro abaixo de 49152", () => {
     expect(portasDoE2E("1024").instalacaoPronta).toBe(1024);
-    expect(portasDoE2E("49142")).toMatchObject({ instalacaoPronta: 49142, inspecaoConfiguracao: 49147 });
+    expect(portasDoE2E("49142")).toMatchObject({
+      instalacaoPronta: 49142,
+      pluggy: 49145,
+      inspecaoConfiguracao: 49147,
+    });
     expect(49142 + 9).toBeLessThan(49152);
   });
 
