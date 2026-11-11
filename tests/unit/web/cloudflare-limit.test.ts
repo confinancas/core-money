@@ -93,6 +93,23 @@ describe("rodada 1: resposta boa limpa o aviso e a leitura de fundo não redirec
     expect(lerLimiteAtingido()).toBeNull();
   });
 
+  it("uma resposta de chamada que começou antes do limite não limpa o aviso", async () => {
+    let liberaResposta: () => void = () => undefined;
+    comFetch(
+      () =>
+        new Promise<Response>((resolve) => {
+          liberaResposta = () => resolve(Response.json({ ok: true }));
+        }),
+    );
+
+    const pendente = apiFetch("/api/usage");
+    avisaLimiteAtingido("requisicoes");
+    liberaResposta();
+    await pendente;
+
+    expect(lerLimiteAtingido()).toBe("requisicoes");
+  });
+
   it("no 401 com semRedirecionarNaSessao, a sessão expirada não é acionada", async () => {
     comFetch(async () => Response.json({ error: "nao_autenticado" }, { status: 401 }));
     const acao = vi.fn();

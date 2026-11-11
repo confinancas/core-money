@@ -260,6 +260,7 @@ test.describe("aviso de uso do plano gratuito", () => {
         body: "<!DOCTYPE html><html><body>error code: 1027</body></html>",
       }),
     );
+    await signUpAndSignIn(page);
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Limite do plano gratuito atingido" })).toBeVisible();

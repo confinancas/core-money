@@ -1,5 +1,5 @@
 import { type ApiErrorBody, isApiErrorBody } from "../../shared/api";
-import { avisaLimiteAtingido, limpaLimiteAtingido } from "../usage/limite-store";
+import { avisaLimiteAtingido, limpaLimiteAtingido, proximaSequencia } from "../usage/limite-store";
 
 const MENSAGEM_PADRAO = "Algo deu errado. Tente de novo.";
 
@@ -118,6 +118,8 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const cabecalhos = new Headers(init.headers);
   if (!cabecalhos.has("accept")) cabecalhos.set("accept", "application/json");
+  // Número de ordem da chamada: a resposta boa só limpa o aviso de limite se a chamada começou depois dele.
+  const desde = proximaSequencia();
 
   let resposta: Response;
   try {
@@ -167,7 +169,7 @@ export async function apiFetch<T>(
   }
 
   // Uma resposta boa da API mostra que o limite passou: o aviso guardado sai (TASK-0109, rodada 1).
-  limpaLimiteAtingido();
+  limpaLimiteAtingido(desde);
 
   // 204 não tem corpo: o resultado é undefined, e não um erro de JSON (correção herdada da TASK-0005).
   if (resposta.status === 204) return undefined as T;

@@ -5,6 +5,17 @@ export type MotivoDoLimite = "requisicoes" | "banco";
 let atual: MotivoDoLimite | null = null;
 const ouvintes = new Set<() => void>();
 
+// Ordem das chamadas: cada requisição pega um número ao começar, e o limite guarda o número de quando apareceu. Uma
+// resposta boa só limpa o aviso se a requisição começou depois dele (TASK-0109, rodada 1): a leitura que já estava
+// no ar quando o limite apareceu não desmente o limite que outra chamada acabou de mostrar.
+let sequencia = 0;
+let registradoEm = 0;
+
+export function proximaSequencia(): number {
+  sequencia += 1;
+  return sequencia;
+}
+
 function avisa(): void {
   for (const ouvinte of ouvintes) ouvinte();
 }
@@ -12,12 +23,15 @@ function avisa(): void {
 export function avisaLimiteAtingido(motivo: MotivoDoLimite): void {
   if (atual === motivo) return;
   atual = motivo;
+  registradoEm = proximaSequencia();
   avisa();
 }
 
-// Chamado por "Tentar de novo": a tela volta ao conteúdo, e a próxima chamada decide de novo.
-export function limpaLimiteAtingido(): void {
+// Sem `desde`: limpa sempre (o "Tentar de novo" da tela de limite, que também recarrega a página). Com `desde`, a
+// resposta boa de uma chamada que começou em `desde` só limpa se começou depois de o limite aparecer.
+export function limpaLimiteAtingido(desde?: number): void {
   if (atual === null) return;
+  if (desde !== undefined && desde <= registradoEm) return;
   atual = null;
   avisa();
 }
