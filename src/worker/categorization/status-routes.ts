@@ -46,8 +46,10 @@ export const statusRoutes = (
 
     const keyState = estadoDaChave(chaveAtual.configured, chaveAtual.readable, porErro);
     // N17: uma chave nova gravada há pouco, com erros ainda na fila, pode levar alguns minutos para voltar.
+    // N1: só vale com a chave legível. Uma chave ilegível não volta sozinha, e o texto não pode prometer isso.
     const chaveNovaRecente =
       keyState === "problema_chave" &&
+      chaveAtual.readable &&
       atualizadaEm !== null &&
       agora().getTime() - Date.parse(atualizadaEm) < MINUTOS_DE_PAUSA * 60 * 1000;
 
