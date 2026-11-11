@@ -612,3 +612,52 @@ test("F6: compra aberta direto, criar uma categoria pelo seletor, e a seta leva 
   await page.getByRole("link", { name: "Voltar" }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
 });
+
+// F8: desistir da criação de categoria aberta pela compra. A seta do topo da "Nova categoria" volta ao seletor (com
+// replace), e a compra segue com a seta até a origem. Com histórico (entra pelo Início) e com a compra aberta direto.
+async function desistirDaCriacaoPeloSeletor(page: Page): Promise<void> {
+  await page.getByRole("link", { name: /Sem categoria · revisar/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/escolher");
+  await page.getByRole("link", { name: /Nova categoria/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/nova");
+  // A seta do topo da criação: desistir, sem criar nada.
+  await page.getByRole("link", { name: "Voltar às categorias" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/escolher");
+}
+
+test("F8: com histórico (entra pelo Início), desistir da criação e fechar o seletor no X leva a seta ao Início", async ({
+  page,
+}) => {
+  await page.goto("/inicio");
+  await page.evaluate((caminho) => {
+    window.history.pushState({ usr: null, key: "e2e-f8-inicio", idx: 1 }, "", caminho);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+  }, COMPRA);
+  await expect(page.getByRole("heading", { level: 2, name: ORIGINAL })).toBeVisible();
+
+  await desistirDaCriacaoPeloSeletor(page);
+
+  // O X do seletor, aberto pela compra, volta à compra com replace; a seta da compra leva ao Início.
+  await page.getByRole("link", { name: "Fechar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+  await page.getByRole("link", { name: "Voltar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/inicio");
+});
+
+test("F8: compra aberta direto, desistir da criação e escolher uma categoria existente leva a seta ao Cartões", async ({
+  page,
+}) => {
+  await page.goto(COMPRA);
+  await expect(page.getByRole("heading", { level: 2, name: ORIGINAL })).toBeVisible();
+
+  await desistirDaCriacaoPeloSeletor(page);
+
+  // Escolher uma categoria que já existe e salvar: a volta à compra também troca a entrada.
+  await page.getByRole("radio", { name: /Mercado E2E/ }).click();
+  await page.getByRole("button", { name: "Salvar categoria" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+  await expect(page.getByText("[TEST] Mercado E2E", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Voltar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
+});

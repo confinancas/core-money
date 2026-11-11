@@ -20,6 +20,8 @@ export function NovaCategoria() {
   // leva junto a marca de histórico da compra. Sem isso, a seta da compra cairia aqui de novo (TASK-0403, F6).
   const daCompra = voltar !== null && new URL(voltar, "http://app.invalid").searchParams.has("transacao");
   const marcaDeHistorico = (localizacao.state as { temHistorico?: unknown } | null)?.temHistorico;
+  // O estado que a compra precisa de volta: a marca de histórico, se chegou. Vale para criar e para desistir (F8).
+  const estadoDaCompra = typeof marcaDeHistorico === "boolean" ? { temHistorico: marcaDeHistorico } : {};
   const paiPedido = params.get("pai");
 
   const [categorias, setCategorias] = useState<CategoryDTO[] | null>(null);
@@ -62,10 +64,7 @@ export function NovaCategoria() {
       const criada = await createCategory(entrada);
       navegar(destino, {
         replace: daCompra,
-        state: {
-          categoriaCriada: criada.id,
-          ...(typeof marcaDeHistorico === "boolean" ? { temHistorico: marcaDeHistorico } : {}),
-        },
+        state: { categoriaCriada: criada.id, ...estadoDaCompra },
       });
     } catch (erro) {
       if (erro instanceof ApiError && erro.code === "validacao" && erro.fields) {
@@ -78,8 +77,18 @@ export function NovaCategoria() {
     }
   }
 
+  // Desistir (a seta do topo) de uma criação aberta pela compra volta ao seletor com replace e leva a marca de histórico:
+  // um link comum empilharia o seletor sobre esta tela, e a seta da compra cairia aqui de novo (TASK-0403, F8).
   const cabecalho = (
-    <GreenTop variant="detail" title="Nova categoria" back={{ to: destino, label: "Voltar às categorias" }} />
+    <GreenTop
+      variant="detail"
+      title="Nova categoria"
+      back={{
+        to: destino,
+        label: "Voltar às categorias",
+        aoClicar: daCompra ? () => navegar(destino, { replace: true, state: estadoDaCompra }) : undefined,
+      }}
+    />
   );
 
   if (categorias === null) {
