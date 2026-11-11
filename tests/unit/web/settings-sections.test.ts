@@ -8,7 +8,7 @@ const ids = (coluna: SettingsSection[]) => coluna.map((secao) => secao.id);
 const SecaoDeTeste = () => null;
 
 describe("registro de seções", () => {
-  it("registra as seções das tasks 0107, 0203, 0802 e 0901, com ids únicos", () => {
+  it("registra as seções das tasks 0107, 0203, 0802, 0901 e 0701, com ids únicos", () => {
     const registradas = SETTINGS_SECTIONS.map((secao) => secao.id);
 
     expect(registradas).toEqual([
@@ -17,6 +17,7 @@ describe("registro de seções", () => {
       "ciclo",
       "distribuicao-da-renda",
       "renda-fixa",
+      "notificacoes",
       "sincronizacao",
       "dados",
     ]);
@@ -32,6 +33,7 @@ describe("registro de seções", () => {
       ["ciclo", "Ciclo e orçamento", 30],
       ["distribuicao-da-renda", "Distribuição da renda", 40],
       ["renda-fixa", "Renda fixa", 50],
+      ["notificacoes", "Notificações", 70],
       ["sincronizacao", "Sincronização", 80],
       ["dados", "Dados", 90],
     ]);
@@ -49,28 +51,29 @@ describe("colunas por largura", () => {
         "ciclo",
         "distribuicao-da-renda",
         "renda-fixa",
+        "notificacoes",
         "sincronizacao",
         "dados",
       ],
     ]);
   });
 
-  it("tablet: duas colunas; Casal, Contas, Ciclo e Distribuição na primeira, Renda fixa, Sincronização e Dados na segunda", () => {
+  it("tablet: duas colunas; Casal, Contas, Ciclo e Distribuição na primeira, Renda fixa, Notificações, Sincronização e Dados na segunda", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "tablet");
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["renda-fixa", "sincronizacao", "dados"],
+      ["renda-fixa", "notificacoes", "sincronizacao", "dados"],
     ]);
   });
 
-  it("desktop: três colunas, Casal e Contas à esquerda, Ciclo, Distribuição e Renda fixa no meio, Sincronização e Dados à direita", () => {
+  it("desktop: três colunas, Casal e Contas à esquerda, Ciclo, Distribuição e Renda fixa no meio, Notificações, Sincronização e Dados à direita", () => {
     const colunas = colunasDasSecoes(SETTINGS_SECTIONS, "desktop");
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
       ["ciclo", "distribuicao-da-renda", "renda-fixa"],
-      ["sincronizacao", "dados"],
+      ["notificacoes", "sincronizacao", "dados"],
     ]);
   });
 
@@ -94,18 +97,19 @@ describe("colunas por largura", () => {
         "ciclo",
         "distribuicao-da-renda",
         "renda-fixa",
+        "notificacoes",
         "sincronizacao",
         "dados",
       ],
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["falsa-de-teste", "renda-fixa", "sincronizacao", "dados"],
+      ["falsa-de-teste", "renda-fixa", "notificacoes", "sincronizacao", "dados"],
     ]);
     expect(colunasDasSecoes(registro, "desktop").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
       ["falsa-de-teste", "ciclo", "distribuicao-da-renda", "renda-fixa"],
-      ["sincronizacao", "dados"],
+      ["notificacoes", "sincronizacao", "dados"],
     ]);
   });
 });

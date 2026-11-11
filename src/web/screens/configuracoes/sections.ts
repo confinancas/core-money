@@ -26,6 +26,7 @@ import { SectionCiclo } from "./SectionCiclo";
 import { SectionContasMeuPluggy } from "./SectionContasMeuPluggy";
 import { SectionDados } from "./SectionDados";
 import { SectionDistribuicaoRenda } from "./SectionDistribuicaoRenda";
+import { SectionNotificacoes } from "./SectionNotificacoes";
 import { SectionRendaFixa } from "./SectionRendaFixa";
 import { SectionSincronizacao } from "./SectionSincronizacao";
 
@@ -71,6 +72,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     tabletColumn: 2,
     desktopColumn: 2,
     Component: SectionRendaFixa,
+  },
+  {
+    id: "notificacoes",
+    title: "Notificações",
+    order: 70,
+    tabletColumn: 2,
+    desktopColumn: 3,
+    Component: SectionNotificacoes,
   },
   {
     id: "sincronizacao",

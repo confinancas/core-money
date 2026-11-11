@@ -12,6 +12,7 @@ import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
 import { fixedIncomesRoutes } from "./income/fixed-incomes-routes";
 import { membersRoutes } from "./members/routes";
+import { notificationPrefsRoutes, notificationsRoutes } from "./notifications/routes";
 import { pluggyConnectionsRoutes } from "./pluggy/routes";
 import { type ValidacaoDaChave, validateClaudeKey } from "./providers/anthropic";
 import { authRoutes } from "./routes/auth";
@@ -104,6 +105,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/", settingsRoutes(validar));
   app.route("/household", householdRoutes(resolverDaSessao, options.agora));
   app.route("/members", membersRoutes(resolverDaSessao, options.agora));
+  app.route("/notifications", notificationsRoutes(resolverDaSessao, options.agora));
+  app.route("/notification-prefs", notificationPrefsRoutes(resolverDaSessao));
   app.route("/categories", categoriesRoutes(resolverDaSessao, options.agora));
   app.route("/rules", regrasRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
