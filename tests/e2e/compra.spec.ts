@@ -168,21 +168,10 @@ function naoSeCruzam(a: Caixa, b: Caixa): boolean {
   );
 }
 
-// Contraste WCAG entre duas cores em rgb(...).
+// Cor computada (rgb(r, g, b)) em trio de números, para comparar com o token.
 function rgbDe(texto: string): [number, number, number] {
   const [r = 0, g = 0, b = 0] = (texto.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
   return [r, g, b];
-}
-function luminancia([r, g, b]: [number, number, number]): number {
-  const canal = (valor: number) => {
-    const s = valor / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
-}
-function contraste(a: [number, number, number], b: [number, number, number]): number {
-  const [claro, escuro] = [luminancia(a), luminancia(b)].sort((x, y) => y - x) as [number, number];
-  return (claro + 0.05) / (escuro + 0.05);
 }
 
 const ISO_DA_HORA = /Hoje, \d{2}\/\d{2} às 14:32 · \[TEST\] Banco E2E Compra final 6655/;
@@ -287,24 +276,20 @@ test("cor: o título branco e o texto laranja da categoria têm contraste sufici
     caixaDoCabecalho.y + caixaDoCabecalho.altura,
   );
 
-  // Branco sobre o pior ponto do gradiente (a parada mais escura, #0B8C5A).
+  // Só o token: o título é branco. O contraste não é afirmado aqui: é decisão de token para Gustavo (rodada 1).
   const cor = await titulo.evaluate((elemento) => getComputedStyle(elemento).color);
-  const contrasteComOVerde = contraste(rgbDe(cor), [11, 140, 90]);
-  expect(contrasteComOVerde, `branco sobre #0B8C5A: ${contrasteComOVerde.toFixed(2)}`).toBeGreaterThanOrEqual(
-    3,
-  );
+  expect(rgbDe(cor)).toEqual([255, 255, 255]);
 
-  // Laranja sobre o verde-claro: 19 px em negrito (texto grande), com 3:1 ou mais.
+  // Os tokens do texto de categoria: laranja (#C27400) sobre o verde-claro (#E6F6EE), no tamanho de texto grande.
   const nome = page.getByText("Sem categoria · revisar");
   const estilo = await nome.evaluate((elemento) => {
     const fundo = getComputedStyle(elemento.closest("a") as HTMLElement).backgroundColor;
     const estiloDoNome = getComputedStyle(elemento);
-    return { cor: estiloDoNome.color, fundo, tamanho: estiloDoNome.fontSize, peso: estiloDoNome.fontWeight };
+    return { cor: estiloDoNome.color, fundo, tamanho: estiloDoNome.fontSize };
   });
-  expect(Number.parseFloat(estilo.tamanho)).toBeGreaterThanOrEqual(18.66);
-  expect(Number(estilo.peso)).toBeGreaterThanOrEqual(700);
-  const contrasteDoLaranja = contraste(rgbDe(estilo.cor), rgbDe(estilo.fundo));
-  expect(contrasteDoLaranja).toBeGreaterThanOrEqual(3);
+  expect(rgbDe(estilo.cor)).toEqual([194, 116, 0]);
+  expect(rgbDe(estilo.fundo)).toEqual([230, 246, 238]);
+  expect(Number.parseFloat(estilo.tamanho)).toBe(19);
 });
 
 test("renomear: o título muda, aparece o original, e usar original desfaz; o banco guarda a descrição original", async ({
@@ -501,4 +486,76 @@ test("olho ligado: os valores da compra ficam borrados", async ({ page }) => {
   const valor = page.getByRole("img", { name: "45,00" });
   await expect(valor).toBeVisible();
   await expect.poll(() => valor.evaluate((elemento) => getComputedStyle(elemento).filter)).toContain("blur");
+});
+
+// F2 (cenário 9): a compra abre do cartão; escolher a categoria volta à compra, que mostra a categoria; a seta leva de
+// volta ao cartão, sem passar pelo seletor. O X do seletor, aberto pela compra, também volta para a compra.
+test("cenário 9: escolher categoria volta à compra com a categoria, e a seta leva ao cartão de origem", async ({
+  page,
+}) => {
+  await page.goto("/cartoes");
+  await page.getByRole("link", { name: /PAG\*JOSEDASILVA/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+
+  await page.getByRole("link", { name: /Sem categoria · revisar/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/escolher");
+  await expect(page.getByRole("radio", { name: /Mercado E2E/ })).toBeVisible();
+  await page.getByRole("radio", { name: /Mercado E2E/ }).click();
+  await page.getByRole("button", { name: "Salvar categoria" }).click();
+
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+  await expect(page.getByText("[TEST] Mercado E2E", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Voltar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
+});
+
+test("F2: o X do seletor, aberto pela compra, volta à compra; a seta depois leva ao cartão", async ({
+  page,
+}) => {
+  await page.goto("/cartoes");
+  await page.getByRole("link", { name: /PAG\*JOSEDASILVA/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+
+  await page.getByRole("link", { name: /Sem categoria · revisar/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/escolher");
+  await page.getByRole("link", { name: "Fechar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+
+  await page.getByRole("link", { name: "Voltar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
+});
+
+// F4: a falha de uma gravação desfaz só o campo que falhou. Ocultar grava; o tipo (que demora e depois falha) volta ao
+// anterior; a compra continua oculta na tela e no banco.
+test("F4: uma gravação que falha não desfaz a outra que deu certo", async ({ page }) => {
+  await page.route("**/api/transactions/e2e-cp-compra", async (rota) => {
+    if (rota.request().method() !== "PATCH") return rota.continue();
+    const corpo = rota.request().postDataJSON() as { spendType?: string };
+    if (corpo.spendType === undefined) return rota.continue();
+    await new Promise((resolver) => setTimeout(resolver, 800));
+    return rota.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "erro_interno", message: "Algo deu errado. Tente de novo." }),
+    });
+  });
+  await page.goto(COMPRA);
+
+  await page.getByRole("radio", { name: "Conforto" }).click();
+  await page.getByRole("switch", { name: "Ocultar dos cálculos e gasto de terceiros" }).click();
+
+  await expect(page.getByText("Gasto de terceiros · fora dos cálculos")).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Não deu para salvar. Tente de novo." }),
+  ).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Prazeres" })).toHaveAttribute("aria-checked", "true");
+  await expect(
+    page.getByRole("switch", { name: "Ocultar dos cálculos e gasto de terceiros" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await expect
+    .poll(() =>
+      consultaSql("pronta", "SELECT hidden, spend_type FROM transactions WHERE id = 'e2e-cp-compra'"),
+    )
+    .toEqual([{ hidden: 1, spend_type: "prazeres" }]);
 });

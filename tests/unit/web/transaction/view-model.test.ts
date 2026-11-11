@@ -5,6 +5,7 @@ import {
   horaSaoPaulo,
   linhaDeData,
   podeOcultar,
+  temTipoDeGasto,
   textoDaCategoria,
   textoDaFatura,
   textoDoCiclo,
@@ -90,6 +91,19 @@ describe("linhaDeData", () => {
     expect(horaSaoPaulo("2026-10-04T02:05:00Z")).toBe("23:05");
     expect(horaSaoPaulo("2026-10-04")).toBeNull();
   });
+
+  // F3: só a meia-noite UTC é data de calendário (sem horário). 03:00Z é meia-noite em São Paulo: um horário de verdade.
+  it("F3: T00:00:00.000Z é só a data (sem hora); 03:00Z é meia-noite de São Paulo e sai 00:00", () => {
+    expect(horaSaoPaulo("2026-11-05T00:00:00.000Z")).toBeNull();
+    expect(horaSaoPaulo("2026-11-05T00:00:00Z")).toBeNull();
+    expect(horaSaoPaulo("2026-11-05T03:00:00.000Z")).toBe("00:00");
+    expect(
+      linhaDeData({ ...BASE, localDate: "2026-11-05", occurredAt: "2026-11-05T00:00:00.000Z" }, "2026-11-05"),
+    ).toBe("Hoje, 05/11 · Nubank final 4417");
+    expect(
+      linhaDeData({ ...BASE, localDate: "2026-11-05", occurredAt: "2026-11-05T03:00:00.000Z" }, "2026-11-05"),
+    ).toBe("Hoje, 05/11 às 00:00 · Nubank final 4417");
+  });
 });
 
 describe("textoDaCategoria", () => {
@@ -136,11 +150,19 @@ describe("tipos, ocultar e título", () => {
     expect(tiposDaCompra(false)).toHaveLength(7);
   });
 
-  it("só saída pode ser ocultada; o título segue o movimento", () => {
-    expect(podeOcultar("compra")).toBe(true);
-    expect(podeOcultar("estorno")).toBe(true);
-    expect(podeOcultar("pix_recebido")).toBe(false);
-    expect(podeOcultar("pagamento_fatura")).toBe(false);
+  // F1: tipo e ocultar só na saída (valor negativo nos movimentos de saída, ou estorno). O "outro" de cashback, com
+  // valor positivo, é entrada.
+  it("F1: só saída tem tipo e pode ser ocultada; o cashback (outro, +5,00) não", () => {
+    const de = (movement: string, amountCents: number) => ({ movement, amountCents });
+    expect(podeOcultar(de("compra", -4500))).toBe(true);
+    expect(podeOcultar(de("estorno", 3000))).toBe(true);
+    expect(podeOcultar(de("outro", -500))).toBe(true);
+    expect(podeOcultar(de("outro", 500))).toBe(false);
+    expect(podeOcultar(de("pix_recebido", 10000))).toBe(false);
+    expect(podeOcultar(de("pagamento_fatura", -10000))).toBe(false);
+    expect(temTipoDeGasto(de("outro", 500))).toBe(false);
+    expect(temTipoDeGasto(de("rendimento", 1200))).toBe(false);
+    expect(temTipoDeGasto(de("boleto", -58000))).toBe(true);
     expect(tituloDaCompra("estorno")).toBe("Estorno");
     expect(tituloDaCompra("debito")).toBe("Débito");
     expect(tituloDaCompra("boleto")).toBe("Boleto");

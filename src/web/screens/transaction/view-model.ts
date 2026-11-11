@@ -28,10 +28,10 @@ const FORMAS: Readonly<Record<string, string>> = {
   ted_recebida: "TED",
 };
 
-// Movimentos que o casal pode ocultar (gasto de terceiros): as saídas, a compra e o estorno. Entrada não.
-const OCULTAVEIS: readonly string[] = [
+// Saída: um dos movimentos de saída com valor negativo, ou o estorno (regra movimentosComTipo, TASK-0802). Entrada
+// com nome de saída (o "outro" de cashback, de valor positivo) não é saída: não tem tipo nem se oculta.
+const MOVIMENTOS_DE_SAIDA: readonly string[] = [
   "compra",
-  "estorno",
   "pix_enviado",
   "ted_enviada",
   "debito",
@@ -39,9 +39,17 @@ const OCULTAVEIS: readonly string[] = [
   "outro",
 ];
 
+export const ehSaida = (movimento: string, valorEmCentavos: number): boolean =>
+  movimento === "estorno" || (valorEmCentavos < 0 && MOVIMENTOS_DE_SAIDA.includes(movimento));
+
 export const tituloDaCompra = (movimento: string): string => TITULOS[movimento] ?? "Transação";
 
-export const podeOcultar = (movimento: string): boolean => OCULTAVEIS.includes(movimento);
+// Tipo de gasto e ocultar só nas saídas (a mesma regra que a API aplica).
+export const temTipoDeGasto = (detalhe: Pick<DetalheDaCompra, "movement" | "amountCents">): boolean =>
+  ehSaida(detalhe.movement, detalhe.amountCents);
+
+export const podeOcultar = (detalhe: Pick<DetalheDaCompra, "movement" | "amountCents">): boolean =>
+  ehSaida(detalhe.movement, detalhe.amountCents);
 
 // A compra de cartão não tem Metas nem Investimentos; a de conta (boleto, débito, outra saída) tem os sete.
 export function tiposDaCompra(cartao: boolean) {
@@ -82,9 +90,14 @@ const FORMATADOR_DE_HORA = new Intl.DateTimeFormat("pt-BR", {
   hourCycle: "h23",
 });
 
+// Meia-noite UTC é só a data de calendário (o agregador manda assim; regra da TASK-0202, em sao-paulo-date.ts). Não é
+// um horário: a tela não diz "às 21:00" para uma compra sem hora. Outro instante, como 03:00Z (meia-noite em São Paulo),
+// é um horário de verdade.
+const SO_DATA_EM_UTC = /T00:00:00(\.000)?Z$/;
+
 // Hora de São Paulo de um instante ISO ("14:32"). Sem horário no texto (só a data), não há hora.
 export function horaSaoPaulo(instante: string): string | null {
-  if (!/T\d{2}:\d{2}/.test(instante)) return null;
+  if (!/T\d{2}:\d{2}/.test(instante) || SO_DATA_EM_UTC.test(instante)) return null;
   const data = new Date(instante);
   if (Number.isNaN(data.getTime())) return null;
   const partes = FORMATADOR_DE_HORA.formatToParts(data);

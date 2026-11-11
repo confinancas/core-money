@@ -62,7 +62,12 @@ export function GreenTop({
               icon={<IconeSeta />}
             />
           ) : close ? (
-            <TopIconButton label={close.label} to={close.to} icon={<IconeFechar />} />
+            <TopIconButton
+              label={close.label}
+              to={close.to}
+              aoClicarNoLink={close.aoClicar}
+              icon={<IconeFechar />}
+            />
           ) : (
             <span aria-hidden="true" className="size-11 shrink-0" />
           )}

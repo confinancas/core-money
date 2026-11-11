@@ -16,7 +16,7 @@ import { DetailRows } from "./transaction/DetailRows";
 import { HideToggle } from "./transaction/HideToggle";
 import { SpendTypePicker } from "./transaction/SpendTypePicker";
 import { type ResultadoDoNome, TitleCard } from "./transaction/TitleCard";
-import { podeOcultar, tituloDaCompra } from "./transaction/view-model";
+import { podeOcultar, temTipoDeGasto, tituloDaCompra } from "./transaction/view-model";
 
 // Compra (TASK-0403): o detalhe de uma compra do cartão, ou de uma saída da conta (débito, boleto, outra). Nome próprio,
 // categoria, tipo e ocultar. Cada mudança grava na hora, com atualização otimista; se o servidor recusa ou cai, o
@@ -58,21 +58,27 @@ export function Compra() {
     };
   }, [carregar]);
 
-  // Grava um campo: mostra o valor novo já; se o PATCH falha, volta ao anterior. O nome tem aviso próprio no cartão.
+  // Grava um campo: mostra o valor novo já (só as chaves que a ação muda); se o PATCH falha, volta só essas chaves ao
+  // valor anterior. Outro campo gravado enquanto isso fica como está (F4). O nome tem aviso próprio no cartão.
   async function gravar(
     campo: CampoComErro,
     corpo: CorpoDoPatch,
-    otimista: (atual: DetalheDaCompra) => DetalheDaCompra,
+    mudanca: Partial<DetalheDaCompra>,
   ): Promise<boolean> {
-    const atual = dados;
-    if (atual === null) return false;
+    const anterior = dados;
+    if (anterior === null) return false;
     setErros({});
-    setDados(otimista(atual));
+    setDados({ ...anterior, ...mudanca });
     try {
       setDados(await patchTransaction(transactionId, corpo));
       return true;
     } catch {
-      setDados(atual);
+      const chaves = Object.keys(mudanca) as (keyof DetalheDaCompra)[];
+      setDados((atual) =>
+        atual === null
+          ? atual
+          : { ...atual, ...Object.fromEntries(chaves.map((chave) => [chave, anterior[chave]])) },
+      );
       if (campo !== "nome") setErros({ [campo]: "Não deu para salvar. Tente de novo." });
       return false;
     }
@@ -80,30 +86,27 @@ export function Compra() {
 
   function escolherTipo(tipo: SpendType) {
     if (dados === null || dados.spendType === tipo) return;
-    void gravar("tipo", { spendType: tipo }, (atual) => ({
-      ...atual,
-      spendType: tipo,
-      spendTypeSource: "escolhido",
-    }));
+    void gravar("tipo", { spendType: tipo }, { spendType: tipo, spendTypeSource: "escolhido" });
   }
 
   function alternarOcultar(oculta: boolean) {
     if (dados === null) return;
-    void gravar("ocultar", { hidden: oculta }, (atual) => ({
-      ...atual,
-      hidden: oculta,
-      hiddenReason: oculta ? "gasto_terceiros" : null,
-    }));
+    void gravar(
+      "ocultar",
+      { hidden: oculta },
+      { hidden: oculta, hiddenReason: oculta ? "gasto_terceiros" : null },
+    );
   }
 
   // Nome: PATCH com o nome (null volta ao original). Com a chave ligada, depois a regra só com o nome; se só a regra
   // falha, o nome fica salvo e a edição continua aberta.
   async function salvarNome(nome: string | null, comRegra: boolean): Promise<ResultadoDoNome> {
-    const gravado = await gravar("nome", { customName: nome }, (atual) => ({
-      ...atual,
-      customName: nome,
-      displayName: nome ?? atual.originalDescription,
-    }));
+    const original = dados?.originalDescription ?? "";
+    const gravado = await gravar(
+      "nome",
+      { customName: nome },
+      { customName: nome, displayName: nome ?? original },
+    );
     if (!gravado) return "erro";
     if (!comRegra || nome === null) return "ok";
     try {
@@ -115,9 +118,13 @@ export function Compra() {
   }
 
   const voltarPara = destinoDeVoltar(aba);
-  // A seta volta no histórico, como o botão de voltar do navegador; sem histórico (aberta direto), vai para a aba.
+  // Se a compra veio de outra tela (há histórico), a seta volta a ela; sem histórico (aberta direto), vai para a aba. A
+  // marca temHistorico vem no estado da própria entrada: a volta do seletor a repassa, porque ele troca esta entrada.
+  const marcaDeHistorico = (localizacao.state as { temHistorico?: unknown } | null)?.temHistorico;
+  const temHistorico =
+    typeof marcaDeHistorico === "boolean" ? marcaDeHistorico : localizacao.key !== "default";
   function voltar() {
-    if (localizacao.key !== "default") navegar(-1);
+    if (temHistorico) navegar(-1);
     else navegar(voltarPara);
   }
 
@@ -152,6 +159,7 @@ export function Compra() {
         <Corpo
           dados={dados}
           aba={aba}
+          temHistorico={temHistorico}
           hoje={hoje}
           erros={erros}
           aoEscolherTipo={escolherTipo}
@@ -166,6 +174,7 @@ export function Compra() {
 function Corpo({
   dados,
   aba,
+  temHistorico,
   hoje,
   erros,
   aoEscolherTipo,
@@ -174,6 +183,7 @@ function Corpo({
 }: {
   dados: DetalheDaCompra;
   aba: Aba | null;
+  temHistorico: boolean;
   hoje: string;
   erros: Partial<Record<CampoComErro, string>>;
   aoEscolherTipo: (tipo: SpendType) => void;
@@ -187,15 +197,15 @@ function Corpo({
       </div>
 
       <div className="flex min-w-0 flex-col gap-5 tablet:col-start-1 tablet:row-start-2 desktop:col-start-2 desktop:row-start-1">
-        <CategoryCard detalhe={dados} aba={aba} />
-        {dados.spendType !== null && (
+        <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />
+        {temTipoDeGasto(dados) && (
           <SpendTypePicker detalhe={dados} erro={erros.tipo ?? null} aoEscolher={aoEscolherTipo} />
         )}
       </div>
 
       <div className="flex min-w-0 flex-col gap-5 tablet:col-start-2 tablet:row-span-2 tablet:row-start-1 desktop:col-start-3 desktop:row-span-1 desktop:row-start-1">
         <DetailRows detalhe={dados} />
-        {podeOcultar(dados.movement) && (
+        {podeOcultar(dados) && (
           <HideToggle hidden={dados.hidden} erro={erros.ocultar ?? null} aoMudar={aoAlternarOcultar} />
         )}
       </div>

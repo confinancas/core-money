@@ -7,7 +7,16 @@ import { textoDaCategoria } from "./view-model";
 
 // Cartão da categoria (TASK-0403): leva ao seletor com a compra, e volta para cá. Sem categoria, fundo verde-claro e
 // "revisar" em laranja, como no protótipo. Com categoria, fundo branco e "Toque para trocar".
-export function CategoryCard({ detalhe, aba }: { detalhe: DetalheDaCompra; aba: Aba | null }) {
+// O seletor entra com replace: a compra sai do histórico enquanto ele está aberto, e volta no lugar dela (F2).
+export function CategoryCard({
+  detalhe,
+  aba,
+  temHistorico,
+}: {
+  detalhe: DetalheDaCompra;
+  aba: Aba | null;
+  temHistorico: boolean;
+}) {
   const texto = textoDaCategoria(detalhe);
   const voltar = `/compras/${encodeURIComponent(detalhe.id)}`;
   const destino = `/categorias/escolher?${new URLSearchParams({ transacao: detalhe.id, voltar }).toString()}`;
@@ -15,7 +24,8 @@ export function CategoryCard({ detalhe, aba }: { detalhe: DetalheDaCompra; aba: 
   return (
     <Link
       to={destino}
-      state={aba !== null ? { fromTab: aba } : undefined}
+      replace
+      state={{ ...(aba !== null ? { fromTab: aba } : {}), temHistorico }}
       className={cn(
         "flex min-h-[76px] items-center justify-between gap-3 rounded-card border px-[22px] py-4 text-ink transition-colors",
         texto.semCategoria
