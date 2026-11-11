@@ -1,7 +1,7 @@
 import { addDays } from "../../shared/cycle";
 import { fxReferenceDate } from "../../shared/income";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
-import { createDb } from "../db/client";
+import { createDb, type Db } from "../db/client";
 import { newMeter } from "../db/metered-d1";
 import {
   buildPtaxUrl,
@@ -28,7 +28,8 @@ type LinhaDeRecebimentoDolar = {
 
 type ParPendente = { fixedIncomeId: string; cycleKey: string; referencia: string };
 
-export type FxDeps = { now: Date; fetch: typeof fetch };
+// db: o do embrulho de medição de uso, quando o despachante o tem; sem ele, a tarefa abre o seu.
+export type FxDeps = { now: Date; fetch: typeof fetch; db?: Db };
 
 export type ResultadoDoFx = { pendentes: number; buscas: number; preenchidos: number };
 
@@ -60,7 +61,7 @@ async function buscarJanela(fetchFn: typeof fetch, referencia: string): Promise<
 // referência antigo. Uma leitura e uma escrita no D1; no máximo 2 chamadas ao Banco Central. Pares que não fecharam ficam
 // para a próxima execução.
 export async function fillPendingFxRates(env: { DB: D1Database }, deps: FxDeps): Promise<ResultadoDoFx> {
-  const db = createDb(env.DB, newMeter());
+  const db = deps.db ?? createDb(env.DB, newMeter());
   const hoje = todayInSaoPaulo(deps.now);
 
   const [paresLidos, cotacoesLidas] = await db.$client.batch([

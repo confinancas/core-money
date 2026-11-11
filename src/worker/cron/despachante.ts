@@ -1,10 +1,12 @@
 // Despachante do cron (TASK-0303). Um Cron Trigger só, a cada 5 minutos (plano gratuito). Cada execução roda as tarefas
 // na ordem de prioridade e para na primeira tarefa pesada: a CPU não se mede dentro do Worker, então uma por vez.
-// Hoje a única tarefa é a categorização; a importação e a sincronização acrescentam as suas aqui, antes dela.
+// As leves vêm primeiro e rodam em toda execução: a cotação do dólar (TASK-0902). Depois, a categorização (pesada).
+// A importação e a sincronização (pesadas) acrescentam as suas aqui, antes dela, e a cotação continua rodando antes.
 
 import { runCategorizationSlice } from "../categorization/cron";
 import type { Db } from "../db/client";
 import type { Env } from "../env";
+import { fillPendingFxRates } from "../income/fx";
 
 export type TarefaDoCron = {
   nome: string;
@@ -13,6 +15,13 @@ export type TarefaDoCron = {
 };
 
 export const TAREFAS_DO_CRON: readonly TarefaDoCron[] = [
+  {
+    // Leve (TASK-0902): busca a cotação do dólar pendente, no máximo 2 chamadas ao Banco Central por execução.
+    nome: "cotacao-dolar",
+    pesada: false,
+    executar: (env, agora, db) =>
+      fillPendingFxRates(env, { now: agora, fetch: (...args) => globalThis.fetch(...args), db }),
+  },
   {
     nome: "categorizacao",
     pesada: true,
