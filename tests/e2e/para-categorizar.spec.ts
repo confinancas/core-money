@@ -74,11 +74,33 @@ function ligaIADeTeste(): void {
 // Cada executaSql sobe o wrangler (3 a 5 s) e o gancho entra no limite do teste: 120 s, como o Meu Pluggy.
 test.setTimeout(120_000);
 
+// A instância pronta é um lar só: outras specs deixam linhas pendentes nele, e a fila conta essas linhas também.
+// Esconde o que não é desta spec (marcado com hidden_reason) e libera depois, para não mexer nos dados dos outros.
+function isolaFila(): void {
+  executaSql(
+    "pronta",
+    `UPDATE transactions SET hidden = 1, hidden_reason = 'e2e-pc' WHERE household_id = ${q(LAR)} AND hidden = 0 AND id NOT LIKE 'e2e-pc-%'`,
+  );
+}
+
+function liberaFila(): void {
+  executaSql(
+    "pronta",
+    "UPDATE transactions SET hidden = 0, hidden_reason = NULL WHERE hidden_reason = 'e2e-pc'",
+  );
+  executaSql("pronta", "DELETE FROM app_secrets WHERE name = 'claude_api_key' AND ciphertext = 'AAAA'");
+}
+
 test.beforeEach(async ({ page }) => {
   semearInstalacaoPronta();
   ligaIADeTeste();
   await signUpAndSignIn(page);
+  isolaFila();
   semeiaFila(DUAS());
+});
+
+test.afterEach(() => {
+  liberaFila();
 });
 
 async function abre(page: Page): Promise<void> {
