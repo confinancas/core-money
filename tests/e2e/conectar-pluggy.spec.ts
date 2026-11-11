@@ -79,8 +79,16 @@ async function todosOsAlvosTem44(page: Page): Promise<void> {
 
 // Só as linhas que este arquivo cria: a conexão [TEST] Conta A e os bancos dos ids de teste. As outras specs têm as
 // suas (com transações ligadas aos bancos), e um DELETE geral quebra a chave estrangeira delas.
+// A importação do histórico (TASK-0204) grava contas, cartões, faturas, movimentos e execuções nesses bancos: apagam-se
+// os filhos antes do banco, na ordem da chave estrangeira.
+const BANCOS_DO_PLUGGY = `(SELECT id FROM bank_items WHERE id IN ('${ITEM_ITAU}', '${ITEM_NUBANK}', '00000000-0000-4000-8000-0000000000e5', '00000000-0000-4000-8000-0000000000ff') OR connection_id IN (SELECT id FROM pluggy_connections WHERE label = '${ROTULO}'))`;
 const LIMPEZA_DO_PLUGGY = [
-  `DELETE FROM bank_items WHERE id IN ('${ITEM_ITAU}', '${ITEM_NUBANK}', '00000000-0000-4000-8000-0000000000e5', '00000000-0000-4000-8000-0000000000ff') OR connection_id IN (SELECT id FROM pluggy_connections WHERE label = '${ROTULO}')`,
+  `DELETE FROM transactions WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM bills WHERE card_id IN (SELECT id FROM cards WHERE bank_item_id IN ${BANCOS_DO_PLUGGY})`,
+  `DELETE FROM cards WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM accounts WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM sync_runs WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM bank_items WHERE id IN ${BANCOS_DO_PLUGGY}`,
   `DELETE FROM pluggy_connections WHERE label = '${ROTULO}'`,
 ].join("; ");
 

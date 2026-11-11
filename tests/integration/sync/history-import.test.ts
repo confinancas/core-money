@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../../src/worker/app";
-import { runScheduled } from "../../../src/worker/cron/dispatch";
+import { despachar } from "../../../src/worker/cron/despachante";
 import { createDb, type Db } from "../../../src/worker/db/client";
 import { type Meter, newMeter } from "../../../src/worker/db/metered-d1";
 import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch";
@@ -449,7 +449,7 @@ describe("importação: fila, cron e dois bancos (cenários 10 a 12)", () => {
       ...AMBIENTE,
       SYNC_QUEUE: { send: async (mensagem: SyncMessage) => void fila.push(mensagem) },
     } as unknown as Env;
-    await runScheduled(ambiente, new Date(AGORA));
+    await despachar(ambiente, new Date(AGORA));
     expect(fila).toEqual([{ runId, seq: 0 }]);
 
     const fetch = pluggyFalsoEmMemoria(2);

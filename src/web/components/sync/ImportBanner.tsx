@@ -6,6 +6,7 @@ import { lerEstadoDaImportacao } from "../../api/sync";
 // Faixa da moldura (TASK-0204): importação em andamento, banco pronto ou banco que não terminou. Consulta a cada 10 s,
 // só com a aba visível. "OK" lembra o runId visto no localStorage (dentro de try/catch: sem ele, a faixa só some na tela).
 const CHAVE_DAS_VISTAS = "mm.importacao.vistas";
+const FOLGA_DO_RELOGIO_MS = 60_000;
 
 function lerVistas(): string[] {
   try {
@@ -30,6 +31,9 @@ function marcarVista(runId: string, atuais: string[]): string[] {
 export function ImportBanner() {
   const [estado, setEstado] = useState<SyncStatusResponse | null>(null);
   const [vistas, setVistas] = useState<string[]>(lerVistas);
+  // "Pronto" só se anuncia para um término ocorrido desde que a página abriu (com uma folga de um minuto para o relógio do
+  // servidor e o do navegador): uma execução antiga não cobre a tela de quem acabou de abrir o app.
+  const [montadoEm] = useState(() => Date.now());
 
   useEffect(() => {
     let ativo = true;
@@ -37,7 +41,8 @@ export function ImportBanner() {
       if (document.visibilityState !== "visible") return;
       lerEstadoDaImportacao()
         .then((resposta) => {
-          if (ativo) setEstado(resposta);
+          if (!ativo) return;
+          setEstado(resposta);
         })
         .catch(() => undefined);
     };
@@ -65,7 +70,10 @@ export function ImportBanner() {
     );
   }
 
-  const terminada = estado.recentlyFinished.find((linha) => !vistas.includes(linha.runId));
+  const terminada = estado.recentlyFinished.find(
+    (linha) =>
+      !vistas.includes(linha.runId) && Date.parse(linha.finishedAt) >= montadoEm - FOLGA_DO_RELOGIO_MS,
+  );
   if (!terminada) return null;
 
   const deuCerto = terminada.status === "ok" || terminada.status === "repetiu";

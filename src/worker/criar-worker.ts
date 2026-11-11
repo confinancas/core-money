@@ -1,7 +1,7 @@
 import type { ExportedHandler, MessageBatch } from "@cloudflare/workers-types";
 import type { BrandConfig } from "../shared/brand/types";
 import { type AppOptions, createApp } from "./app";
-import { runScheduled } from "./cron/dispatch";
+import { despachar } from "./cron/despachante";
 import type { Env } from "./env";
 import type { SyncMessage } from "./sync/plan";
 import { handleSyncBatch, type LoteDaFila } from "./sync/queue";
@@ -31,7 +31,7 @@ export function criarWorker({ marca, versao, rotasDoApp }: CriarWorkerOptions) {
       return handleSyncBatch(lote as unknown as LoteDaFila, env);
     },
     scheduled(evento: ScheduledController, env: Env, ctx: ExecutionContext) {
-      ctx.waitUntil(runScheduled(env, new Date(evento.scheduledTime)));
+      ctx.waitUntil(despachar(env, new Date(evento.scheduledTime)));
     },
   } satisfies ExportedHandler<Env, SyncMessage>;
 }
