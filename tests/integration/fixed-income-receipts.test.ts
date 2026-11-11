@@ -828,3 +828,54 @@ describe("rodada 2: lastFx é a cotação do dia de referência mais novo (F6)",
     expect(tela.corpo.fixedIncomes[0].lastFx).toEqual({ rateE4: 56000, rate: "5,60", date: "2026-10-06" });
   });
 });
+
+// Rodada 3 (TASK-0902, Fable): o recasamento pelo PATCH do texto só casa a entrada boa. Mata as três mutações vivas do
+// filtro de candidatas: a entrada de ciclo fora de chaves, a oculta e a saída (valor negativo) no SQL.
+describe("rodada 3: o recasamento só casa a entrada boa (filtros de ciclo, oculta e saída)", () => {
+  it("PATCH do texto: só a entrada boa do ciclo atual casa; a de dois ciclos atrás, a oculta e a saída ficam sem renda", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const rendaId = await criarRenda(lar, {
+      nome: "[TEST] Salário",
+      valor: 500000,
+      forma: "auto",
+      texto: "OUTRO",
+    });
+    // Dois ciclos atrás (05/09 cai no ciclo 2026-08): tem o texto, mas está fora do ciclo atual e do anterior.
+    const antiga = await entrarPeloExtrato(lar, "SALARIO ANTIGO", 300000, "2026-09-05");
+    // Entrada oculta com o texto da renda.
+    const oculta = await entrarPeloExtrato(lar, "SALARIO OCULTO", 300000, "2026-11-05");
+    await env.DB.prepare("UPDATE transactions SET hidden = 1 WHERE id = ?").bind(oculta).run();
+    // Saída (valor negativo) de movimento "outro", com o texto da renda.
+    const saida = await inserirTransacao(lar, {
+      movement: "outro",
+      amountCents: -100000,
+      descricao: "SALARIO SAIDA",
+      localDate: "2026-11-05",
+    });
+    await afterIngest(createDb(env.DB, newMeter()), {
+      householdId: lar.householdId,
+      bankItemId: lar.bankItemId,
+      insertedIds: [saida],
+      updatedIds: [],
+      now: AGORA,
+    });
+    // Entrada boa: do ciclo atual, visível, de entrada.
+    const boa = await entrarPeloExtrato(lar, "SALARIO BOM", 200000, "2026-11-06");
+
+    // Com o texto "OUTRO", nenhuma entrada casa.
+    expect(await linhaDaTransacao(boa)).toMatchObject({ income_kind: null, fixed_income_id: null });
+
+    const trocou = await chamar(app, "PATCH", `/api/fixed-incomes/${rendaId}`, { statementText: "SALARIO" });
+    expect(trocou.status).toBe(200);
+
+    expect(await linhaDaTransacao(boa)).toMatchObject({
+      income_kind: "parte_salario",
+      fixed_income_id: rendaId,
+    });
+    for (const id of [antiga, oculta, saida]) {
+      expect(await linhaDaTransacao(id)).toMatchObject({ income_kind: null, fixed_income_id: null });
+    }
+    expect(await contar("SELECT COUNT(*) AS total FROM fixed_income_receipts")).toBe(1);
+  });
+});
