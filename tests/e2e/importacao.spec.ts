@@ -52,13 +52,8 @@ test.afterAll(() => {
   executaSql("pronta", LIMPEZA);
 });
 
-test("cenário 1: a barra aparece no passo 4, chega a pronto, e a faixa some com OK", async ({
-  page,
-}, testInfo) => {
-  const largura = testInfo.project.name;
-  await signUpAndSignIn(page);
-  await page.goto(ROTA);
-
+// Os passos da conexão, da tela de nome até "Conectar 1 banco" (o Meu Pluggy falso responde pelas chaves [TEST]).
+async function conectaUmBanco(page: Page): Promise<void> {
   // Passo 1 e 2 (com o teste das chaves), e o passo 3 com o id do banco.
   await page.getByLabel("Nome desta conexão").fill(ROTULO);
   await page.getByRole("button", { name: "Continuar" }).click();
@@ -72,6 +67,16 @@ test("cenário 1: a barra aparece no passo 4, chega a pronto, e a faixa some com
   await page.getByRole("button", { name: "Adicionar" }).click();
   await expect(page.getByRole("checkbox", { name: /Itaú/ })).toBeVisible();
   await page.getByRole("button", { name: "Conectar 1 banco" }).click();
+}
+
+test("cenário 1: a barra aparece no passo 4, chega a pronto, e a faixa some com OK", async ({
+  page,
+}, testInfo) => {
+  const largura = testInfo.project.name;
+  await signUpAndSignIn(page);
+  await page.goto(ROTA);
+
+  await conectaUmBanco(page);
 
   // Passo 4: a barra do histórico, com o percentual e a frase da spec.
   await expect(page.getByText(`${ROTULO} conectada`)).toBeVisible();
@@ -95,4 +100,38 @@ test("cenário 1: a barra aparece no passo 4, chega a pronto, e a faixa some com
   await expect(faixa).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("region", { name: "Importação do histórico" })).toHaveCount(0);
+});
+
+// Teto do dia atingido (60% de 100 mil escritas, orcamento.ts): a primeira fatia que lê o banco pausa a importação até a
+// virada, e a faixa e o passo 4 dizem que ela continua amanhã, no lugar do percentual. A linha de uso do dia é do teste
+// e sai no fim (a usage_daily é compartilhada entre as specs).
+const LIMITE_DO_DIA = 60_000;
+
+test("cenário 2: com o teto do dia atingido, a faixa e o passo 4 dizem que a importação continua amanhã", async ({
+  page,
+}) => {
+  const dia = new Date().toISOString().slice(0, 10);
+  try {
+    executaSql(
+      "pronta",
+      `INSERT INTO usage_daily (day, requests, rows_read, rows_written, size_bytes) VALUES ('${dia}', 0, 0, ${LIMITE_DO_DIA}, 0) ON CONFLICT(day) DO UPDATE SET rows_written = excluded.rows_written`,
+    );
+    await signUpAndSignIn(page);
+    await page.goto(ROTA);
+    await conectaUmBanco(page);
+
+    const passoQuatro = page.getByRole("region", { name: "Progresso do histórico" });
+    await expect(passoQuatro.getByText("A importação continua amanhã", { exact: true })).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(passoQuatro.getByRole("progressbar", { name: "Histórico" })).toHaveCount(0);
+
+    const faixa = page.getByRole("region", { name: "Importação do histórico" });
+    await expect(faixa.getByText("A importação continua amanhã", { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await semRolagemHorizontal(page);
+  } finally {
+    executaSql("pronta", `DELETE FROM usage_daily WHERE day = '${dia}'`);
+  }
 });

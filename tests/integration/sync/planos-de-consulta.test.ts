@@ -79,11 +79,13 @@ describe("planos de consulta da importação (1.500 execuções encerradas, lar 
     const lar = await semeiaLarComBancos(4);
     await semeiaExecucoesEncerradas(lar.bancos, 1500);
 
-    const detalhes = await plano(SQL_DO_STATUS, lar.householdId, DESDE);
+    const detalhes = await plano(SQL_DO_STATUS, lar.householdId, lar.householdId, DESDE);
 
     expect(detalhes.some((linha) => linha.startsWith("SCAN"))).toBe(false);
     expect(detalhes).toContain("SEARCH b USING INDEX bank_items_connection_idx (connection_id=?)");
-    expect(detalhes).toContain("SEARCH r USING INDEX sync_runs_open_idx (bank_item_id=?)");
+    // As duas metades do UNION ALL cortam pelo índice de banco e término: as abertas (término nulo) e as recentes (TASK-0204, A2).
+    expect(detalhes).toContain("SEARCH r USING INDEX sync_runs_open_idx (bank_item_id=? AND finished_at=?)");
+    expect(detalhes).toContain("SEARCH r USING INDEX sync_runs_open_idx (bank_item_id=? AND finished_at>?)");
   });
 
   it("o limite de bancos conta pelo índice de bank_items por conexão", async () => {

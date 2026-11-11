@@ -5,6 +5,9 @@ export type ImportacaoEmAndamento = {
   institutionName: string;
   progressPct: number;
   startedAt: string;
+  // Pausada pelo teto diário de escritas: a retomada é a virada do dia (00:00 UTC), e pausadaAte é essa hora.
+  pausada: boolean;
+  pausadaAte: string | null;
 };
 
 export type StatusDaImportacao = "ok" | "repetiu" | "instavel" | "erro";

@@ -62,7 +62,16 @@ export function ImportBanner() {
         className="mx-auto flex w-full items-center gap-3 border-b border-line bg-surface px-4 py-3 text-[14px]"
       >
         <p className="flex-1">
-          Buscando o histórico do {emAndamento.institutionName} · {emAndamento.progressPct}%
+          {emAndamento.pausada ? (
+            <>
+              Buscando o histórico do {emAndamento.institutionName} ·{" "}
+              <span>A importação continua amanhã</span>
+            </>
+          ) : (
+            <>
+              Buscando o histórico do {emAndamento.institutionName} · {emAndamento.progressPct}%
+            </>
+          )}
         </p>
       </section>
     );

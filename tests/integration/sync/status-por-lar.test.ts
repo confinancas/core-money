@@ -142,7 +142,7 @@ describe("GET /api/sync/status: só o lar da sessão", () => {
       .run();
 
     const resultado = await env.DB.prepare(SQL_DO_STATUS)
-      .bind(b.householdId, "2026-11-09T12:00:00.000Z")
+      .bind(b.householdId, b.householdId, "2026-11-09T12:00:00.000Z")
       .all();
 
     expect(resultado.results).toHaveLength(0);

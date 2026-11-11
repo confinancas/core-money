@@ -14,10 +14,13 @@ type Props = {
 };
 
 // Passo 4 (TASK-0203, painel de progresso na TASK-0204): a conta está conectada; enquanto o histórico é buscado, a barra
-// mostra o andamento (consulta /api/sync/status a cada 5 s, com a tela aberta).
+// mostra o andamento (consulta /api/sync/status a cada 5 s, com a tela aberta). Pausada pelo teto diário, a barra dá
+// lugar à frase de que a importação continua amanhã.
 export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVerEmConfiguracoes }: Props) {
-  const [progresso, setProgresso] = useState<number | null>(null);
+  const [andamento, setAndamento] = useState<{ progressPct: number; pausada: boolean } | null>(null);
   const chave = bancoIds.join(",");
+  const progresso = andamento?.progressPct ?? null;
+  const pausada = andamento?.pausada ?? false;
 
   useEffect(() => {
     let ativo = true;
@@ -27,7 +30,9 @@ export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVer
         .then((resposta) => {
           if (!ativo) return;
           const emAndamento = resposta.importing.find((linha) => ids.includes(linha.bankItemId));
-          setProgresso(emAndamento ? emAndamento.progressPct : null);
+          setAndamento(
+            emAndamento ? { progressPct: emAndamento.progressPct, pausada: emAndamento.pausada } : null,
+          );
         })
         .catch(() => undefined);
     };
@@ -55,21 +60,29 @@ export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVer
         <section aria-label="Progresso do histórico" className="flex w-full flex-col gap-2">
           <div className="flex items-center justify-between text-[14px] font-bold">
             <span>Buscando o histórico</span>
-            <span data-testid="progresso-do-historico">{progresso}%</span>
+            {!pausada && <span data-testid="progresso-do-historico">{progresso}%</span>}
           </div>
-          <div
-            role="progressbar"
-            aria-label="Histórico"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progresso}
-            className="h-2 w-full overflow-hidden rounded-full bg-line"
-          >
-            <div className="h-full rounded-full bg-success" style={{ width: `${progresso}%` }} />
-          </div>
-          <p className="text-[13px] leading-normal text-ink-2">
-            Pode levar alguns minutos. Dá para usar o app enquanto isso; avisamos quando terminar.
-          </p>
+          {pausada ? (
+            <p className="text-[14px] leading-normal text-ink-2" data-testid="pausa-do-historico">
+              A importação continua amanhã
+            </p>
+          ) : (
+            <>
+              <div
+                role="progressbar"
+                aria-label="Histórico"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progresso}
+                className="h-2 w-full overflow-hidden rounded-full bg-line"
+              >
+                <div className="h-full rounded-full bg-success" style={{ width: `${progresso}%` }} />
+              </div>
+              <p className="text-[13px] leading-normal text-ink-2">
+                Pode levar alguns minutos. Dá para usar o app enquanto isso; avisamos quando terminar.
+              </p>
+            </>
+          )}
         </section>
       )}
       <div className="flex w-full flex-col gap-3">

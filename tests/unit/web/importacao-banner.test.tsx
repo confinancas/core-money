@@ -49,6 +49,8 @@ function emAndamento(progressPct: number): ImportacaoEmAndamento {
     institutionName: "Banco [TEST]",
     progressPct,
     startedAt: "2026-11-11T10:00:00.000Z",
+    pausada: false,
+    pausadaAte: null,
   };
 }
 
@@ -133,6 +135,21 @@ describe("faixa da importação: os estados", () => {
     expect(await screen.findByText("Buscando o histórico do Banco [TEST] · 42%")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "OK" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Ver banco" })).toBeNull();
+  });
+
+  it("importando e pausada pelo teto: diz que a importação continua amanhã, no lugar do percentual", async () => {
+    estado = sincronizacaoCom({
+      importing: [{ ...emAndamento(42), pausada: true, pausadaAte: "2026-11-11T00:00:00.000Z" }],
+    });
+    render(
+      <MemoryRouter>
+        <ImportBanner />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("A importação continua amanhã")).toBeInTheDocument();
+    expect(faixa()).toHaveTextContent("Buscando o histórico do Banco [TEST] · A importação continua amanhã");
+    expect(screen.queryByText(/42%/)).toBeNull();
   });
 
   it("pronto: anuncia o término com OK, que grava o runId e tira a faixa", async () => {
