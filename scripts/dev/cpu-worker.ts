@@ -6,7 +6,36 @@ import type { MappedTransaction } from "../../src/worker/bank/map";
 import { ingestTransactions } from "../../src/worker/bank/repository";
 import { criarWorker } from "../../src/worker/criar-worker";
 import type { AppEnv } from "../../src/worker/env";
+import type { ClienteDaIA } from "../../src/worker/categorization/claude";
+import { runCategorizationSlice } from "../../src/worker/categorization/cron";
 import { getSession } from "../../src/worker/household/context";
+import { newMeter } from "../../src/worker/db/metered-d1";
+
+// Anthropic falsa para a medição da fatia (TASK-0303): responde a cada ref do lote com uma sugestão, sem rede. A chave
+// é de mentira e não sai deste arquivo para a rede; o cliente de verdade nunca roda aqui.
+const CHAVE_DE_MEDICAO = "sk-ant-api03-TEST-medicao-cpu";
+const clienteFalsoDeLote: ClienteDaIA = {
+  messages: {
+    create: async (params) => {
+      const conteudo = (params.messages as Array<{ content: string }>)[0]?.content ?? "{}";
+      const { transacoes } = JSON.parse(conteudo) as { transacoes: Array<{ ref: string }> };
+      const sugestoes = transacoes.map((t) => ({
+        ref: t.ref,
+        categoria: "c1",
+        entrada: null,
+        renda: null,
+        subtipo: null,
+        certeza: "media",
+        motivo: "medicao",
+      }));
+      return {
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: JSON.stringify({ sugestoes }) }],
+        usage: { input_tokens: 4000, output_tokens: 600, cache_read_input_tokens: 3000, cache_creation_input_tokens: 0 },
+      };
+    },
+  },
+};
 
 // Entrada da MEDIÇÃO de CPU (TASK-0104): o mesmo Worker de src/worker/index.ts, com uma rota a mais, só de medição.
 // O app ainda não tem rota de importação (ela chega com a TASK-0204), e a importação de 100 transações com o pipeline
@@ -50,6 +79,19 @@ function rotasDeMedicao(app: Hono<AppEnv>): void {
       now: agora,
     });
     return c.json({ inseridas: resultado.insertedIds.length }, 200);
+  });
+
+  // POST /api/cpu/categorizacao (TASK-0303): uma fatia do cron, com a Anthropic falsa e a chave da medição (sem leitura
+  // do segredo: a decifragem é medida na TASK-0102). Cada rodada tira 2 lotes cheios (50 itens) da fila do lar.
+  app.post("/cpu/categorizacao", async (c) => {
+    getSession(c);
+    const resultado = await runCategorizationSlice(c.env, {
+      now: () => new Date(),
+      createClient: () => clienteFalsoDeLote,
+      getApiKey: async () => ({ status: "ok", value: CHAVE_DE_MEDICAO }),
+      meter: newMeter(),
+    });
+    return c.json({ situacao: resultado.situacao, lotes: resultado.lotes, ok: resultado.ok }, 200);
   });
 }
 
