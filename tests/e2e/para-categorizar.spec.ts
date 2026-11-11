@@ -13,7 +13,7 @@ const BANCO = "e2e-pc-banco";
 const CONTA = "e2e-pc-conta";
 const CARTAO = "e2e-pc-cartao";
 const CATEGORIA_IA = "e2e-pc-categoria";
-const CATEGORIA_NOME = "Serviços";
+const CATEGORIA_NOME = "Triagem E2E";
 
 const q = (valor: string | number | null): string =>
   valor === null ? "NULL" : typeof valor === "number" ? String(valor) : `'${valor.replace(/'/g, "''")}'`;
@@ -88,7 +88,20 @@ function liberaFila(): void {
     "pronta",
     "UPDATE transactions SET hidden = 0, hidden_reason = NULL WHERE hidden_reason = 'e2e-pc'",
   );
-  executaSql("pronta", "DELETE FROM app_secrets WHERE name = 'claude_api_key' AND ciphertext = 'AAAA'");
+  // Só o que esta spec criou: as linhas, as regras de teste, o cartão, a categoria, a conta e o banco de teste.
+  executaSql(
+    "pronta",
+    [
+      "DELETE FROM transactions WHERE id LIKE 'e2e-pc-%'",
+      `DELETE FROM rules WHERE household_id = ${q(LAR)} AND match_value LIKE 'TEST E2E%'`,
+      `DELETE FROM cards WHERE id = ${q(CARTAO)}`,
+      `DELETE FROM accounts WHERE id = ${q(CONTA)}`,
+      `DELETE FROM categories WHERE id = ${q(CATEGORIA_IA)}`,
+      `DELETE FROM bank_items WHERE id = ${q(BANCO)}`,
+      `DELETE FROM pluggy_connections WHERE id = ${q(CONEXAO)}`,
+      "DELETE FROM app_secrets WHERE name = 'claude_api_key' AND ciphertext = 'AAAA'",
+    ].join(";\n"),
+  );
 }
 
 test.beforeEach(async ({ page }) => {
@@ -168,7 +181,7 @@ test("layout: colunas e sobreposição nas três larguras", async ({ page }) => 
 
 test("cenário 3: o ✓ confirma só a linha; a outra continua na fila", async ({ page }) => {
   await abre(page);
-  await page.getByRole("button", { name: /Confirmar .*Serviços.* para \[TEST\] Pix E2E um/ }).click();
+  await page.getByRole("button", { name: /Confirmar .*Triagem E2E.* para \[TEST\] Pix E2E um/ }).click();
   await expect(page.getByText("1 de 2 categorizados")).toBeVisible();
   await expect(page.getByText("faltam 1")).toBeVisible();
   await expect(page.getByText("[TEST] Pix E2E dois")).toBeVisible();
@@ -236,7 +249,7 @@ test("cenário 16: confirmar uma compra leva as iguais que esperavam", async ({ 
   ]);
   await abre(page);
   await page
-    .getByRole("button", { name: /Confirmar .*Serviços.* para \[TEST\] ASAAS E2E/ })
+    .getByRole("button", { name: /Confirmar .*Triagem E2E.* para \[TEST\] ASAAS E2E/ })
     .first()
     .click();
   await expect(page.getByText("+ 2 iguais")).toBeVisible();
@@ -251,7 +264,7 @@ test("cenário 20: desfazer a confirmação devolve as iguais à fila", async ({
   ]);
   await abre(page);
   await page
-    .getByRole("button", { name: /Confirmar .*Serviços.* para \[TEST\] ASAAS E2E/ })
+    .getByRole("button", { name: /Confirmar .*Triagem E2E.* para \[TEST\] ASAAS E2E/ })
     .first()
     .click();
   await expect(page.getByText("3 de 3 categorizados")).toBeVisible();
