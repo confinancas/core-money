@@ -142,17 +142,25 @@ async function semRolagemHorizontal(page: Page): Promise<void> {
 
 // As duas colunas nas três larguras (cenário 11): uma coluna com Novas acima de Anteriores no celular; duas colunas,
 // Novas à esquerda e Anteriores à direita, do mesmo topo, no tablet e no desktop.
+// As duas colunas nas três larguras, pelos cartões (rodada 1). No celular, Novas fica sobre o topo, e o rótulo e o cartão de
+// Anteriores vêm abaixo. No tablet e no desktop, o cartão de Novas e o rótulo de Anteriores começam do mesmo topo, e o
+// cartão de Anteriores vem logo abaixo do rótulo, como no protótipo.
 async function provaDasColunas(page: Page): Promise<void> {
-  const novas = await caixaDe(page.getByRole("heading", { level: 2, name: "Novas", exact: true }));
-  const anteriores = await caixaDe(page.getByRole("heading", { level: 2, name: "Anteriores", exact: true }));
+  const cartaoDeNovas = await caixaDe(page.getByRole("region", { name: "Novas", exact: true }));
+  const rotuloDeAnteriores = await caixaDe(
+    page.getByRole("heading", { level: 2, name: "Anteriores", exact: true }),
+  );
+  const cartaoDeAnteriores = await caixaDe(page.getByRole("region", { name: "Anteriores", exact: true }));
 
   if (test.info().project.name === "celular") {
-    expect(novas.y).toBeLessThan(anteriores.y);
-    expect(Math.abs(novas.x - anteriores.x)).toBeLessThanOrEqual(1);
+    expect(cartaoDeNovas.y).toBeLessThan(rotuloDeAnteriores.y);
+    expect(rotuloDeAnteriores.y).toBeLessThan(cartaoDeAnteriores.y);
+    expect(Math.abs(cartaoDeNovas.x - cartaoDeAnteriores.x)).toBeLessThanOrEqual(1);
     return;
   }
-  expect(novas.x).toBeLessThan(anteriores.x);
-  expect(Math.abs(novas.y - anteriores.y)).toBeLessThanOrEqual(2);
+  expect(cartaoDeNovas.x).toBeLessThan(cartaoDeAnteriores.x);
+  expect(Math.abs(cartaoDeNovas.y - rotuloDeAnteriores.y)).toBeLessThanOrEqual(8);
+  expect(rotuloDeAnteriores.y).toBeLessThan(cartaoDeAnteriores.y);
 }
 
 const contaNaoLidas = () =>
@@ -195,6 +203,56 @@ test.describe("Notificações", () => {
 
     await provaDasColunas(page);
     await semRolagemHorizontal(page);
+  });
+
+  test("rodada 1: o botão fica numa linha própria, abaixo do título, e o subtítulo tem uma linha, nas três larguras", async ({
+    page,
+  }) => {
+    semeiaNotificacoes(CENARIO_UM);
+    await signUpAndSignIn(page);
+    await page.goto("/notificacoes");
+    await expect(page.getByText("4 novas", { exact: true })).toBeVisible();
+
+    const titulo = await caixaDe(page.getByRole("heading", { level: 1, name: "Notificações", exact: true }));
+    const subtitulo = await caixaDe(page.getByText("4 novas", { exact: true }));
+    const botao = await caixaDe(page.getByRole("button", { name: "Marcar todas como lidas", exact: true }));
+
+    // O botão começa abaixo do subtítulo, e as caixas do botão e do título não se cruzam (no celular, antes ele cobria o título).
+    expect(botao.y).toBeGreaterThanOrEqual(subtitulo.y + subtitulo.height - 1);
+    const cruzam =
+      botao.x < titulo.x + titulo.width &&
+      titulo.x < botao.x + botao.width &&
+      botao.y < titulo.y + titulo.height &&
+      titulo.y < botao.y + botao.height;
+    expect(cruzam).toBe(false);
+    // O subtítulo tem uma linha só: a 13 px, uma linha tem menos de 24 px de altura.
+    expect(subtitulo.height).toBeLessThan(24);
+  });
+
+  test("rodada 1: 'Novas' fica dentro do cartão branco, e 'Anteriores' sai em branco a 90% sobre a faixa (tablet e desktop) ou em cinza (celular)", async ({
+    page,
+  }) => {
+    semeiaNotificacoes(CENARIO_UM);
+    await signUpAndSignIn(page);
+    await page.goto("/notificacoes");
+    await expect(page.getByText("4 novas", { exact: true })).toBeVisible();
+
+    const cartao = await caixaDe(page.getByRole("region", { name: "Novas", exact: true }));
+    const rotulo = await caixaDe(page.getByRole("heading", { level: 2, name: "Novas", exact: true }));
+    expect(rotulo.x).toBeGreaterThanOrEqual(cartao.x);
+    expect(rotulo.x + rotulo.width).toBeLessThanOrEqual(cartao.x + cartao.width);
+    expect(rotulo.y).toBeGreaterThanOrEqual(cartao.y);
+    expect(rotulo.y + rotulo.height).toBeLessThanOrEqual(cartao.y + cartao.height);
+
+    const cor = await page
+      .getByRole("heading", { level: 2, name: "Anteriores", exact: true })
+      .evaluate((elemento) => getComputedStyle(elemento).color);
+    if (test.info().project.name === "celular") {
+      expect(cor).toBe("rgb(102, 117, 110)");
+    } else {
+      // Branco a 90%: o navegador pode devolver a cor como rgba ou como color(srgb ...), conforme a versão.
+      expect(cor).toMatch(/rgba\(255, 255, 255, 0\.9\)|color\(srgb 1 1 1 \/ 0\.9\)/);
+    }
   });
 
   test("cenário 2: tocar numa notificação a marca como lida para o lar e vai ao link", async ({ page }) => {
