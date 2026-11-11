@@ -25,6 +25,7 @@ import { recoveryRoutes } from "./routes/recovery";
 import { settingsRoutes } from "./routes/settings";
 import { setupRoutes } from "./routes/setup";
 import { setupHouseholdRoutes } from "./routes/setup-household";
+import { transacoesDetalheRoutes } from "./routes/transactions";
 import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
 import { regrasAutomaticasRoutes, tiposDeGastoRoutes } from "./spend-types/routes";
@@ -110,6 +111,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/categories", categoriesRoutes(resolverDaSessao, options.agora));
   app.route("/rules", regrasRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
+  app.route("/transactions", transacoesDetalheRoutes(resolverDaSessao));
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/fixed-incomes", fixedIncomesRoutes(resolverDaSessao, options.agora));
