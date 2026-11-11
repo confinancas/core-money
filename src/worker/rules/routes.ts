@@ -3,13 +3,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { chaveVazia, type RuleScope, type RuleSet, ruleScopeForMovement } from "../../shared/rule-match";
 import { SPEND_TYPES } from "../../shared/spend-types";
+import { termoDeBusca } from "../../shared/texto-busca";
 import {
   applyRuleRetroactiveSliceStmts,
   applyRuleToPendingStmt,
   type RegraParaAplicar,
   setTransactionCategoryStmt,
 } from "../categorization/apply";
-import { termoDeBusca } from "../../shared/texto-busca";
 import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";

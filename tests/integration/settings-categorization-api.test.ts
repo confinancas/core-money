@@ -420,7 +420,10 @@ describe("F1: renomear pela API não muda o tipo padrão nem o das transações"
   it("PATCH só com o nome deixa default_spend_type e o tipo das transações como estavam", async () => {
     const lar = await criarLar();
     const restaurantes = await idDaCategoria(lar, "Restaurantes e delivery");
-    const tipoPadrao = await valorDoBanco("SELECT default_spend_type FROM categories WHERE id = ?", restaurantes);
+    const tipoPadrao = await valorDoBanco(
+      "SELECT default_spend_type FROM categories WHERE id = ?",
+      restaurantes,
+    );
     const compra = await inserirTransacao(lar, {
       movement: "compra",
       amountCents: -3000,
@@ -430,9 +433,13 @@ describe("F1: renomear pela API não muda o tipo padrão nem o das transações"
       spendTypeSource: "categoria",
     });
     const app = appDoLar(lar);
-    const r = await callApi(app, "PATCH", `/api/categories/${restaurantes}`, { name: "[TEST] Restaurantes 0305" });
+    const r = await callApi(app, "PATCH", `/api/categories/${restaurantes}`, {
+      name: "[TEST] Restaurantes 0305",
+    });
     expect(r.status).toBe(200);
-    expect(await valorDoBanco("SELECT default_spend_type FROM categories WHERE id = ?", restaurantes)).toBe(tipoPadrao);
+    expect(await valorDoBanco("SELECT default_spend_type FROM categories WHERE id = ?", restaurantes)).toBe(
+      tipoPadrao,
+    );
     expect(await valorDoBanco("SELECT spend_type FROM transactions WHERE id = ?", compra)).toBe("prazeres");
   });
 });
