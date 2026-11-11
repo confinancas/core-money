@@ -248,7 +248,9 @@ describe("importação inteira de um banco: conta e cartão, 2.000 transações 
     // Teto de 17,5 (decisão do Opus, merge da 0303): o custo inclui a fila de categorização, por onde cada transação
     // importada também passa (TASK-0303). Medido depois do merge: 16,88.
     expect(medidor.rowsWritten / linhas.length).toBeLessThanOrEqual(17.5);
-    expect(medidor.rowsRead / linhas.length).toBeLessThanOrEqual(45);
+    // Teto de 50 (decisão do Opus, merge da 0303): as leituras por transação incluem a fila de categorização, por onde cada
+    // transação importada também passa (TASK-0303). Medido depois do merge: 47,05; antes, 40,6.
+    expect(medidor.rowsRead / linhas.length).toBeLessThanOrEqual(50);
   }, 120_000);
 });
 
