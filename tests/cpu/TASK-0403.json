@@ -1,0 +1,38 @@
+{
+  "task": "TASK-0403",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-1', 'cpu-membro-1', 'CPU-SEM-LOGIN-0403', 0, NULL, 'CPU Chromium', 'cadastro', '2026-11-10T00:00:00.000Z', NULL)",
+    "INSERT INTO pluggy_connections (id, household_id, label, created_at) VALUES ('cpu-conexao', 'cpu-lar', '[TEST] Conexão', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO bank_items (id, connection_id, institution_name, institution_color, created_at) VALUES ('cpu-banco', 'cpu-conexao', '[TEST] Banco CPU', '#8A05BE', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO cards (id, bank_item_id, last4, name, limit_cents, available_cents) VALUES ('cpu-cartao', 'cpu-banco', '1234', '[TEST] Cartão CPU', 600000, 366000)",
+    "INSERT INTO cycles (household_id, key, starts_on, ends_on) VALUES ('cpu-lar', '2026-10', '2026-10-11', '2026-11-10')",
+    "INSERT INTO bills (id, card_id, closes_on, due_on, amount_cents, status, paid_on, cycle_key) VALUES ('cpu-b-aberta', 'cpu-cartao', '2026-11-03', '2026-11-10', NULL, 'aberta', NULL, '2026-10')",
+    "INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, installment_number, installment_total, cycle_key, hidden, last_seen_at) VALUES ('cpu-compra-1', 'cpu-lar', 'cpu-ext-compra-1', 'cpu-banco', NULL, 'cpu-cartao', 'cpu-b-aberta', 'compra', '2026-11-05T12:00:00.000Z', '2026-11-05', -4500, '[TEST] Compra CPU', 'TEST COMPRA CPU', 2, 6, '2026-10', 0, '2026-11-10T00:00:00.000Z')"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/transactions/:id (compra de cartão, por id)",
+      "method": "GET",
+      "path": "/api/transactions/cpu-compra-1",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    },
+    {
+      "name": "PATCH /api/transactions/:id (nome próprio, por id)",
+      "method": "PATCH",
+      "path": "/api/transactions/cpu-compra-1",
+      "headers": {
+        "cookie": "{sessao}",
+        "content-type": "application/json"
+      },
+      "body": {
+        "customName": "Conserto do portão"
+      }
+    }
+  ]
+}
