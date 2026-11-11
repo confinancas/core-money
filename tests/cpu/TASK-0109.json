@@ -1,0 +1,30 @@
+{
+  "task": "TASK-0109",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES ('cpu-0109-primeiro-acesso', NULL, 'primeiro_acesso', 'cpu-0109-codigo-ja-usado', '2026-11-10T00:00:00.000Z', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/usage",
+      "method": "GET",
+      "path": "/api/usage",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "PUT /api/settings/paid-plan",
+      "method": "PUT",
+      "path": "/api/settings/paid-plan",
+      "headers": { "cookie": "{sessao}" },
+      "corpos": [{ "paidPlan": true }, { "paidPlan": false }]
+    },
+    {
+      "name": "GET /api/health",
+      "method": "GET",
+      "path": "/api/health"
+    }
+  ]
+}

@@ -1,6 +1,10 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { NewDeviceNotice } from "../../components/NewDeviceNotice";
+import { LimitReached } from "../../usage/LimitReached";
+import { lerLimiteAtingido, ouvirLimiteAtingido } from "../../usage/limite-store";
+import { UsageBanner } from "../../usage/UsageBanner";
+import { UsoProvider } from "../../usage/useUsage";
 import { useFeatures } from "../features";
 import { useBreakpoint } from "../useBreakpoint";
 import type { Aba, Frame } from "./aba";
@@ -15,34 +19,56 @@ export function AppFrame({ frame, aba, children }: { frame: Frame; aba: Aba | nu
   const largura = useBreakpoint();
   const { assistente } = useFeatures();
   const membros = useFrameMembers();
+  // Limite do plano gratuito atingido (TASK-0109): o conteúdo sai e a tela LimitReached entra no lugar, na moldura.
+  const limite = useSyncExternalStore(ouvirLimiteAtingido, lerLimiteAtingido);
 
-  if (frame === "bare") return <>{children}</>;
+  // A Abertura (bare) também explica o limite: sem a moldura, mas com a mesma tela (TASK-0109, rodada 1).
+  if (frame === "bare") return limite ? <LimitReached motivo={limite} /> : children;
 
-  // A faixa de aparelho novo (TASK-0106) fica no topo do conteúdo, nas três molduras com conteúdo do app.
-  if (largura === "celular") {
-    const comMenu = frame !== "full";
-    return (
-      <div className="min-h-dvh">
-        <main className={cn("min-h-dvh", comMenu && "pb-32")}>
+  const conteudo = limite ? <LimitReached motivo={limite} /> : children;
+
+  // Os avisos (TASK-0106 e TASK-0109) ficam no topo do conteúdo, nas três molduras com conteúdo do app.
+  const moldura =
+    largura === "celular" ? (
+      <CelularComMenu comMenu={frame !== "full"} aba={aba} assistente={assistente}>
+        <NewDeviceNotice />
+        <UsageBanner />
+        {conteudo}
+      </CelularComMenu>
+    ) : (
+      <div className="flex min-h-dvh">
+        {largura === "tablet" ? (
+          <SideRail aba={aba} assistente={assistente} />
+        ) : (
+          <Sidebar aba={aba} assistente={assistente} membros={membros} />
+        )}
+        <main className="min-w-0 flex-1">
           <NewDeviceNotice />
-          {children}
+          <UsageBanner />
+          {conteudo}
         </main>
-        {comMenu && <BottomNav aba={aba} assistente={assistente} />}
       </div>
     );
-  }
 
+  // O uso é lido uma vez por moldura (e de novo ao voltar à tela): a faixa e a seção Plano da Cloudflare leem daqui.
+  return <UsoProvider>{moldura}</UsoProvider>;
+}
+
+function CelularComMenu({
+  comMenu,
+  aba,
+  assistente,
+  children,
+}: {
+  comMenu: boolean;
+  aba: Aba | null;
+  assistente: boolean;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex min-h-dvh">
-      {largura === "tablet" ? (
-        <SideRail aba={aba} assistente={assistente} />
-      ) : (
-        <Sidebar aba={aba} assistente={assistente} membros={membros} />
-      )}
-      <main className="min-w-0 flex-1">
-        <NewDeviceNotice />
-        {children}
-      </main>
+    <div className="min-h-dvh">
+      <main className={cn("min-h-dvh", comMenu && "pb-32")}>{children}</main>
+      {comMenu && <BottomNav aba={aba} assistente={assistente} />}
     </div>
   );
 }
