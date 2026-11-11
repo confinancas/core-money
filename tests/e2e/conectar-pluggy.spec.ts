@@ -92,15 +92,22 @@ const LIMPEZA_DO_PLUGGY = [
   `DELETE FROM pluggy_connections WHERE label = '${ROTULO}'`,
 ].join("; ");
 
+// A importação do histórico (TASK-0204) roda em segundo plano nos bancos deste arquivo e pode escrever no D1 local enquanto a
+// limpeza roda (R12). A limpeza não espera a importação: uma fatia que encontra o D1 travado repete (com espera de 300 s),
+// e a execução fica aberta por mais tempo que o orçamento do teste. O helper do D1 repete o comando em SQLITE_BUSY.
+async function limpaOPluggy(): Promise<void> {
+  executaSql("pronta", LIMPEZA_DO_PLUGGY);
+}
+
 // Cada teste começa com a instalação pronta, a sessão semeada e nenhuma conexão deste arquivo; no fim, a mesma limpeza.
-test.beforeEach(() => {
+test.beforeEach(async () => {
   semearInstalacaoPronta();
   semeiaSessaoDaInstalacaoPronta();
-  executaSql("pronta", LIMPEZA_DO_PLUGGY);
+  await limpaOPluggy();
 });
 
-test.afterAll(() => {
-  executaSql("pronta", LIMPEZA_DO_PLUGGY);
+test.afterAll(async () => {
+  await limpaOPluggy();
 });
 
 // O id da conta [TEST] Conta A no banco de teste. O link de cada cartão da seção leva o id, e as outras contas do

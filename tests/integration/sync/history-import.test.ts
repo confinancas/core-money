@@ -1,139 +1,33 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../../src/worker/app";
+import { classifyMovements, reconcileHousehold } from "../../../src/worker/bank/classify";
 import { despachar } from "../../../src/worker/cron/despachante";
-import { createDb, type Db } from "../../../src/worker/db/client";
-import { type Meter, newMeter } from "../../../src/worker/db/metered-d1";
+import { createDb } from "../../../src/worker/db/client";
+import { newMeter } from "../../../src/worker/db/metered-d1";
 import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch";
 import type { Env } from "../../../src/worker/env";
-import { nomeDaChave } from "../../../src/worker/pluggy/connections";
-import { encryptSecret } from "../../../src/worker/security/crypto";
 import { type SyncMessage, somaDias } from "../../../src/worker/sync/plan";
 import { handleSyncBatch, type LoteDaFila, type MensagemDaFila } from "../../../src/worker/sync/queue";
 import { startRun } from "../../../src/worker/sync/runs";
-import { type ResultadoDaFatia, runSyncSlice } from "../../../src/worker/sync/slice";
+import { faturasReaisDoCartao, type ResultadoDaFatia, runSyncSlice } from "../../../src/worker/sync/slice";
 import { callApi, semearPronto } from "../helpers/app";
-import { semearLar } from "../helpers/sessao";
-
-// Importação do histórico (TASK-0204): cenários 1 a 10, 12 e 13 da spec, com o Meu Pluggy falso e deps.fetch injetado.
-// Nenhuma chamada sai do Worker de teste. Dados [TEST]; chaves fictícias.
-
-const AGORA = "2026-11-10T12:00:00.000Z";
-const HOJE = "2026-11-10";
-const AMBIENTE = env as unknown as Env;
-type Busca = typeof fetch;
-
-type Banco = { householdId: string; connectionId: string; itemId: string };
-
-// Lar, conexão com chaves cifradas (TEST) e um banco. Sem execução ainda.
-async function semearBanco(): Promise<Banco> {
-  // Passkey e membro próprios: a suíte pode criar vários lares no mesmo teste.
-  const lar = await semearLar(env.DB, {
-    memberId: crypto.randomUUID(),
-    passkeyId: `cred-TEST-0204-${crypto.randomUUID()}`,
-    email: `${crypto.randomUUID()}@example.com`,
-  });
-  const connectionId = crypto.randomUUID();
-  const itemId = crypto.randomUUID();
-  const cifraId = await encryptSecret(
-    env.MASTER_KEY,
-    nomeDaChave(connectionId, "client_id"),
-    "TEST-client-id-0204",
-  );
-  const cifraSegredo = await encryptSecret(
-    env.MASTER_KEY,
-    nomeDaChave(connectionId, "client_secret"),
-    "TEST-segredo-0204",
-  );
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO pluggy_connections (id, household_id, label, cpf_masked, client_id_enc, iv, client_secret_enc,
-         client_secret_iv, created_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
-    ).bind(
-      connectionId,
-      lar.householdId,
-      `[TEST] Conexão ${connectionId.slice(0, 6)}`,
-      cifraId.ciphertext,
-      cifraId.iv,
-      cifraSegredo.ciphertext,
-      cifraSegredo.iv,
-      AGORA,
-    ),
-    env.DB.prepare(
-      `INSERT INTO bank_items (id, connection_id, institution_name, institution_color, consent_expires_at, last_sync_at,
-         status, disconnected_at, created_at) VALUES (?, ?, '[TEST] Banco', '#0E9A63', NULL, NULL, 'ativo', NULL, ?)`,
-    ).bind(itemId, connectionId, AGORA),
-  ]);
-  return { householdId: lar.householdId, connectionId, itemId };
-}
-
-// Cada fatia tem o seu medidor: o teste confere quantas idas ao D1 ela fez.
-type Passo = { resultado: ResultadoDaFatia; chamadasDaFatia: number };
-
-// Roda fatias seguidas até encerrar, repetir ou pular; devolve cada passo com as idas ao D1 da fatia.
-async function rodar(runId: string, fetch: Busca, seqInicial = 0, tentativa = 1): Promise<Passo[]> {
-  const passos: Passo[] = [];
-  let seq = seqInicial;
-  for (let i = 0; i < 400; i++) {
-    const medidor: Meter = newMeter();
-    const db = createDb(env.DB, medidor);
-    const resultado = await runSyncSlice(AMBIENTE, { db, fetch }, { runId, seq, tentativa }, AGORA);
-    passos.push({ resultado, chamadasDaFatia: medidor.calls });
-    if (resultado.tipo !== "continua") break;
-    seq += 1;
-  }
-  return passos;
-}
-
-const db = (): Db => createDb(env.DB, newMeter());
-
-async function execucao(runId: string) {
-  return env.DB.prepare(
-    "SELECT status, progress_pct, new_transactions, finished_at, retried, error_code, slices_done, slices_total FROM sync_runs WHERE id = ?",
-  )
-    .bind(runId)
-    .first<{
-      status: string | null;
-      progress_pct: number;
-      new_transactions: number;
-      finished_at: string | null;
-      retried: number;
-      error_code: string | null;
-      slices_done: number;
-      slices_total: number;
-    }>();
-}
-
-const contaDeTransacoes = async (bankItemId: string): Promise<number> => {
-  const linha = await env.DB.prepare("SELECT COUNT(*) AS n FROM transactions WHERE bank_item_id = ?")
-    .bind(bankItemId)
-    .first<{ n: number }>();
-  return linha?.n ?? 0;
-};
-
-// Fase, janela e totais que o D1 guarda agora. Leitura direta (fora do medidor): é a verificação do teste.
-async function cursorDaExecucao(runId: string) {
-  const linha = await env.DB.prepare(
-    "SELECT cursor_json, slices_total, slices_done FROM sync_runs WHERE id = ?",
-  )
-    .bind(runId)
-    .first<{ cursor_json: string; slices_total: number; slices_done: number }>();
-  const cursor = JSON.parse(linha?.cursor_json ?? "{}") as { seq?: number; phase?: string; w?: number };
-  return {
-    seq: cursor.seq ?? 0,
-    phase: cursor.phase ?? "inicio",
-    w: cursor.w ?? 0,
-    slices_total: linha?.slices_total ?? 0,
-    slices_done: linha?.slices_done ?? 0,
-  };
-}
-
-const movimentoDe = async (transacaoId: string): Promise<string | null> => {
-  const linha = await env.DB.prepare("SELECT movement FROM transactions WHERE id = ?")
-    .bind(transacaoId)
-    .first<{ movement: string }>();
-  return linha?.movement ?? null;
-};
+import {
+  AGORA,
+  AMBIENTE,
+  type Banco,
+  type Busca,
+  contaDeTransacoes,
+  cursorDaExecucao,
+  db,
+  execucao,
+  HOJE,
+  movimentoDe,
+  type Passo,
+  rodar,
+  semearBanco,
+  urlDe,
+} from "./importacao-helpers";
 
 describe("importação: caminho feliz (cenário 1) e mais nova primeiro (cenário 2)", () => {
   it("roda até o fim: status ok, progresso 100, linhas, faturas e a aberta, e cada fatia dentro de 20 chamadas", async () => {
@@ -507,7 +401,7 @@ describe("importação: fila, cron e dois bancos (cenários 10 a 12)", () => {
       ...AMBIENTE,
       SYNC_QUEUE: { send: async (mensagem: SyncMessage) => void fila.push(mensagem) },
     } as unknown as Env;
-    await despachar(ambiente, new Date(AGORA));
+    await despachar(ambiente, new Date(AGORA), db());
     expect(fila).toEqual([{ runId, seq: 0 }]);
 
     const fetch = pluggyFalsoEmMemoria(2);
@@ -698,5 +592,129 @@ describe("rotas de medição e estado da importação (cenário 13 e status)", (
     };
     expect(corpoB.importing).toEqual([]);
     expect(corpoB.recentlyFinished).toEqual([expect.objectContaining({ runId, status: "ok" })]);
+  });
+});
+
+describe("importação: faturas reais no contexto das transações (TASK-0202, R13c)", () => {
+  // Compra de 1º de outubro: a fatura real fecha em 3 de outubro, então a compra cai nela, e não na aberta de novembro.
+  // Só a janela de 11 de outubro traz a compra, para que ela seja gravada uma vez.
+  const comCompraNaFaturaReal: Busca = async (entrada, init) => {
+    const url = urlDe(entrada);
+    if (
+      url.pathname === "/v2/transactions" &&
+      url.searchParams.get("accountId")?.endsWith("-cartao") &&
+      url.searchParams.get("dateTo") === "2026-10-11" &&
+      !url.searchParams.has("after")
+    ) {
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              id: "[TEST] compra-fatura-real",
+              accountId: url.searchParams.get("accountId"),
+              date: "2026-10-01T15:00:00.000Z",
+              description: "[TEST] COMPRA FATURA REAL",
+              descriptionRaw: "[TEST] COMPRA FATURA REAL",
+              amount: -80,
+              type: "DEBIT",
+              category: null,
+              operationType: "CARTAO",
+              paymentData: null,
+              creditCardMetadata: null,
+              status: "POSTED",
+            },
+          ],
+          next: null,
+        }),
+        { status: 200 },
+      );
+    }
+    return pluggyFalsoEmMemoria(0)(entrada, init);
+  };
+
+  it("a compra cai na fatura real, e faturasReaisDoCartao devolve só as reais (sem a sintética da aberta)", async () => {
+    const banco = await semearBanco();
+    const runId = (await startRun(db(), banco.itemId, "historico", AGORA)) as string;
+    const passos = await rodar(runId, comCompraNaFaturaReal);
+    expect(passos.at(-1)?.resultado).toEqual({ tipo: "encerrou", status: "ok", codigo: null });
+
+    const cartao = `${banco.itemId}-cartao`;
+    const compra = await env.DB.prepare(
+      "SELECT bill_id FROM transactions WHERE bank_item_id = ? AND original_description = ?",
+    )
+      .bind(banco.itemId, "[TEST] COMPRA FATURA REAL")
+      .first<{ bill_id: string | null }>();
+    expect(compra?.bill_id).toBe(`${cartao}-fatura-anterior`);
+    expect(await faturasReaisDoCartao(db(), cartao)).toEqual([
+      { id: `${cartao}-fatura-anterior`, closes_on: "2026-10-03" },
+    ]);
+  });
+});
+
+describe("conciliação com o hoje de verdade (TASK-0204, R3)", () => {
+  // Entrada no cartão marcada como pagamento de fatura, sem saída de conta que a pareie, com `dias` de idade.
+  async function pagamentoSemPar(banco: Banco, dias: number): Promise<string> {
+    const id = crypto.randomUUID();
+    const data = somaDias(HOJE, -dias);
+    await env.DB.prepare(
+      `INSERT INTO transactions (id, household_id, external_id, bank_item_id, card_id, movement, occurred_at, local_date,
+         amount_cents, original_description, last_seen_at, provider_operation_type)
+       VALUES (?, ?, ?, ?, ?, 'pagamento_fatura', ?, ?, 25000, '[TEST] PAGAMENTO FATURA', ?, 'PAGAMENTO_FATURA')`,
+    )
+      .bind(
+        id,
+        banco.householdId,
+        `[TEST] pagamento-${id}`,
+        banco.itemId,
+        `${banco.itemId}-cartao`,
+        `${data}T12:00:00.000Z`,
+        data,
+        AGORA,
+      )
+      .run();
+    return id;
+  }
+
+  it("pagamento sem par de 17 e de 22 dias: continuam pix_recebido ao reconciliar as janelas 0, 1 e 2", async () => {
+    const banco = await semearBanco();
+    const runId = (await startRun(db(), banco.itemId, "historico", AGORA)) as string;
+    // inicio grava o cartão; as linhas de teste entram depois.
+    await runSyncSlice(
+      AMBIENTE,
+      { db: db(), fetch: pluggyFalsoEmMemoria(0) },
+      { runId, seq: 0, tentativa: 1 },
+      AGORA,
+    );
+    const dezessete = await pagamentoSemPar(banco, 17);
+    const vinteEDois = await pagamentoSemPar(banco, 22);
+
+    // A gravação classifica com o hoje real: sem par e com mais de 5 dias, as duas são pix_recebido.
+    await classifyMovements(db(), banco.householdId, [dezessete, vinteEDois], AGORA);
+    expect(await movimentoDe(dezessete)).toBe("pix_recebido");
+    expect(await movimentoDe(vinteEDois)).toBe("pix_recebido");
+
+    // A importação segue pelas 25 janelas de conciliação (fase conciliar). A de 17 dias é relida na janela 1, cujo fim
+    // é hoje menos 15: não pode voltar a pagamento_fatura por causa do fim dessa janela.
+    const passos = await rodar(runId, pluggyFalsoEmMemoria(0), 1);
+    expect(passos.at(-1)?.resultado).toEqual({ tipo: "encerrou", status: "ok", codigo: null });
+    expect(await movimentoDe(dezessete)).toBe("pix_recebido");
+    expect(await movimentoDe(vinteEDois)).toBe("pix_recebido");
+  });
+
+  it("reconcileHousehold classifica com o hoje real, mesmo quando a janela escrita termina antes", async () => {
+    const banco = await semearBanco();
+    const runId = (await startRun(db(), banco.itemId, "historico", AGORA)) as string;
+    await runSyncSlice(
+      AMBIENTE,
+      { db: db(), fetch: pluggyFalsoEmMemoria(0) },
+      { runId, seq: 0, tentativa: 1 },
+      AGORA,
+    );
+    const dezessete = await pagamentoSemPar(banco, 17);
+    await classifyMovements(db(), banco.householdId, [dezessete], AGORA);
+    for (const w of [0, 1, 2]) {
+      await reconcileHousehold(db(), banco.householdId, HOJE, AGORA, somaDias(HOJE, -15 * w));
+    }
+    expect(await movimentoDe(dezessete)).toBe("pix_recebido");
   });
 });

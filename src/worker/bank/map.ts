@@ -1,4 +1,5 @@
 import { bankNameFromCode } from "../../shared/bank-codes";
+import { daysBetween } from "../../shared/cycle";
 import { establishmentKey } from "../../shared/establishment-key";
 import { toSaoPauloDate } from "../../shared/sao-paulo-date";
 
@@ -314,6 +315,11 @@ function daFechamento(closesOn: string, cartao: CardBillContext): Resolucao | nu
   return { billId: sintetica(cartao.cardId, closesOn), closesOn, futura: true };
 }
 
+// Teto do fechamento conhecido (TASK-0204, R10): só vale se estiver a até 35 dias da compra. Mais longe, a compra vai para
+// o fechamento calculado do ciclo dela. Sem o teto, as compras de meses sem fatura real caíam todas na primeira fatura
+// conhecida, ou na aberta.
+const DIAS_MAXIMOS_DO_FECHAMENTO_CONHECIDO = 35;
+
 // Primeiro fechamento conhecido (real ou da aberta) que não é antes da data local. null se não há nenhum.
 // Com uma real a cobrir a compra, a releitura não a leva para a aberta de um mês depois (TASK-0202, correção).
 function primeiroFechamentoConhecido(dataLocal: string, cartao: CardBillContext): string | null {
@@ -344,7 +350,9 @@ function resolverFatura(tx: PluggyTransaction, cartao: CardBillContext): Resoluc
   }
   const dataLocal = toSaoPauloDate(tx.date);
   const conhecido = primeiroFechamentoConhecido(dataLocal, cartao);
-  if (conhecido !== null) return daFechamento(conhecido, cartao);
+  if (conhecido !== null && daysBetween(dataLocal, conhecido) <= DIAS_MAXIMOS_DO_FECHAMENTO_CONHECIDO) {
+    return daFechamento(conhecido, cartao);
+  }
   if (dia !== null) return daFechamento(proximoFechamento(dataLocal, dia), cartao);
   return null;
 }

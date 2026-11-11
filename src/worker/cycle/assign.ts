@@ -53,29 +53,19 @@ function paresDoEscopo(householdId: string, escopo: EscopoDeCiclo): Par[] {
       },
     ];
   }
+  // Só os lançamentos gravados e as faturas em que eles caem. O cartão inteiro não entra aqui: a cada gravação, reler
+  // os lançamentos do cartão custava cerca de 10 leituras por lançamento dele (TASK-0801, item 3). A fatura de um
+  // lançamento só muda de data nas faturas (upsertBillsStmts), e isso a reavaliação do cartão cobre (cardIds).
   const json = JSON.stringify(escopo.ids);
-  const cartoesDosIds =
-    "SELECT x.card_id FROM transactions x WHERE x.id IN (SELECT value FROM json_each(?)) AND x.card_id IS NOT NULL";
-  // Cada cartão do lote uma vez (DISTINCT): o CROSS JOIN com as transações é por cartão. Sem o DISTINCT, cada id
-  // repetiria as transações do cartão dele (lote de 100 no cartão de 150 viraria 15.000 linhas na subconsulta).
-  const cartoesDoLote =
-    "SELECT DISTINCT x.card_id AS card_id FROM json_each(?) AS j CROSS JOIN transactions AS x ON x.id = j.value AND x.card_id IS NOT NULL";
   return [
     {
       t: {
         sql: "t.id IN (SELECT x.id FROM json_each(?) AS j CROSS JOIN transactions AS x ON x.id = j.value AND x.household_id = ?)",
         params: [json, householdId],
       },
-      b: null,
-    },
-    {
-      t: {
-        sql: `t.id IN (SELECT y.id FROM (${cartoesDoLote}) AS c CROSS JOIN transactions AS y INDEXED BY transactions_card_local_date_idx ON y.card_id = c.card_id AND y.household_id = ?)`,
-        params: [json, householdId],
-      },
       b: {
-        sql: `b.card_id IN (${cartoesDosIds}) AND b.card_id IN (${CARTOES_DO_LAR})`,
-        params: [json, householdId],
+        sql: `b.id IN (SELECT x.bill_id FROM json_each(?) AS j CROSS JOIN transactions AS x ON x.id = j.value AND x.household_id = ? WHERE x.bill_id IS NOT NULL) AND b.card_id IN (${CARTOES_DO_LAR})`,
+        params: [json, householdId, householdId],
       },
     },
   ];

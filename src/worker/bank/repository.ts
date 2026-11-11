@@ -1,4 +1,7 @@
+import { addDays, ciclosQueFaltam } from "../../shared/cycle";
+import { calendarioDaLeitura, insertCyclesStmts, leituraCalendarioStmts } from "../cycle/calendar";
 import type { Db } from "../db/client";
+import { ORIGEM_PADRAO, TIPO_PADRAO, temTipoPadrao } from "../spend-types/derive";
 import { afterIngest } from "./after-ingest";
 import type { AccountRow, BillRow, CardRow, FuturaRow, MappedTransaction } from "./map";
 
@@ -7,8 +10,12 @@ const MAX_LINHAS = 200;
 const MAX_PARAMETROS = 100;
 // 90 ids + o bank_item_id = 91 parâmetros na busca.
 const IDS_POR_BUSCA = 90;
+// O calendário que a gravação cria vai até este número de dias depois da última data do lote. Cobre a fatura que
+// fecha depois da compra (até 35 dias); o que sobrar, o passo 2 do afterIngest completa.
+const DIAS_DE_CALENDARIO_APOS_O_LOTE = 40;
 
-// Colunas que o INSERT preenche, nesta ordem. Vinte e uma por linha: quatro linhas por comando (84 parâmetros).
+// Colunas que o INSERT preenche, nesta ordem. Vinte e uma por linha. O ciclo (cycle_key) vem depois, calculado na
+// própria gravação (CICLO_NA_GRAVACAO): é o que o passo 2 do afterIngest faria, sem reescrever a linha.
 const COLUNAS_DA_LINHA = [
   "id",
   "household_id",
@@ -32,7 +39,9 @@ const COLUNAS_DA_LINHA = [
   "provider_operation_type",
   "last_seen_at",
 ] as const;
-const LINHAS_POR_COMANDO = Math.floor(MAX_PARAMETROS / COLUNAS_DA_LINHA.length);
+// Além das 21 colunas, o ciclo usa três parâmetros: a fatura, a data do lançamento e o lar. 24 por linha: 4 por comando.
+const PARAMETROS_DO_CICLO = 3;
+const LINHAS_POR_COMANDO = Math.floor(MAX_PARAMETROS / (COLUNAS_DA_LINHA.length + PARAMETROS_DO_CICLO));
 
 // Só o que vem do banco é atualizado no conflito. Nunca tocam: movement, movement_original, movement_locked,
 // custom_name, category_id, spend_type*, hidden*, income_*, fixed_income_id, card_would_accept, ai_*, categorized_*,
@@ -56,11 +65,22 @@ const ATUALIZADAS_DO_BANCO = [
   "last_seen_at",
 ] as const;
 
-const SQL_INSERT_TRANSACAO = (linhas: number): string =>
-  `INSERT INTO transactions (${COLUNAS_DA_LINHA.join(", ")}) VALUES ${Array.from(
-    { length: linhas },
-    () => `(${COLUNAS_DA_LINHA.map(() => "?").join(", ")})`,
-  ).join(", ")} ON CONFLICT (bank_item_id, external_id) DO UPDATE SET ${[
+// O mesmo cálculo de cicloDaData (assign.ts), com a data que decide: a da fatura, quando a linha tem uma, ou a do dia.
+// Nas contas, bill_id é nulo e o COALESCE dá a data do dia. O ciclo é nulo fora do calendário (o passo 2 completa).
+// Parâmetros, nesta ordem: bill_id, local_date, household_id.
+const CICLO_NA_GRAVACAO = `(SELECT CASE WHEN c.ends_on >= d.dia THEN c.key END
+    FROM (SELECT COALESCE((SELECT b.closes_on FROM bills AS b WHERE b.id = ?), ?) AS dia) AS d, cycles AS c
+    WHERE c.household_id = ? AND c.starts_on <= d.dia ORDER BY c.starts_on DESC LIMIT 1)`;
+
+// O tipo padrão (spend_type e a origem) entra como literal, não como parâmetro: a linha que não tem tipo (entrada,
+// pagamento de fatura, transferência) leva NULL. Cada tupla diz se é saída com tipo, então o SQL varia por tupla.
+const SQL_INSERT_TRANSACAO = (temTipo: boolean[]): string =>
+  `INSERT INTO transactions (${[...COLUNAS_DA_LINHA, "cycle_key", "spend_type", "spend_type_source"].join(", ")}) VALUES ${temTipo
+    .map((tipado) => {
+      const tipo = tipado ? `'${TIPO_PADRAO}', '${ORIGEM_PADRAO}'` : "NULL, NULL";
+      return `(${[...COLUNAS_DA_LINHA.map(() => "?"), CICLO_NA_GRAVACAO, tipo].join(", ")})`;
+    })
+    .join(", ")} ON CONFLICT (bank_item_id, external_id) DO UPDATE SET ${[
     ...ATUALIZADAS_DO_BANCO.map((coluna) => `${coluna} = excluded.${coluna}`),
     "removed_at = NULL",
   ].join(", ")}`;
@@ -186,33 +206,9 @@ export function upsertBillsStmts(
   return comandos;
 }
 
-// Busca os movimentos já gravados deste item, por external_id, em grupos de 90 ids. Uma chamada ao D1.
-async function buscarExistentes(
-  db: Db,
-  bankItemId: string,
-  externalIds: string[],
-): Promise<Map<string, string>> {
-  const existentes = new Map<string, string>();
-  if (externalIds.length === 0) return existentes;
-  const comandos = emGrupos(externalIds, IDS_POR_BUSCA).map((grupo) =>
-    db.$client
-      .prepare(
-        `SELECT id, external_id FROM transactions WHERE bank_item_id = ? AND external_id IN (${grupo.map(() => "?").join(", ")})`,
-      )
-      .bind(bankItemId, ...grupo),
-  );
-  const resultados = await db.$client.batch(comandos);
-  for (const resultado of resultados) {
-    for (const linha of resultado.results as { id: string; external_id: string }[]) {
-      existentes.set(linha.external_id, linha.id);
-    }
-  }
-  return existentes;
-}
-
-// Grava os movimentos do item sem duplicar: (bank_item_id, external_id) é a chave. Duas chamadas ao D1:
-// a busca dos existentes e a gravação (faturas sintéticas futuras, depois os movimentos).
-// Devolve os ids inseridos e os atualizados, e chama afterIngest com eles.
+// Grava os movimentos do item sem duplicar: (bank_item_id, external_id) é a chave. Duas chamadas ao D1: a leitura
+// (os existentes, e o calendário do lar, no mesmo lote) e a gravação (ciclos que faltam, faturas sintéticas futuras e
+// os movimentos, nessa ordem, no mesmo lote). Devolve os ids inseridos e os atualizados, e chama afterIngest com eles.
 export async function ingestTransactions(
   db: Db,
   entrada: IngestInput,
@@ -228,28 +224,58 @@ export async function ingestTransactions(
   const updatedIds: string[] = [];
 
   if (linhas.length > 0) {
-    const existentes = await buscarExistentes(
-      db,
-      bankItemId,
+    // Os existentes por external_id, em grupos de 90 ids, e o calendário do lar: tudo numa ida ao D1.
+    const buscas = emGrupos(
       linhas.map((linha) => linha.external_id),
+      IDS_POR_BUSCA,
+    ).map((grupo) =>
+      db.$client
+        .prepare(
+          `SELECT id, external_id FROM transactions WHERE bank_item_id = ? AND external_id IN (${grupo.map(() => "?").join(", ")})`,
+        )
+        .bind(bankItemId, ...grupo),
     );
+    const leitura = await db.$client.batch([...buscas, ...leituraCalendarioStmts(db, householdId)]);
+    const existentes = new Map<string, string>();
+    for (const resultado of leitura.slice(0, buscas.length)) {
+      for (const linha of resultado.results as { id: string; external_id: string }[]) {
+        existentes.set(linha.external_id, linha.id);
+      }
+    }
+    const { ciclos, diaDoLar } = calendarioDaLeitura(leitura[buscas.length], leitura[buscas.length + 1]);
+
     // Sempre um id novo no INSERT: reusar o id existente faria o conflito de chave primária escapar do ON CONFLICT.
     const ids = linhas.map(() => crypto.randomUUID());
+
+    const comandos: D1PreparedStatement[] = [];
+    if (diaDoLar !== null) {
+      const datas = linhas.map((linha) => linha.local_date).sort();
+      const faltam = ciclosQueFaltam(
+        ciclos,
+        diaDoLar,
+        datas[0] ?? "",
+        addDays(datas[datas.length - 1] ?? "", DIAS_DE_CALENDARIO_APOS_O_LOTE),
+      );
+      comandos.push(...insertCyclesStmts(db, householdId, faltam, true));
+    }
 
     const futuras = new Map<string, FuturaRow>();
     for (const linha of linhas) {
       if (linha.futura) futuras.set(linha.futura.id, linha.futura);
     }
-    const comandos: D1PreparedStatement[] = [...futuras.values()].map((futura) =>
-      db.$client
-        .prepare(
-          "INSERT INTO bills (id, card_id, closes_on, due_on, amount_cents, status, paid_on, cycle_key) VALUES (?, ?, ?, NULL, NULL, 'futura', NULL, NULL) ON CONFLICT (id) DO NOTHING",
-        )
-        .bind(futura.id, futura.card_id, futura.closes_on),
+    comandos.push(
+      ...[...futuras.values()].map((futura) =>
+        db.$client
+          .prepare(
+            "INSERT INTO bills (id, card_id, closes_on, due_on, amount_cents, status, paid_on, cycle_key) VALUES (?, ?, ?, NULL, NULL, 'futura', NULL, NULL) ON CONFLICT (id) DO NOTHING",
+          )
+          .bind(futura.id, futura.card_id, futura.closes_on),
+      ),
     );
 
     const indicadas = linhas.map((linha, i) => ({ linha, id: ids[i] ?? "" }));
     for (const grupo of emGrupos(indicadas, LINHAS_POR_COMANDO)) {
+      const temTipo = grupo.map(({ linha }) => temTipoPadrao(linha.movement, linha.amount_cents));
       const valores = grupo.flatMap(({ linha, id }) => [
         id,
         householdId,
@@ -272,8 +298,12 @@ export async function ingestTransactions(
         linha.provider_category,
         linha.provider_operation_type,
         now,
+        // Os três parâmetros do ciclo: a fatura, a data e o lar.
+        linha.bill_id,
+        linha.local_date,
+        householdId,
       ]);
-      comandos.push(db.$client.prepare(SQL_INSERT_TRANSACAO(grupo.length)).bind(...valores));
+      comandos.push(db.$client.prepare(SQL_INSERT_TRANSACAO(temTipo)).bind(...valores));
     }
     await db.$client.batch(comandos);
 

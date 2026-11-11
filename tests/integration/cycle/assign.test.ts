@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { addDays, cycleForDate } from "../../../src/shared/cycle";
+import { reavaliarCartaoInteiro } from "../../../src/worker/bank/after-ingest";
 import type { BillRow, MappedTransaction } from "../../../src/worker/bank/map";
 import { ingestTransactions, upsertBillsStmts, upsertCardsStmts } from "../../../src/worker/bank/repository";
 import { assignCycleKeysStmts } from "../../../src/worker/cycle/assign";
@@ -434,7 +435,7 @@ describe("cycle_key: os cenários de fatura e de cálculo", () => {
     expect(ids.length).toBe(5);
   });
 
-  it("9. fatura sintética vira real: a compra passa para a real, e o cycle_key acompanha na gravação seguinte", async () => {
+  it("9. fatura sintética vira real: a compra passa para a real, e o cycle_key acompanha na reavaliação do cartão", async () => {
     const { householdId, connectionId } = await criarLar(11);
     const itemId = await criarItem(connectionId, "Nubank");
     const db = dbComMedidor();
@@ -477,8 +478,11 @@ describe("cycle_key: os cenários de fatura e de cálculo", () => {
       .bind("[TEST] ext-antes")
       .first<{ bill_id: string }>();
     expect(herdou?.bill_id).toBe(real.id);
-    // Ainda sem gravação nova: a chave ainda é a antiga (a data que decide mudou, mas o passo 2 não rodou).
+    // Ainda sem reavaliação: a chave é a antiga (a data que decide mudou, mas o ciclo ainda não foi refeito).
     expect(await cicloDe("[TEST] ext-antes")).toBe("2026-10");
+    // A reavaliação do cartão, que a fase de faturas roda depois de upsertBillsStmts, refaz o ciclo dele.
+    await reavaliarCartaoInteiro(db, householdId, cartaoId);
+    expect(await cicloDe("[TEST] ext-antes")).toBe("2026-11");
 
     await ingestTransactions(db, {
       householdId,

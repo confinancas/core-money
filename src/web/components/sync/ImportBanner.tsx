@@ -3,10 +3,13 @@ import { Link } from "react-router";
 import type { SyncStatusResponse } from "../../../shared/sync-api";
 import { lerEstadoDaImportacao } from "../../api/sync";
 
-// Faixa da moldura (TASK-0204): importação em andamento, banco pronto ou banco que não terminou. Consulta a cada 10 s,
-// só com a aba visível. "OK" lembra o runId visto no localStorage (dentro de try/catch: sem ele, a faixa só some na tela).
+// Faixa da importação do histórico (TASK-0204): em andamento, banco pronto ou banco que não terminou. Fica dentro do
+// AppFrame, no conteúdo (a moldura bare das telas de acesso não a monta). Consulta a cada 10 s, só com a aba visível.
+// Um término aparece enquanto a rota de estado o devolve (as últimas 24 h), mesmo que a página tenha aberto depois dele;
+// "OK" grava o runId no localStorage (dentro de try/catch: sem ele, a faixa só some nesta tela).
 const CHAVE_DAS_VISTAS = "mm.importacao.vistas";
-const FOLGA_DO_RELOGIO_MS = 60_000;
+const MAXIMO_DE_VISTAS = 100;
+const INTERVALO_DE_CONSULTA_MS = 10_000;
 
 function lerVistas(): string[] {
   try {
@@ -18,22 +21,17 @@ function lerVistas(): string[] {
   }
 }
 
-function marcarVista(runId: string, atuais: string[]): string[] {
-  const novas = [...atuais, runId];
+function gravarVistas(vistas: string[]): void {
   try {
-    window.localStorage.setItem(CHAVE_DAS_VISTAS, JSON.stringify(novas));
+    window.localStorage.setItem(CHAVE_DAS_VISTAS, JSON.stringify(vistas));
   } catch {
     // Sem localStorage a faixa some só nesta tela.
   }
-  return novas;
 }
 
 export function ImportBanner() {
   const [estado, setEstado] = useState<SyncStatusResponse | null>(null);
   const [vistas, setVistas] = useState<string[]>(lerVistas);
-  // "Pronto" só se anuncia para um término ocorrido desde que a página abriu (com uma folga de um minuto para o relógio do
-  // servidor e o do navegador): uma execução antiga não cobre a tela de quem acabou de abrir o app.
-  const [montadoEm] = useState(() => Date.now());
 
   useEffect(() => {
     let ativo = true;
@@ -47,7 +45,7 @@ export function ImportBanner() {
         .catch(() => undefined);
     };
     buscar();
-    const intervalo = window.setInterval(buscar, 10_000);
+    const intervalo = window.setInterval(buscar, INTERVALO_DE_CONSULTA_MS);
     return () => {
       ativo = false;
       window.clearInterval(intervalo);
@@ -70,11 +68,14 @@ export function ImportBanner() {
     );
   }
 
-  const terminada = estado.recentlyFinished.find(
-    (linha) =>
-      !vistas.includes(linha.runId) && Date.parse(linha.finishedAt) >= montadoEm - FOLGA_DO_RELOGIO_MS,
-  );
+  const terminada = estado.recentlyFinished.find((linha) => !vistas.includes(linha.runId));
   if (!terminada) return null;
+
+  function marcarComoVista(runId: string) {
+    const novas = [...vistas, runId].slice(-MAXIMO_DE_VISTAS);
+    gravarVistas(novas);
+    setVistas(novas);
+  }
 
   const deuCerto = terminada.status === "ok" || terminada.status === "repetiu";
   return (
@@ -98,7 +99,7 @@ export function ImportBanner() {
       <button
         type="button"
         className="flex min-h-[44px] min-w-[44px] items-center justify-center font-bold text-accent"
-        onClick={() => setVistas((atuais) => marcarVista(terminada.runId, atuais))}
+        onClick={() => marcarComoVista(terminada.runId)}
       >
         OK
       </button>

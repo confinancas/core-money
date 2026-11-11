@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "86b385c3-c266-481a-b227-903286f652db",
+  "id": "e1536726-0866-45af-9b02-df31310dfe3c",
   "prevId": "bf60d401-ea0e-43b2-a2a5-3118e421e71e",
   "tables": {
     "accounts": {
@@ -340,7 +340,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "bank_items_connection_idx": {
+          "name": "bank_items_connection_idx",
+          "columns": [
+            "connection_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "bank_items_connection_id_pluggy_connections_id_fk": {
           "name": "bank_items_connection_id_pluggy_connections_id_fk",
@@ -2089,6 +2097,14 @@
             "finished_at"
           ],
           "isUnique": false
+        },
+        "sync_runs_open_heartbeat_idx": {
+          "name": "sync_runs_open_heartbeat_idx",
+          "columns": [
+            "heartbeat_at"
+          ],
+          "isUnique": false,
+          "where": "\"sync_runs\".\"finished_at\" IS NULL"
         }
       },
       "foreignKeys": {
@@ -2548,6 +2564,14 @@
             "cycle_key"
           ],
           "isUnique": false
+        },
+        "transactions_no_cycle_local_date_idx": {
+          "name": "transactions_no_cycle_local_date_idx",
+          "columns": [
+            "local_date"
+          ],
+          "isUnique": false,
+          "where": "\"transactions\".\"cycle_key\" IS NULL AND \"transactions\".\"removed_at\" IS NULL"
         }
       },
       "foreignKeys": {

@@ -2,6 +2,7 @@
 import { createDb } from "../db/client";
 import { newMeter } from "../db/metered-d1";
 import type { Env } from "../env";
+import { flushUsage } from "../usage/flush";
 import { enqueueSlice } from "./enqueue";
 import type { SyncMessage } from "./plan";
 import { runSyncSlice } from "./slice";
@@ -19,6 +20,7 @@ export type DependenciasDoLote = { agora?: () => Date; fetch?: typeof fetch };
 
 // Uma mensagem por vez. Continua: enfileira a fatia seguinte e confirma. Repete: devolve à fila com o atraso.
 // Encerrou ou pulou: confirma. Uma falha não prevista não deixa a mensagem em laço (já virou erro_inesperado na fatia).
+// As escritas da fatia vão para o contador do dia (TASK-0109): é o que o teto de escritas da importação lê.
 export async function handleSyncBatch(
   lote: LoteDaFila,
   env: Env,
@@ -26,10 +28,12 @@ export async function handleSyncBatch(
 ): Promise<void> {
   for (const mensagem of lote.messages) {
     const { runId, seq } = mensagem.body;
-    const agora = (deps.agora ?? (() => new Date()))().toISOString();
+    const instante = (deps.agora ?? (() => new Date()))();
+    const agora = instante.toISOString();
+    const medidor = newMeter();
     let resultado: Awaited<ReturnType<typeof runSyncSlice>>;
     try {
-      const db = createDb(env.DB, newMeter());
+      const db = createDb(env.DB, medidor);
       resultado = await runSyncSlice(
         env,
         { db, fetch: deps.fetch },
@@ -40,6 +44,8 @@ export async function handleSyncBatch(
       console.error(`sync lote: ${erro instanceof Error ? erro.name : "erro"}`);
       mensagem.ack();
       continue;
+    } finally {
+      await flushUsage(env.DB, medidor, instante);
     }
 
     if (resultado.tipo === "repete") {

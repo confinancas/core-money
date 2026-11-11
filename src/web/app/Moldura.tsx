@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, Outlet, ScrollRestoration } from "react-router";
 import { brand } from "../../shared/brand";
-import { ImportBanner } from "../components/sync/ImportBanner";
 import { useFeatures } from "./features";
 import { AppFrame } from "./frame/AppFrame";
 import { useRotaAtual } from "./rota-atual";
@@ -22,7 +21,6 @@ export function Moldura() {
 
   return (
     <>
-      <ImportBanner />
       <AppFrame frame={meta?.frame ?? "bare"} aba={aba}>
         <Outlet />
       </AppFrame>

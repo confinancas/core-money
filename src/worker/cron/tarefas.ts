@@ -1,8 +1,7 @@
 // Tarefas do despachante que são da importação: retomar as execuções paradas (TASK-0204) e atribuir o ciclo às transações
-// que ainda não têm (TASK-0801). Cada uma tem a forma de TarefaDoCron, de despachante.ts.
+// que ainda não têm (TASK-0801). Cada uma tem a forma de TarefaDoCron, de despachante.ts. O db chega medido (TASK-0109).
 import { assignCycleKeys } from "../cycle/calendar";
-import { createDb } from "../db/client";
-import { newMeter } from "../db/metered-d1";
+import type { Db } from "../db/client";
 import type { Env } from "../env";
 import { enqueueSlice } from "../sync/enqueue";
 
@@ -11,18 +10,24 @@ import { enqueueSlice } from "../sync/enqueue";
 export const LIMITE_DO_HEARTBEAT_MS = 15 * 60 * 1000;
 const EXECUCOES_POR_RODADA = 10;
 
+// As consultas ficam aqui para o teste de plano (EXPLAIN QUERY PLAN) ler o mesmo SQL que o cron roda. O índice parcial
+// sync_runs_open_heartbeat_idx só serve a consulta que repete o `finished_at IS NULL` do índice.
+export const SQL_PARADAS = `SELECT id, cursor_json FROM sync_runs
+  WHERE finished_at IS NULL AND heartbeat_at < ? ORDER BY heartbeat_at LIMIT ?`;
+
+// Lançamentos sem ciclo, do mais novo para o mais antigo. O índice parcial transactions_no_cycle_local_date_idx guarda só
+// os que faltam: com todos atribuídos, a consulta não lê a tabela (TASK-0204, R1).
+export const SQL_SEM_CICLO = `SELECT id, household_id FROM transactions
+  WHERE cycle_key IS NULL AND removed_at IS NULL ORDER BY local_date DESC LIMIT 200`;
+
 export const retomarImportacoes = {
   nome: "retomar-importacoes",
   pesada: false,
-  async executar(env: Env, agora: Date): Promise<boolean> {
-    const db = createDb(env.DB, newMeter());
+  async executar(env: Env, agora: Date, db: Db): Promise<boolean> {
     const agoraIso = agora.toISOString();
     const limite = new Date(agora.getTime() - LIMITE_DO_HEARTBEAT_MS).toISOString();
     const paradas = await db.$client
-      .prepare(
-        `SELECT id, cursor_json FROM sync_runs
-         WHERE finished_at IS NULL AND heartbeat_at < ? ORDER BY heartbeat_at LIMIT ?`,
-      )
+      .prepare(SQL_PARADAS)
       .bind(limite, EXECUCOES_POR_RODADA)
       .all<{ id: string; cursor_json: string | null }>();
     let retomadas = 0;
@@ -46,14 +51,8 @@ export const retomarImportacoes = {
 export const atribuirCiclos = {
   nome: "atribuir-ciclos",
   pesada: true,
-  async executar(env: Env): Promise<boolean> {
-    const db = createDb(env.DB, newMeter());
-    const linhas = await db.$client
-      .prepare(
-        `SELECT id, household_id FROM transactions WHERE cycle_key IS NULL AND removed_at IS NULL
-         ORDER BY local_date DESC LIMIT 200`,
-      )
-      .all<{ id: string; household_id: string }>();
+  async executar(_env: Env, _agora: Date, db: Db): Promise<boolean> {
+    const linhas = await db.$client.prepare(SQL_SEM_CICLO).all<{ id: string; household_id: string }>();
     const porLar = new Map<string, string[]>();
     for (const linha of linhas.results ?? []) {
       porLar.set(linha.household_id, [...(porLar.get(linha.household_id) ?? []), linha.id]);

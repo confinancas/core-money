@@ -2,6 +2,7 @@
 // orçamento do plano gratuito (até 4 chamadas ao Pluggy e 200 linhas gravadas) e grava o cursor com seq + 1.
 
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
+import { resetsAt } from "../../shared/usage";
 import { reconcileHousehold } from "../bank/classify";
 import {
   type BillRow,
@@ -13,6 +14,7 @@ import {
   mapTransaction,
   openBillFromCard,
 } from "../bank/map";
+import { processNewTransactions } from "../categorization/pipeline";
 import type { Db } from "../db/client";
 import type { Env } from "../env";
 import {
@@ -23,6 +25,9 @@ import {
 } from "../pluggy/connections";
 import { PluggyError } from "../pluggy/errors";
 import type { PluggyAccount, PluggyItem } from "../pluggy/types";
+import { applySpendTypesOnImport } from "../spend-types/derive";
+import { causaDoErro } from "../usage/d1-limit-errors";
+import { atingiuOTeto, escritasDeHoje } from "./orcamento";
 import {
   DIAS_DA_CONCILIACAO,
   futureWindow,
@@ -95,13 +100,60 @@ const contextoDaFatia = (
   agora: Date,
 ): ContextoDeConexao => ({ db, env, householdId, fetch: fetchImpl, agora: () => agora });
 
-// Reais já gravadas do cartão (sem as sintéticas): base do contexto de faturas das transações.
-async function faturasReaisDoCartao(db: Db, cardId: string): Promise<{ id: string; closes_on: string }[]> {
+// Reais já gravadas do cartão (sem as sintéticas): base do contexto de faturas das transações (TASK-0202).
+export async function faturasReaisDoCartao(
+  db: Db,
+  cardId: string,
+): Promise<{ id: string; closes_on: string }[]> {
   const linhas = await db.$client
     .prepare("SELECT id, closes_on FROM bills WHERE card_id = ? AND substr(id, 1, 5) <> 'sint:'")
     .bind(cardId)
     .all<{ id: string; closes_on: string }>();
   return linhas.results ?? [];
+}
+
+// Falhas passageiras do D1 (rede, banco ocupado, serviço fora): repetem a fatia, como um erro temporário do Pluggy. O
+// limite diário não entra aqui (o teto de escritas do orcamento.ts cuida dele antes).
+const FALHA_PASSAGEIRA_DO_D1 =
+  /network connection lost|database is locked|sqlite_busy|d1[^\n]{0,40}(indispon|unavailable|overloaded)/i;
+
+function ehFalhaPassageiraDoD1(erro: unknown): boolean {
+  const causa = causaDoErro(erro);
+  const mensagem = causa instanceof Error ? causa.message : typeof causa === "string" ? causa : "";
+  return FALHA_PASSAGEIRA_DO_D1.test(mensagem);
+}
+
+// Pausa até a virada do dia: o heartbeat vai para lá e o cron só reenfileira depois (estaPausada, orcamento.ts).
+function pausarStmt(db: Db, runId: string, ate: string): D1PreparedStatement {
+  return db.$client
+    .prepare("UPDATE sync_runs SET heartbeat_at = ? WHERE id = ? AND finished_at IS NULL")
+    .bind(ate, runId);
+}
+
+// Completa as regras e o tipo de gasto das linhas da fatia que já existiam: é o caso da repetição de uma fatia cujo
+// INSERT passou e cujo afterIngest falhou. A repetição vê as linhas como atualizadas, e o afterIngest não roda para elas.
+// A gravação já põe o tipo padrão ("padrao") numa saída nova, então a pendência não é o tipo nulo: é a linha sem
+// categoria e sem origem escolhida pelo casal, por regra ou pela categoria. Idempotente: a regra só pega linha sem
+// categoria, o tipo padrão só pega origem nula ou padrão, e o que o casal escolheu não muda.
+async function completarTipos(
+  db: Db,
+  householdId: string,
+  ids: readonly string[],
+  nowIso: string,
+): Promise<void> {
+  const pendentes = await db.$client
+    .prepare(
+      `SELECT t.id AS id FROM json_each(?) AS j
+       CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?
+       WHERE t.category_id IS NULL AND COALESCE(t.spend_type_source, '') NOT IN ('escolhido', 'regra', 'categoria')`,
+    )
+    .bind(JSON.stringify(ids), householdId)
+    .all<{ id: string }>();
+  const lista = (pendentes.results ?? []).map((linha) => linha.id);
+  if (lista.length === 0) return;
+  // Regras primeiro: a categoria que a regra põe define o tipo logo depois.
+  await processNewTransactions(db, householdId, lista, nowIso);
+  await applySpendTypesOnImport(db, householdId, lista);
 }
 
 type Dependencias = { fetch?: typeof fetch; agora: Date; nowIso: string; seq: number };
@@ -208,6 +260,12 @@ async function faseFaturas(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncC
     comandos.push(...upsertBillsStmts(db, { id: cartao.id }, reais, cartao.aberta ?? null));
   }
   if (comandos.length > 0) await db.$client.batch(comandos);
+  // Depois das faturas: uma fatura real que absorve lançamentos muda a data deles, então o cartão inteiro é reavaliado
+  // uma vez por execução (decisão do Opus, rodada 1). Sem isso, o ciclo desses lançamentos fica para trás.
+  const { reavaliarCartaoInteiro } = await import("../bank/after-ingest");
+  for (const cartao of daFatia) {
+    await reavaliarCartaoInteiro(db, run.household_id, cartao.id);
+  }
   const fim = i >= contas.length;
   const proximo: SyncCursor = {
     ...cursor,
@@ -256,12 +314,13 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
         };
   const trecho = pagina.results.slice(cursor.offset, cursor.offset + LINHAS_POR_FATIA);
   const { ingestTransactions } = await gravacao();
-  const { insertedIds } = await ingestTransactions(db, {
+  const { insertedIds, updatedIds } = await ingestTransactions(db, {
     householdId: run.household_id,
     bankItemId: run.bank_item_id,
     rows: trecho.map((transacao) => mapTransaction(transacao, contaDaTransacao)),
     now: dep.nowIso,
   });
+  if (updatedIds.length > 0) await completarTipos(db, run.household_id, updatedIds, dep.nowIso);
 
   const proximo: SyncCursor = {
     ...cursor,
@@ -296,8 +355,15 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
 // Fase conciliar: uma janela de 15 dias por fatia, da de hoje (w = 0) para a mais antiga (w = 24). Cada janela
 // concilia as linhas que terminam em hoje menos 15 * w dias. Depois da última, a fase passa a fim.
 async function faseConciliar(db: Db, run: LinhaDaExecucao, cursor: SyncCursor, dep: Dependencias) {
+  // O hoje é o real (a regra dos 5 dias conta a partir dele); a janela escreve até hoje menos 15 vezes w (TASK-0204, R3).
   const hoje = todayInSaoPaulo(dep.agora);
-  await reconcileHousehold(db, run.household_id, somaDias(hoje, -DIAS_DA_CONCILIACAO * cursor.w), dep.nowIso);
+  await reconcileHousehold(
+    db,
+    run.household_id,
+    hoje,
+    dep.nowIso,
+    somaDias(hoje, -DIAS_DA_CONCILIACAO * cursor.w),
+  );
   const proximoW = cursor.w + 1;
   const proximo: SyncCursor = {
     ...cursor,
@@ -350,6 +416,26 @@ async function encerrar(
   return { tipo: "encerrou", status, codigo };
 }
 
+// Repete a fatia com a espera da tabela, ou com o Retry-After quando ele for maior. Na quarta falha (ou sem linha na
+// tabela), o banco vai a instável e a execução encerra.
+async function repetirOuParar(
+  db: Db,
+  run: LinhaDaExecucao,
+  entrada: EntradaDaFatia,
+  retryAfterSec: number | undefined,
+  agora: Date,
+  nowIso: string,
+): Promise<ResultadoDaFatia> {
+  const tabela = ATRASOS_DA_REPETICAO[entrada.tentativa - 1];
+  if (tabela === undefined || entrada.tentativa >= TENTATIVAS_ANTES_DE_INSTAVEL) {
+    return encerrar(db, run, "instavel", "banco_instavel", "instavel", nowIso);
+  }
+  const atraso = Math.max(tabela, retryAfterSec ?? 0);
+  const quando = new Date(agora.getTime() + atraso * 1000).toISOString();
+  await db.$client.batch([marcarRepeticaoStmt(db, run.id, quando)]);
+  return { tipo: "repete", atrasoSegundos: atraso };
+}
+
 // Traduz a falha: parada com motivo, repetição com espera, ou exceção não prevista (vira erro_inesperado).
 async function tratarFalha(
   db: Db,
@@ -372,17 +458,12 @@ async function tratarFalha(
       return encerrar(db, run, "erro", "item_inexistente", "acao_necessaria", nowIso);
     }
     if (erro.kind === "temporary" || erro.kind === "rate_limited") {
-      const tabela = ATRASOS_DA_REPETICAO[entrada.tentativa - 1];
-      if (tabela === undefined || entrada.tentativa >= TENTATIVAS_ANTES_DE_INSTAVEL) {
-        return encerrar(db, run, "instavel", "banco_instavel", "instavel", nowIso);
-      }
-      const atraso = Math.max(tabela, erro.retryAfterSec ?? 0);
-      const quando = new Date(agora.getTime() + atraso * 1000).toISOString();
-      await db.$client.batch([marcarRepeticaoStmt(db, run.id, quando)]);
-      return { tipo: "repete", atrasoSegundos: atraso };
+      return repetirOuParar(db, run, entrada, erro.retryAfterSec, agora, nowIso);
     }
     return encerrar(db, run, "erro", "erro_inesperado", "acao_necessaria", nowIso);
   }
+  // Falha passageira do D1 (TASK-0204, R6a): repete a fatia, como um erro temporário.
+  if (ehFalhaPassageiraDoD1(erro)) return repetirOuParar(db, run, entrada, undefined, agora, nowIso);
   console.error(`sync fatia: ${erro instanceof Error ? erro.name : "erro"}`);
   return encerrar(db, run, "erro", "erro_inesperado", null, nowIso);
 }
@@ -406,6 +487,15 @@ export async function runSyncSlice(
   const nowIso = agora.toISOString();
   try {
     if (cursor.phase === "fim") return await faseFim(db, run, nowIso);
+    // Teto diário de escritas (TASK-0204, R2): nas fases que trazem dados do banco, ao chegar a 60% do limite do dia, a
+    // execução pausa até a virada e o cursor não anda; a mensagem é confirmada e o cron reenfileira esta fatia depois
+    // do heartbeat. A conciliação só reclassifica 15 dias de linhas e fica no colchão dos 40%: não lê o contador.
+    const trazDadosDoBanco =
+      cursor.phase === "inicio" || cursor.phase === "faturas" || cursor.phase === "transacoes";
+    if (trazDadosDoBanco && atingiuOTeto(await escritasDeHoje(db.$client, agora))) {
+      await db.$client.batch([pausarStmt(db, run.id, resetsAt(agora))]);
+      return { tipo: "pulou" };
+    }
 
     const dep: Dependencias = { fetch: deps.fetch, agora, nowIso, seq: entrada.seq };
     const resultado =

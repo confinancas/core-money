@@ -5,6 +5,16 @@ import { getSession, requireHousehold, type SessionResolver } from "../household
 
 const JANELA_DO_RECENTE_MS = 24 * 60 * 60 * 1000;
 
+// A consulta do status fica exportada para o teste de plano ler o mesmo SQL. Parte dos bancos do lar pela conexão
+// (bank_items_connection_idx) e das execuções pelo banco (sync_runs_bank_item_started_idx): nenhum SCAN de sync_runs.
+export const SQL_DO_STATUS = `SELECT r.id AS run_id, r.bank_item_id, b.institution_name, r.kind, r.progress_pct, r.started_at,
+    r.finished_at, r.status
+  FROM sync_runs r
+  JOIN bank_items b ON b.id = r.bank_item_id
+  JOIN pluggy_connections p ON p.id = b.connection_id
+  WHERE p.household_id = ? AND r.kind = 'historico' AND (r.finished_at IS NULL OR r.finished_at >= ?)
+  ORDER BY r.started_at`;
+
 type LinhaDoStatus = {
   run_id: string;
   bank_item_id: string;
@@ -27,15 +37,7 @@ export function syncRoutes(
     const { householdId } = getSession(c);
     const desde = new Date(agora().getTime() - JANELA_DO_RECENTE_MS).toISOString();
     const resultado = await c.var.db.$client
-      .prepare(
-        `SELECT r.id AS run_id, r.bank_item_id, b.institution_name, r.kind, r.progress_pct, r.started_at,
-           r.finished_at, r.status
-         FROM sync_runs r
-         JOIN bank_items b ON b.id = r.bank_item_id
-         JOIN pluggy_connections p ON p.id = b.connection_id
-         WHERE p.household_id = ? AND r.kind = 'historico' AND (r.finished_at IS NULL OR r.finished_at >= ?)
-         ORDER BY r.started_at`,
-      )
+      .prepare(SQL_DO_STATUS)
       .bind(householdId, desde)
       .all<LinhaDoStatus>();
     const linhas = resultado.results ?? [];

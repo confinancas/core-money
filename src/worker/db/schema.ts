@@ -97,7 +97,11 @@ export const bankItems = sqliteTable(
     disconnectedAt: text("disconnected_at"),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [check("bank_items_status_ck", sql`${t.status} IN ('ativo', 'instavel', 'acao_necessaria')`)],
+  (t) => [
+    check("bank_items_status_ck", sql`${t.status} IN ('ativo', 'instavel', 'acao_necessaria')`),
+    // Bancos de uma conexão: o limite de bancos e o status por lar (TASK-0204, R5).
+    index("bank_items_connection_idx").on(t.connectionId),
+  ],
 );
 
 // Histórico de atualizações. As colunas da fila (fatias, cursor, heartbeat, código do erro) são da TASK-0204.
@@ -130,6 +134,8 @@ export const syncRuns = sqliteTable(
     check("sync_runs_retried_ck", sql`${t.retried} IN (0, 1)`),
     index("sync_runs_bank_item_started_idx").on(t.bankItemId, t.startedAt),
     index("sync_runs_open_idx").on(t.bankItemId, t.finishedAt),
+    // Execuções abertas por heartbeat: o cron (retomar-importacoes) lê só estas (TASK-0204, R5).
+    index("sync_runs_open_heartbeat_idx").on(t.heartbeatAt).where(sql`${t.finishedAt} IS NULL`),
   ],
 );
 
@@ -261,6 +267,11 @@ export const transactions = sqliteTable(
     index("transactions_bill_idx").on(t.billId),
     index("transactions_household_establishment_idx").on(t.householdId, t.establishmentKey),
     index("transactions_household_fixed_bill_cycle_idx").on(t.householdId, t.fixedBillId, t.cycleKey),
+    // Lançamentos sem ciclo, por data: o cron de atribuir-ciclos lê só estes (TASK-0204, R1). Quando todos têm ciclo, o
+    // índice fica vazio e a consulta não lê a tabela.
+    index("transactions_no_cycle_local_date_idx")
+      .on(t.localDate)
+      .where(sql`${t.cycleKey} IS NULL AND ${t.removedAt} IS NULL`),
   ],
 );
 

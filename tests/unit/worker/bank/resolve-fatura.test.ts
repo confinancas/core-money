@@ -46,14 +46,12 @@ describe("resolveCardBill: primeiro fechamento conhecido (correção da TASK-020
     });
   });
 
-  it("uma real anterior à compra não a leva: sem real a cobrir, vai para o primeiro fechamento conhecido (a aberta)", () => {
+  it("uma real anterior à compra não a leva; a aberta fica a 36 dias, além do teto de 35 (R10), e a compra fica sem fatura", () => {
+    // O fechamento calculado da compra é 03/11, antes da aberta (03/12) e sem fatura real: fica sem fatura.
     const real = { id: "[TEST] real-out", closes_on: "2026-10-03" };
     expect(
       resolveCardBill(transacao({ date: "2026-10-28T12:00:00.000Z" }), contexto({ knownBills: [real] })),
-    ).toEqual({
-      billId: `sint:${CARTAO}:2026-12-03`,
-      closesOn: "2026-12-03",
-    });
+    ).toBeNull();
   });
 
   it("regra (4) na virada do ano: compra de 15/12 com fechamento no dia 3 cai em 03/01/2027", () => {
@@ -63,6 +61,62 @@ describe("resolveCardBill: primeiro fechamento conhecido (correção da TASK-020
         contexto({ openClosesOn: "2026-12-03" }),
       ),
     ).toEqual({ billId: `sint:${CARTAO}:2027-01-03`, closesOn: "2027-01-03" });
+  });
+});
+
+// Faturas reais só de junho a novembro de 2026 (o Pluggy devolveu só esse trecho), com a aberta em 03/12/2026.
+const JUNHO_A_NOVEMBRO = [
+  "2026-06-03",
+  "2026-07-03",
+  "2026-08-03",
+  "2026-09-03",
+  "2026-10-03",
+  "2026-11-03",
+].map((fecha) => ({ id: `[TEST] real-${fecha}`, closes_on: fecha }));
+
+describe("resolveCardBill: teto de 35 dias no fechamento conhecido (TASK-0204, R10)", () => {
+  it("compras de dezembro a abril não vão para a de junho: com a aberta, o fechamento calculado é anterior a ela e sem fatura real", () => {
+    for (const data of ["2025-12-05", "2026-01-20", "2026-03-10", "2026-04-15"]) {
+      expect(
+        resolveCardBill(
+          transacao({ date: `${data}T12:00:00.000Z` }),
+          contexto({ knownBills: JUNHO_A_NOVEMBRO }),
+        ),
+      ).toBeNull();
+    }
+  });
+
+  it("uma compra a até 35 dias do fechamento conhecido segue o teto e vai para ele (20/05 cai na de 03/06)", () => {
+    expect(
+      resolveCardBill(
+        transacao({ date: "2026-05-20T12:00:00.000Z" }),
+        contexto({ knownBills: JUNHO_A_NOVEMBRO }),
+      ),
+    ).toEqual({ billId: "[TEST] real-2026-06-03", closesOn: "2026-06-03" });
+  });
+
+  it("sem a aberta, as compras de dezembro e abril vão para as sintéticas dos fechamentos calculados delas", () => {
+    expect(
+      resolveCardBill(
+        transacao({ date: "2025-12-05T12:00:00.000Z" }),
+        contexto({ openClosesOn: null, knownBills: JUNHO_A_NOVEMBRO }),
+      ),
+    ).toEqual({ billId: `sint:${CARTAO}:2026-01-03`, closesOn: "2026-01-03" });
+    expect(
+      resolveCardBill(
+        transacao({ date: "2026-04-15T12:00:00.000Z" }),
+        contexto({ openClosesOn: null, knownBills: JUNHO_A_NOVEMBRO }),
+      ),
+    ).toEqual({ billId: `sint:${CARTAO}:2026-05-03`, closesOn: "2026-05-03" });
+  });
+
+  it("sem nenhuma fatura real, as compras de meses antigos não caem todas na aberta; a de novembro segue nela", () => {
+    expect(resolveCardBill(transacao({ date: "2026-05-10T12:00:00.000Z" }), contexto())).toBeNull();
+    expect(resolveCardBill(transacao({ date: "2026-07-01T12:00:00.000Z" }), contexto())).toBeNull();
+    expect(resolveCardBill(transacao({ date: "2026-11-20T12:00:00.000Z" }), contexto())).toEqual({
+      billId: `sint:${CARTAO}:2026-12-03`,
+      closesOn: "2026-12-03",
+    });
   });
 });
 
