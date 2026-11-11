@@ -190,3 +190,21 @@ export function IconeCheck(props: Props) {
     </Svg>
   );
 }
+
+// Lápis (renomear) e seta para a direita (linha que leva a outra tela), como no protótipo da compra (TASK-0403).
+export function IconeLapis(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </Svg>
+  );
+}
+
+export function IconeSetaDireita(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="m9 18 6-6-6-6" />
+    </Svg>
+  );
+}

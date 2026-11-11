@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { ErrorState } from "@/components/ui/error-state";
 import { GreenTop } from "@/components/ui/green-top";
 import { SkeletonCard } from "@/components/ui/skeleton";
@@ -12,9 +12,16 @@ import { caminhoSeguro } from "./voltar";
 // Criar uma categoria (principal ou subcategoria de um nível). Depois de criar, volta a quem abriu com a nova selecionada.
 export function NovaCategoria() {
   const navegar = useNavigate();
+  const localizacao = useLocation();
   const [params] = useSearchParams();
   const voltar = caminhoSeguro(params.get("voltar"));
   const destino = voltar ?? "/categorias/escolher";
+  // Aberta pelo seletor de uma compra (o voltar leva ?transacao=): a volta troca esta entrada pelo seletor (replace), e
+  // leva junto a marca de histórico da compra. Sem isso, a seta da compra cairia aqui de novo (TASK-0403, F6).
+  const daCompra = voltar !== null && new URL(voltar, "http://app.invalid").searchParams.has("transacao");
+  const marcaDeHistorico = (localizacao.state as { temHistorico?: unknown } | null)?.temHistorico;
+  // O estado que a compra precisa de volta: a marca de histórico, se chegou. Vale para criar e para desistir (F8).
+  const estadoDaCompra = typeof marcaDeHistorico === "boolean" ? { temHistorico: marcaDeHistorico } : {};
   const paiPedido = params.get("pai");
 
   const [categorias, setCategorias] = useState<CategoryDTO[] | null>(null);
@@ -55,7 +62,10 @@ export function NovaCategoria() {
     setErroCampos({});
     try {
       const criada = await createCategory(entrada);
-      navegar(destino, { state: { categoriaCriada: criada.id } });
+      navegar(destino, {
+        replace: daCompra,
+        state: { categoriaCriada: criada.id, ...estadoDaCompra },
+      });
     } catch (erro) {
       if (erro instanceof ApiError && erro.code === "validacao" && erro.fields) {
         setErroCampos(erro.fields);
@@ -67,8 +77,18 @@ export function NovaCategoria() {
     }
   }
 
+  // Desistir (a seta do topo) de uma criação aberta pela compra volta ao seletor com replace e leva a marca de histórico:
+  // um link comum empilharia o seletor sobre esta tela, e a seta da compra cairia aqui de novo (TASK-0403, F8).
   const cabecalho = (
-    <GreenTop variant="detail" title="Nova categoria" back={{ to: destino, label: "Voltar às categorias" }} />
+    <GreenTop
+      variant="detail"
+      title="Nova categoria"
+      back={{
+        to: destino,
+        label: "Voltar às categorias",
+        aoClicar: daCompra ? () => navegar(destino, { replace: true, state: estadoDaCompra }) : undefined,
+      }}
+    />
   );
 
   if (categorias === null) {

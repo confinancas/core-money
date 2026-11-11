@@ -205,9 +205,9 @@ test("cenário 12: sem pendentes, a tela diz que está tudo categorizado", async
 
 test("cenário 16: confirmar uma compra leva as iguais que esperavam", async ({ page }) => {
   semeiaFila([
-    { id: "e2e-pc-i1", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000 },
-    { id: "e2e-pc-i2", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000 },
-    { id: "e2e-pc-i3", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000 },
+    { id: "e2e-pc-i1", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000, movement: "compra" },
+    { id: "e2e-pc-i2", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000, movement: "compra" },
+    { id: "e2e-pc-i3", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000, movement: "compra" },
   ]);
   await abre(page);
   await page
@@ -220,9 +220,9 @@ test("cenário 16: confirmar uma compra leva as iguais que esperavam", async ({ 
 
 test("cenário 20: desfazer a confirmação devolve as iguais à fila", async ({ page }) => {
   semeiaFila([
-    { id: "e2e-pc-i1", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000 },
-    { id: "e2e-pc-i2", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000 },
-    { id: "e2e-pc-i3", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000 },
+    { id: "e2e-pc-i1", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000, movement: "compra" },
+    { id: "e2e-pc-i2", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000, movement: "compra" },
+    { id: "e2e-pc-i3", nome: "[TEST] ASAAS E2E", chave: "TEST E2E igual", valor: -3000, movement: "compra" },
   ]);
   await abre(page);
   await page
