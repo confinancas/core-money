@@ -146,7 +146,9 @@ describe("GET /api/sync/status: só o lar da sessão", () => {
       .all();
 
     expect(resultado.results).toHaveLength(0);
-    // Medido: poucas linhas (os bancos e a conexão do lar). Antes desta task: 1.500 mais as do lar, pela varredura.
-    expect(resultado.meta.rows_read).toBeLessThanOrEqual(10);
+    // Medido: 9 a 11 linhas lidas (o ramo aberto e o recente pelo índice, mais a conexão e o banco do lar), conforme o
+    // gate. Antes desta task: 1.500 mais as do lar, pela varredura. O teto de 20 é o do status-leituras.test.ts, mesma
+    // consulta; uma varredura do lar de 1.500 passa de 1.500, então o teto separa os dois casos com folga.
+    expect(resultado.meta.rows_read).toBeLessThanOrEqual(20);
   });
 });
