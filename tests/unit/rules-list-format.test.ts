@@ -9,7 +9,9 @@ import {
   textoDeDesfazer,
 } from "../../src/web/screens/configuracoes/regras/format";
 
-const base = (sobre: Omit<Partial<RegraDaLista>, "set"> & { set?: Partial<RegraDaLista["set"]> }): RegraDaLista => {
+const base = (
+  sobre: Omit<Partial<RegraDaLista>, "set"> & { set?: Partial<RegraDaLista["set"]> },
+): RegraDaLista => {
   const { set, ...resto } = sobre;
   return {
     id: "[TEST] regra-1",
