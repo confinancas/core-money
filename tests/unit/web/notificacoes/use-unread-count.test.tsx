@@ -67,4 +67,40 @@ describe("useUnreadCount", () => {
     expect(screen.getByText("contador 3")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+  it("relê quando a aba volta a ficar visível, não relê quando ela fica oculta, e tira os ouvintes ao desmontar", async () => {
+    const fetchSimulado = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ count: 4 }))
+      .mockResolvedValueOnce(Response.json({ count: 2 }));
+    vi.stubGlobal("fetch", fetchSimulado);
+    let visibilidade: DocumentVisibilityState = "visible";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibilidade });
+
+    try {
+      const { unmount } = render(<Sino />);
+      expect(await screen.findByText("contador 4")).toBeInTheDocument();
+
+      visibilidade = "hidden";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(fetchSimulado).toHaveBeenCalledTimes(1);
+
+      visibilidade = "visible";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await waitFor(() => expect(screen.getByText("contador 2")).toBeInTheDocument());
+      expect(fetchSimulado).toHaveBeenCalledTimes(2);
+
+      unmount();
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(fetchSimulado).toHaveBeenCalledTimes(2);
+    } finally {
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  });
 });

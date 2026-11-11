@@ -14,6 +14,7 @@ describe("MoneyText", () => {
     expect(valores).toHaveLength(1);
     expect(valores[0]?.textContent).toBe("1.980,00");
     expect(valores[0]?.querySelector(".mm-cents")?.textContent).toBe(",00");
+    expect(valores[0]).toHaveAttribute("data-v");
   });
 
   it("trata cada valor, com sinal e sem separador de milhar", () => {

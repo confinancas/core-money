@@ -555,4 +555,42 @@ describe("notificationInsertStatements: a mesma chave não duplica (cenário 8)"
       ),
     ).toBe(2);
   });
+  it("repetir a chave deixa a linha que já existe intacta, inclusive lida", async () => {
+    const { householdId } = await criaLarDeDuas();
+    const db = createDb(env.DB, newMeter());
+    const original = {
+      householdId,
+      kind: "vencimento" as const,
+      title: "[TEST] Título original",
+      body: "[TEST] corpo original",
+      link: "/contas",
+      dedupeKey: "vencimento:fatura:intacta",
+      createdAt: AGORA.toISOString(),
+    };
+    await db.$client.batch(notificationInsertStatements(db, [original]));
+    await env.DB.prepare("UPDATE notifications SET read_at = ? WHERE dedupe_key = ?")
+      .bind(horasAtras(1), "vencimento:fatura:intacta")
+      .run();
+
+    await db.$client.batch(
+      notificationInsertStatements(db, [
+        { ...original, title: "[TEST] Título novo", body: "[TEST] corpo novo", createdAt: horasAtras(-1) },
+      ]),
+    );
+
+    const linha = await env.DB.prepare(
+      "SELECT title, body, created_at, read_at FROM notifications WHERE dedupe_key = ?",
+    )
+      .bind("vencimento:fatura:intacta")
+      .first<{ title: string; body: string; created_at: string; read_at: string | null }>();
+    expect(linha?.title).toBe("[TEST] Título original");
+    expect(linha?.body).toBe("[TEST] corpo original");
+    expect(linha?.created_at).toBe(AGORA.toISOString());
+    expect(linha?.read_at).toBe(horasAtras(1));
+    expect(
+      await contaSql(
+        "SELECT COUNT(*) AS n FROM notifications WHERE dedupe_key = 'vencimento:fatura:intacta'",
+      ),
+    ).toBe(1);
+  });
 });
