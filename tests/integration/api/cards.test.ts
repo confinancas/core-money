@@ -1017,3 +1017,128 @@ describe("rodada 1: regras que as mutações provaram", () => {
     expect(resposta.recent.some((r) => r.id === "k18-pagamento")).toBe(false);
   });
 });
+
+// Rodada 2 (TASK-0402, F10): "Últimas compras" não mostra lançamento com data futura. As parcelas que o banco manda
+// adiantadas numa fatura futura ficam fora da lista, mas continuam fora dos totais e da projeção (a projeção é a fonte
+// das futuras). Duas sondas da reconferência da Fable.
+describe("rodada 2: teto de data em 'Últimas compras' (F10)", () => {
+  const appEm = (lar: { householdId: string; memberId: string }, agora: string): Hono<AppEnv> =>
+    createApp({ resolveSession: async () => lar, agora: () => new Date(agora) });
+
+  it("F10 (sonda 02/11): a parcela 3 e a 4 adiantadas no banco não entram em 'Últimas compras'", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const cartao = lar.cardId;
+    await inserirFatura(cartao, {
+      id: "f10a-aberta",
+      fecha: "2026-11-03",
+      vence: "2026-11-10",
+      status: "aberta",
+      ciclo: "2026-10",
+    });
+    await inserirFatura(cartao, {
+      id: "f10a-dez",
+      fecha: "2026-12-03",
+      vence: "2026-12-10",
+      status: "futura",
+    });
+    await inserirFatura(cartao, {
+      id: "f10a-jan",
+      fecha: "2027-01-03",
+      vence: "2027-01-10",
+      status: "futura",
+    });
+    await inserirCompra({
+      id: "f10a-loja2",
+      cartaoId: cartao,
+      faturaId: "f10a-aberta",
+      data: "2026-11-02",
+      valorCentavos: -10_000,
+      parcela: [2, 6],
+      ciclo: "2026-10",
+      descricao: "[TEST] Loja 2 de 6",
+    });
+    await inserirCompra({
+      id: "f10a-loja3",
+      cartaoId: cartao,
+      faturaId: "f10a-dez",
+      data: "2026-12-02",
+      valorCentavos: -10_000,
+      parcela: [3, 6],
+      descricao: "[TEST] Loja 3 de 6",
+    });
+    await inserirCompra({
+      id: "f10a-loja4",
+      cartaoId: cartao,
+      faturaId: "f10a-jan",
+      data: "2027-01-02",
+      valorCentavos: -10_000,
+      parcela: [4, 6],
+      descricao: "[TEST] Loja 4 de 6",
+    });
+
+    const resposta = RespostaDeCartoesSchema.parse(
+      (await chamar(appEm(lar, "2026-11-02T12:00:00.000Z"), "/api/cards")).corpo,
+    );
+    expect(resposta.recent.map((r) => r.id)).toEqual(["f10a-loja2"]);
+    // Os totais e a projeção não mudam: a aberta soma a 2 de 6; as parcelas 3 a 6 vêm da projeção, sem dobrar.
+    expect(resposta.openBillsCents).toBe(10_000);
+    expect(resposta.futureInstallmentsCents).toBe(40_000);
+  });
+
+  it("F10 (sonda 05/11): duas compras em 10× adiantadas não tiram as cinco compras de 01/11 a 05/11 da lista", async () => {
+    const lar = await criarLar();
+    await inserirCiclos(lar);
+    const cartao = lar.cardId;
+    await inserirFatura(cartao, {
+      id: "f10b-aberta",
+      fecha: "2026-12-03",
+      vence: "2026-12-10",
+      status: "aberta",
+      ciclo: "2026-11",
+    });
+    for (const dia of [1, 2, 3, 4, 5]) {
+      const data = "2026-11-0" + dia;
+      await inserirCompra({
+        id: "f10b-0" + dia,
+        cartaoId: cartao,
+        faturaId: "f10b-aberta",
+        data,
+        valorCentavos: -1_000 * dia,
+        ciclo: "2026-11",
+        descricao: "[TEST] Compra " + data,
+      });
+    }
+    for (const compra of ["A", "B"]) {
+      for (let parcela = 2; parcela <= 10; parcela++) {
+        const mes = parcela + 2;
+        const mm = String(mes).padStart(2, "0");
+        const fatura = "f10b-fut-" + mm;
+        if (compra === "A")
+          await inserirFatura(cartao, {
+            id: fatura,
+            fecha: "2027-" + mm + "-03",
+            vence: "2027-" + mm + "-10",
+            status: "futura",
+          });
+        await inserirCompra({
+          id: "f10b-" + compra + "-" + parcela,
+          cartaoId: cartao,
+          faturaId: fatura,
+          data: "2027-" + mm + "-02",
+          valorCentavos: -5_000,
+          parcela: [parcela, 10],
+          descricao: "[TEST] Parcelada " + compra + " " + parcela + " de 10",
+        });
+      }
+    }
+
+    const resposta = RespostaDeCartoesSchema.parse(
+      (await chamar(appEm(lar, "2026-11-05T12:00:00.000Z"), "/api/cards")).corpo,
+    );
+    expect(resposta.recent.map((r) => r.id)).toEqual(["f10b-05", "f10b-04", "f10b-03", "f10b-02", "f10b-01"]);
+    expect(resposta.recent.every((r) => r.localDate <= "2026-11-05")).toBe(true);
+    // As parcelas adiantadas do banco não entram em nenhum total desta tela.
+    expect(resposta.futureInstallmentsCents).toBe(0);
+  });
+});

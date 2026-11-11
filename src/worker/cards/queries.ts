@@ -74,9 +74,10 @@ const SQL_CALENDARIO = `SELECT k.key AS key, k.starts_on AS starts_on, k.ends_on
 
 const SQL_DIA_DO_LAR = `SELECT cycle_start_day FROM households WHERE id = ?`;
 
-// Compras e estornos desde o início do ciclo anterior, sem limite de cima (a fatura aberta que fecha no próximo ciclo
-// entra inteira), da mais nova para a mais velha, até 10. O início é o menor dos dois últimos ciclos que começaram até
-// hoje (o atual e o anterior); sem calendário, a lista fica vazia. Usa o índice transactions_card_local_date_idx.
+// Compras e estornos desde o início do ciclo anterior até hoje, da mais nova para a mais velha, até 10. O início é o
+// menor dos dois últimos ciclos que começaram até hoje (o atual e o anterior); sem calendário, a lista fica vazia. O
+// teto "até hoje" deixa de fora a parcela com data futura que o banco manda adiantada numa fatura futura: ela continua
+// nos totais e na projeção, só não entra na lista. Usa o índice transactions_card_local_date_idx.
 const sqlRecentes = (escopo: Escopo) => `SELECT ${COLUNAS_DO_LANCAMENTO}, t.card_id AS card_id,
     bi.institution_name AS institution_name, c.last4 AS last4
   FROM transactions AS t JOIN cards AS c ON c.id = t.card_id JOIN bank_items AS bi ON bi.id = c.bank_item_id
@@ -84,6 +85,7 @@ const sqlRecentes = (escopo: Escopo) => `SELECT ${COLUNAS_DO_LANCAMENTO}, t.card
   WHERE t.card_id IN ${escopo.sql} AND t.removed_at IS NULL AND t.movement IN ('compra', 'estorno')
     AND t.local_date >= (SELECT MIN(k.starts_on) FROM (SELECT k.starts_on AS starts_on FROM cycles AS k
       WHERE k.household_id = ? AND k.starts_on <= ? ORDER BY k.starts_on DESC LIMIT 2) AS k)
+    AND t.local_date <= ?
   ORDER BY t.local_date DESC, t.occurred_at DESC, t.id DESC LIMIT 10`;
 
 // Compras e estornos da fatura aberta do cartão, com os ocultos (a tela mostra os dois).
@@ -226,7 +228,7 @@ export async function lerCartoes(db: Db, householdId: string, hoje: string): Pro
     db.$client.prepare(sqlParcelasDaBase(escopo)).bind(...escopo.params),
     db.$client.prepare(SQL_CALENDARIO).bind(householdId),
     db.$client.prepare(SQL_DIA_DO_LAR).bind(householdId),
-    db.$client.prepare(sqlRecentes(escopo)).bind(householdId, ...escopo.params, householdId, hoje),
+    db.$client.prepare(sqlRecentes(escopo)).bind(householdId, ...escopo.params, householdId, hoje, hoje),
   ]);
 
   const cartoes = linhas<LinhaDeCartao>(resultados[0]);
