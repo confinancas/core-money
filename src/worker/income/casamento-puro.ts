@@ -22,7 +22,6 @@ export type Casamento = {
 };
 
 // Movimentos que podem ser parte de uma renda: o Pix e a TED recebidos, e o que o banco trouxe sem categoria.
-export const MOVIMENTOS_DE_ENTRADA = ["pix_recebido", "ted_recebida", "outro"] as const;
 
 // Quem casa com um texto de extrato: a renda cujo texto aparece nele e é o mais longo. Empate (ou nenhuma) é nulo.
 export function casaRendaPeloExtrato(descricao: string, rendas: readonly RendaDoExtrato[]): string | null {

@@ -8,13 +8,6 @@ import { addTransactionReceiptStmts, removeTransactionReceiptStmt } from "./rece
 // o texto mais longo; empate, nenhuma (a entrada fica para classificar).
 
 // Consultas do pipeline e do recasamento. A lista de ids entra por json_each, como laço de fora (CROSS JOIN).
-export const SQL_CANDIDATAS_DO_LOTE = `SELECT t.id AS id, t.original_description AS description, t.local_date AS received_on,
-    t.cycle_key AS cycle_key, t.amount_cents AS amount_cents
-  FROM json_each(?) AS j
-  CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?
-  WHERE t.amount_cents > 0 AND t.hidden = 0 AND t.removed_at IS NULL AND t.income_kind IS NULL
-    AND t.movement IN ('pix_recebido', 'ted_recebida', 'outro')`;
-
 export const SQL_RENDAS_DO_EXTRATO = `SELECT id, statement_text FROM fixed_incomes
   WHERE household_id = ? AND archived_at IS NULL AND arrival IN ('auto', 'partes') AND statement_text IS NOT NULL`;
 

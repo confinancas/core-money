@@ -1,11 +1,7 @@
 import { COUNTERPARTY_KEY_SQL, chaveVazia, type RuleScope } from "../../shared/rule-match";
 import type { Db } from "../db/client";
 import { type CandidataDeEntrada, casamentosDoExtrato, type RendaDoExtrato } from "../income/casamento-puro";
-import {
-  escritasDosCasamentos,
-  SQL_CANDIDATAS_DO_LOTE,
-  SQL_RENDAS_DO_EXTRATO,
-} from "../income/statement-match";
+import { escritasDosCasamentos, SQL_RENDAS_DO_EXTRATO } from "../income/statement-match";
 import { applyRuleToTransactionStmt, type RegraParaAplicar } from "./apply";
 
 // Pipeline de regras na importação (TASK-0302). Chamado pelo afterIngest, depois da classificação e do ciclo, só com os
@@ -21,11 +17,20 @@ export type ResultadoDoPipeline = {
   pending: string[];
 };
 
+// As colunas da leitura do lote. As de entrada (description, cycle_key, amount, hidden, removed_at, income_kind) são
+// as do casamento pelo extrato (TASK-0902): saem da mesma leitura, para não reler as transações do lote.
 type LinhaDaImportacao = {
   id: string;
   movement: string;
   card_id: string | null;
   category_id: string | null;
+  description: string;
+  received_on: string;
+  cycle_key: string | null;
+  amount_cents: number;
+  hidden: number;
+  removed_at: string | null;
+  income_kind: string | null;
 };
 
 type CasamentoDeRegra = {
@@ -67,17 +72,20 @@ const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.i
   LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL
 `;
 
-// Entrada do lote que pode casar com uma renda pelo extrato (TASK-0902): as colunas vêm de SQL_CANDIDATAS_DO_LOTE.
-type LinhaCandidataDoLote = {
-  id: string;
-  description: string;
-  received_on: string;
-  cycle_key: string | null;
-  amount_cents: number;
-};
-
-const SQL_LINHAS = `SELECT t.id, t.movement, t.card_id, t.category_id FROM json_each(?) AS j
+const SQL_LINHAS = `SELECT t.id, t.movement, t.card_id, t.category_id, t.original_description AS description,
+    t.local_date AS received_on, t.cycle_key AS cycle_key, t.amount_cents AS amount_cents, t.hidden AS hidden,
+    t.removed_at AS removed_at, t.income_kind AS income_kind
+  FROM json_each(?) AS j
   CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?`;
+
+// Entrada que pode casar com uma renda pelo extrato: sem renda, visível, não removida, de entrada (TASK-0902).
+const MOVIMENTOS_DE_ENTRADA = ["pix_recebido", "ted_recebida", "outro"];
+const ehCandidataDeEntrada = (linha: LinhaDaImportacao): boolean =>
+  linha.amount_cents > 0 &&
+  linha.hidden === 0 &&
+  linha.removed_at === null &&
+  linha.income_kind === null &&
+  MOVIMENTOS_DE_ENTRADA.includes(linha.movement);
 
 const PAGAMENTO_DE_FATURA = "pagamento_fatura";
 
@@ -91,22 +99,20 @@ export async function processNewTransactions(
   if (ids.length === 0) return { categorizedByRule: [], pending: [] };
   const json = JSON.stringify(ids);
 
-  const [linhasLidas, casamentosLidos, candidatasLidas, rendasLidas] = await db.$client.batch([
+  const [linhasLidas, casamentosLidos, rendasLidas] = await db.$client.batch([
     db.$client.prepare(SQL_LINHAS).bind(json, householdId),
     db.$client.prepare(SQL_CASAMENTOS).bind(json, householdId, json, householdId),
-    db.$client.prepare(SQL_CANDIDATAS_DO_LOTE).bind(json, householdId),
     db.$client.prepare(SQL_RENDAS_DO_EXTRATO).bind(householdId),
   ]);
   const linhas = (linhasLidas?.results ?? []) as LinhaDaImportacao[];
   const casamentos = (casamentosLidos?.results ?? []) as CasamentoDeRegra[];
-  const candidatas = (candidatasLidas?.results ?? []) as LinhaCandidataDoLote[];
   const rendas = ((rendasLidas?.results ?? []) as { id: string; statement_text: string }[]).map(
     (renda): RendaDoExtrato => ({ id: renda.id, statementText: renda.statement_text }),
   );
 
   // Entradas casadas com uma renda pelo texto do extrato (TASK-0902): recebimento e marca, na escrita deste lote.
   const casadas = casamentosDoExtrato(
-    candidatas.map(
+    linhas.filter(ehCandidataDeEntrada).map(
       (linha): CandidataDeEntrada => ({
         id: linha.id,
         description: linha.description,
