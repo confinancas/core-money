@@ -73,8 +73,8 @@ describe("F5: 'Dentro de' não oferece principal arquivada", () => {
     render(
       <EditarCategoria categoria={servicos} todas={[servicos, mercado, lazerArquivada]} aoMudar={() => {}} />,
     );
-    expect(screen.queryByRole("option", { name: "Lazer", exact: true })).toBeNull();
-    expect(screen.getByRole("option", { name: "Mercado", exact: true })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "Lazer" })).toBeNull();
+    expect(screen.getByRole("option", { name: "Mercado" })).toBeTruthy();
   });
 
   it("a mãe atual, se estiver arquivada, continua como opção para não sumir do campo", () => {
@@ -82,7 +82,7 @@ describe("F5: 'Dentro de' não oferece principal arquivada", () => {
     render(
       <EditarCategoria categoria={subcategoria} todas={[subcategoria, lazerArquivada]} aoMudar={() => {}} />,
     );
-    expect(screen.getByRole("option", { name: "Lazer", exact: true })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Lazer" })).toBeTruthy();
   });
 });
 
@@ -102,7 +102,7 @@ describe("N4: a cor nova vai no PATCH", () => {
     atualizar.mockClear();
     render(<EditarCategoria categoria={servicos} todas={[servicos]} aoMudar={() => {}} />);
     // Verde (#22A06B), diferente da cor de servicos (Azul), para a troca ser visível no PATCH.
-    fireEvent.click(screen.getByRole("radio", { name: "Verde", exact: true }));
+    fireEvent.click(screen.getByRole("radio", { name: "Verde" }));
     fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
     await waitFor(() => expect(atualizar).toHaveBeenCalledTimes(1));
     const [, corpo] = atualizar.mock.calls[0] as unknown as [string, Record<string, unknown>];

@@ -73,14 +73,14 @@ describe("N7: trocar de categoria não recarrega a lista", () => {
         </HideValuesProvider>
       </FeaturesProvider>,
     );
-    await screen.findByRole("link", { name: "Saúde", exact: true });
+    await screen.findByRole("link", { name: "Saúde" });
     expect(buscarCategorias).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("link", { name: "Lazer", exact: true }));
+    fireEvent.click(screen.getByRole("link", { name: "Lazer" }));
     await waitFor(() => expect(roteador.state.location.pathname).toBe("/configuracoes/categorias/cat-lazer"));
 
     // A lista continua na tela, e nenhuma nova leitura foi feita.
-    expect(screen.getByRole("link", { name: "Saúde", exact: true })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Saúde" })).toBeTruthy();
     expect(buscarCategorias).toHaveBeenCalledTimes(1);
   });
 });
