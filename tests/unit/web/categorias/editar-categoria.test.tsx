@@ -96,3 +96,16 @@ describe("N7: depois de salvar, o editor mostra 'Salvo'", () => {
     expect(await screen.findByText("Salvo")).toBeTruthy();
   });
 });
+
+describe("N4: a cor nova vai no PATCH", () => {
+  it("trocar a cor manda a cor escolhida, e não a da categoria antes da edição", async () => {
+    atualizar.mockClear();
+    render(<EditarCategoria categoria={servicos} todas={[servicos]} aoMudar={() => {}} />);
+    // Verde (#22A06B), diferente da cor de servicos (Azul), para a troca ser visível no PATCH.
+    fireEvent.click(screen.getByRole("radio", { name: "Verde", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await waitFor(() => expect(atualizar).toHaveBeenCalledTimes(1));
+    const [, corpo] = atualizar.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(corpo.color).toBe("#22A06B");
+  });
+});
