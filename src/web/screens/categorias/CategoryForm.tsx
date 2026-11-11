@@ -28,6 +28,8 @@ type Props = {
   // Erros que a API devolveu (422), mostrados junto dos campos.
   erroCampos?: CategoryFieldErrors;
   aoEnviar: (entrada: NovaCategoriaEntrada) => void;
+  // Edição (TASK-0305): a categoria que está sendo editada não conta como repetida nem aparece em "Dentro de".
+  idEmEdicao?: string;
 };
 
 // Formulário de categoria (criar nesta task; a TASK-0305 reaproveita para editar). A validação é a mesma da API.
@@ -39,6 +41,7 @@ export function CategoryForm({
   erroGeral,
   erroCampos,
   aoEnviar,
+  idEmEdicao,
 }: Props) {
   const idPai = useId();
   const idDica = useId();
@@ -49,7 +52,9 @@ export function CategoryForm({
   const [errosLocais, setErrosLocais] = useState<CategoryFieldErrors>({});
 
   const erros: CategoryFieldErrors = { ...erroCampos, ...errosLocais };
-  const principais = categorias.filter((categoria) => categoria.parentId === null);
+  const principais = categorias.filter(
+    (categoria) => categoria.parentId === null && categoria.id !== idEmEdicao,
+  );
   const nomeVisivel = nome.trim() === "" ? "Nova categoria" : nome.trim();
 
   function enviar(evento: FormEvent<HTMLFormElement>) {
@@ -63,7 +68,7 @@ export function CategoryForm({
       defaultSpendType: null,
       archived: false,
     };
-    const validacao = validateCategoryInput(entrada, categorias);
+    const validacao = validateCategoryInput(entrada, categorias, idEmEdicao);
     if (!validacao.ok) {
       setErrosLocais(validacao.fields);
       return;

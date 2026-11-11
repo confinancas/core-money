@@ -17,6 +17,7 @@ describe("registro de seções", () => {
       "ciclo",
       "distribuicao-da-renda",
       "renda-fixa",
+      "categorias-e-ia",
       "notificacoes",
       "sincronizacao",
       "plano-cloudflare",
@@ -34,6 +35,7 @@ describe("registro de seções", () => {
       ["ciclo", "Ciclo e orçamento", 30],
       ["distribuicao-da-renda", "Distribuição da renda", 40],
       ["renda-fixa", "Renda fixa", 50],
+      ["categorias-e-ia", "Categorias e IA", 60],
       ["notificacoes", "Notificações", 70],
       ["sincronizacao", "Sincronização", 80],
       ["plano-cloudflare", "Plano da Cloudflare", 85],
@@ -53,6 +55,7 @@ describe("colunas por largura", () => {
         "ciclo",
         "distribuicao-da-renda",
         "renda-fixa",
+        "categorias-e-ia",
         "notificacoes",
         "sincronizacao",
         "plano-cloudflare",
@@ -66,7 +69,7 @@ describe("colunas por largura", () => {
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["renda-fixa", "notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
+      ["renda-fixa", "categorias-e-ia", "notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
 
@@ -75,7 +78,7 @@ describe("colunas por largura", () => {
 
     expect(colunas.map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
-      ["ciclo", "distribuicao-da-renda", "renda-fixa"],
+      ["ciclo", "distribuicao-da-renda", "renda-fixa", "categorias-e-ia"],
       ["notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
@@ -100,6 +103,7 @@ describe("colunas por largura", () => {
         "ciclo",
         "distribuicao-da-renda",
         "renda-fixa",
+        "categorias-e-ia",
         "notificacoes",
         "sincronizacao",
         "plano-cloudflare",
@@ -108,11 +112,11 @@ describe("colunas por largura", () => {
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy", "ciclo", "distribuicao-da-renda"],
-      ["falsa-de-teste", "renda-fixa", "notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
+      ["falsa-de-teste", "renda-fixa", "categorias-e-ia", "notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
     expect(colunasDasSecoes(registro, "desktop").map(ids)).toEqual([
       ["casal", "contas-meu-pluggy"],
-      ["falsa-de-teste", "ciclo", "distribuicao-da-renda", "renda-fixa"],
+      ["falsa-de-teste", "ciclo", "distribuicao-da-renda", "renda-fixa", "categorias-e-ia"],
       ["notificacoes", "sincronizacao", "plano-cloudflare", "dados"],
     ]);
   });
