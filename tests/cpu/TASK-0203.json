@@ -1,0 +1,54 @@
+{
+  "task": "TASK-0203",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES ('cpu-0203-primeiro-acesso', NULL, 'primeiro_acesso', 'cpu-0203-codigo-ja-usado', '2026-11-10T00:00:00.000Z', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO pluggy_connections (id, household_id, label, cpf_masked, client_id_enc, iv, client_secret_enc, client_secret_iv, created_at) VALUES ('cpu-conexao', 'cpu-lar', '[TEST] Conexão CPU', '***.000.000-**', 'cpu-cifra-id-nao-lida', 'cpu-iv-id-nao-lido', 'cpu-cifra-segredo-nao-lida', 'cpu-iv-segredo-nao-lido', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO bank_items (id, connection_id, institution_name, institution_color, consent_expires_at, status, created_at) VALUES ('cpu-banco', 'cpu-conexao', '[TEST] Banco CPU', '#0E9A63', '2027-10-01T00:00:00.000Z', 'ativo', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO pluggy_connections (id, household_id, label, created_at) VALUES ('cpu-conexao-sem-chaves', 'cpu-lar', '[TEST] Sem chaves CPU', '2026-11-10T00:00:01.000Z')"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/pluggy-connections (uma conexão com um banco)",
+      "method": "GET",
+      "path": "/api/pluggy-connections",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "POST /api/pluggy-connections/test-keys (formato recusado, sem chamada ao Pluggy)",
+      "method": "POST",
+      "path": "/api/pluggy-connections/test-keys",
+      "headers": { "cookie": "{sessao}" },
+      "body": { "clientId": "nao-e-uuid", "clientSecret": "curto" }
+    },
+    {
+      "name": "POST /api/pluggy-connections (rótulo repetido, sem chamada ao Pluggy)",
+      "method": "POST",
+      "path": "/api/pluggy-connections",
+      "headers": { "cookie": "{sessao}" },
+      "body": {
+        "label": "[TEST] Conexão CPU",
+        "clientId": "11111111-1111-4111-8111-111111111111",
+        "clientSecret": "TEST-cpu-0203-segredo",
+        "items": [{ "itemId": "00000000-0000-4000-8000-0000000000cc" }]
+      }
+    },
+    {
+      "name": "POST /api/pluggy-connections/:id/bank-items (conexão sem chaves, sem chamada ao Pluggy)",
+      "method": "POST",
+      "path": "/api/pluggy-connections/cpu-conexao-sem-chaves/bank-items",
+      "headers": { "cookie": "{sessao}" },
+      "body": { "items": [{ "itemId": "00000000-0000-4000-8000-0000000000cd" }] }
+    },
+    {
+      "name": "PUT /api/pluggy-connections/:id/keys (formato recusado, sem chamada ao Pluggy)",
+      "method": "PUT",
+      "path": "/api/pluggy-connections/cpu-conexao/keys",
+      "headers": { "cookie": "{sessao}" },
+      "body": { "clientId": "nao-e-uuid", "clientSecret": "curto" }
+    }
+  ]
+}

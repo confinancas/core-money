@@ -22,6 +22,7 @@ export function portasDoE2E(entrada) {
     instalacaoPronta: base,
     stub: base + 1,
     configuracao: base + 2,
+    pluggy: base + 3,
     inspecaoInstalacaoPronta: base + 4,
     inspecaoConfiguracao: base + 5,
   };
