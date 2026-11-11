@@ -1,0 +1,48 @@
+{
+  "task": "TASK-0902",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-1', 'cpu-membro-1', 'CPU-SEM-LOGIN-0902', 0, NULL, 'CPU Chromium', 'cadastro', '2026-11-10T00:00:00.000Z', NULL)",
+    "INSERT INTO pluggy_connections (id, household_id, label, created_at) VALUES ('cpu-conexao', 'cpu-lar', '[TEST] Conexão CPU', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO bank_items (id, connection_id, institution_name, created_at) VALUES ('cpu-banco', 'cpu-conexao', '[TEST] Banco CPU', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO accounts (id, bank_item_id, kind, name, balance_cents, overdraft_used_cents, balance_at) VALUES ('cpu-conta', 'cpu-banco', 'corrente', '[TEST] Conta CPU', 0, 0, '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text, kept_usd_is_investment, archived_at) VALUES ('cpu-renda-usd', 'cpu-lar', '[TEST] CPU Dólar', 'USD', 200000, 5, 'partes', 'HIGLOBE', 1, NULL)",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 12) INSERT INTO fixed_income_receipts (id, fixed_income_id, cycle_key, transaction_id, amount_cents, received_on, fx_rate, fx_date, confirmed_by) SELECT 'cpu-rec-' || i, 'cpu-renda-usd', '2026-10', NULL, 1000, '2026-11-10', 54212, '2026-11-10', 'pessoa' FROM n",
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100) INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, movement, occurred_at, local_date, amount_cents, original_description, cycle_key, last_seen_at) SELECT 'cpu-tx-' || i, 'cpu-lar', 'cpu-ext-' || i, 'cpu-banco', 'cpu-conta', CASE WHEN i <= 10 THEN 'rendimento' ELSE 'compra' END, '2026-10-20T12:00:00.000Z', '2026-10-20', CASE WHEN i <= 10 THEN 100 + i ELSE -1000 - i END, '[TEST] CPU lançamento ' || i, '2026-10', '2026-10-20T12:00:00.000Z' FROM n"
+  ],
+  "requests": [
+    {
+      "name": "GET /api/cycle/income (ciclo com 100 lançamentos e 12 recebimentos)",
+      "method": "GET",
+      "path": "/api/cycle/income?cycleKey=2026-10",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    },
+    {
+      "name": "POST /api/fixed-incomes/:id/receipts (recebimento à mão, em dólar)",
+      "method": "POST",
+      "path": "/api/fixed-incomes/cpu-renda-usd/receipts",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "corpos": [
+        {
+          "receivedOn": "2026-11-10",
+          "amountCents": 5000
+        }
+      ]
+    },
+    {
+      "name": "DELETE /api/fixed-incomes/:id/receipts/:receiptId (recebimento à mão)",
+      "method": "DELETE",
+      "path": "/api/fixed-incomes/cpu-renda-usd/receipts/cpu-rec-{i}",
+      "headers": {
+        "cookie": "{sessao}"
+      }
+    }
+  ]
+}

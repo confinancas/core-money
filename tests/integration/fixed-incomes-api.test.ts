@@ -455,3 +455,60 @@ describe("guarda do lar na escrita", () => {
     expect(await linhaDoBanco(id)).toMatchObject({ name: CLT.name, amount_cents: 500000, archived_at: null });
   });
 });
+
+// Lacunas apontadas na avaliação da TASK-0901 (TASK-0902): a guarda do UPDATE em renda arquivada, o GET com o switch
+// desligado, o PATCH parcial que não religa o dólar, e o 400 para keptUsdIsInvestment que não é booleano.
+describe("lacunas da avaliação da TASK-0901", () => {
+  it("atualizarRendaFixa numa renda arquivada não grava nada", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const id = await criarRenda(app, DOLAR);
+    await chamar(app, "DELETE", `/api/fixed-incomes/${id}`);
+    const antes = await linhaDoBanco(id);
+
+    const gravou = await atualizarRendaFixa(createDb(env.DB, newMeter()), lar.householdId, id, {
+      name: "[TEST] Mudou",
+      currency: "USD",
+      amountCents: 999900,
+      usualDay: 9,
+      arrival: "manual",
+      statementText: null,
+      keptUsdIsInvestment: false,
+    });
+    expect(gravou).toBe(false);
+    expect(await linhaDoBanco(id)).toEqual(antes);
+  });
+
+  it("o GET devolve keptUsdIsInvestment falso quando o switch está desligado", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    await criarRenda(app, { ...DOLAR, keptUsdIsInvestment: false });
+    const resposta = await chamar(app, "GET", "/api/fixed-incomes");
+    expect(resposta.corpo.fixedIncomes[0].keptUsdIsInvestment).toBe(false);
+  });
+
+  it("um PATCH de outro campo não religa o dólar que estava desligado", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    const id = await criarRenda(app, { ...DOLAR, keptUsdIsInvestment: false });
+    const resposta = await chamar(app, "PATCH", `/api/fixed-incomes/${id}`, { amountCents: 300000 });
+    expect(resposta.status).toBe(200);
+    expect(resposta.corpo.fixedIncome.keptUsdIsInvestment).toBe(false);
+    expect((await linhaDoBanco(id))?.kept_usd_is_investment).toBe(0);
+  });
+
+  it("keptUsdIsInvestment que não é booleano é recusado com 400 e nada é gravado", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    for (const valor of [0, 1, null, "false"]) {
+      const resposta = await chamar(app, "POST", "/api/fixed-incomes", {
+        ...DOLAR,
+        keptUsdIsInvestment: valor,
+      });
+      expect(resposta.status).toBe(400);
+    }
+    expect(
+      await contarNoBanco("SELECT COUNT(*) AS n FROM fixed_incomes WHERE household_id = ?", lar.householdId),
+    ).toBe(0);
+  });
+});

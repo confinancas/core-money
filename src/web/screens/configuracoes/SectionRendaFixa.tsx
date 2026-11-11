@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router";
 import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/error-state";
 import { Money } from "@/components/ui/money";
@@ -8,7 +9,7 @@ import { fetchFixedIncomes } from "../../api/fixed-incomes";
 import { SettingsRow } from "../../components/settings/SettingsRow";
 
 // Seção Renda fixa (TASK-0901): uma linha por renda ativa, que abre o editor dela na tela de Renda fixa, e a linha
-// "Adicionar renda fixa", que abre o editor vazio.
+// "Adicionar renda fixa" (verde, com +, como no protótipo), que abre o editor vazio. As linhas têm divisória (TASK-0902).
 export function SectionRendaFixa() {
   const [dados, setDados] = useState<FixedIncomesResponse | null>(null);
   const [falhou, setFalhou] = useState(false);
@@ -31,7 +32,7 @@ export function SectionRendaFixa() {
   }
 
   return (
-    <Card className="flex flex-col overflow-hidden p-0">
+    <Card className="flex flex-col overflow-hidden p-0 [&>*+*]:border-t [&>*+*]:border-field-border">
       {dados.fixedIncomes.map((renda) => {
         const dolar = renda.currency === "USD";
         return (
@@ -52,7 +53,15 @@ export function SectionRendaFixa() {
           />
         );
       })}
-      <SettingsRow titulo="Adicionar renda fixa" para="/renda/fixa?nova=1" />
+      <Link
+        to="/renda/fixa?nova=1"
+        className="flex min-h-14 items-center gap-2.5 px-4 py-3 text-[15px] font-semibold text-primary-ink transition-colors hover:bg-field"
+      >
+        <span aria-hidden="true" className="text-[18px] leading-none">
+          +
+        </span>
+        Adicionar renda fixa
+      </Link>
     </Card>
   );
 }

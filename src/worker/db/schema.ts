@@ -558,3 +558,44 @@ export const notificationPrefs = sqliteTable(
     check("notification_prefs_enabled_ck", sql`${t.enabled} IN (0, 1)`),
   ],
 );
+
+// Recebimentos de uma renda fixa (TASK-0902): cada parte que chega é uma linha. transaction_id nulo é o recebimento
+// lançado à mão; com transação, é o que o extrato (ou a classificação do Pix recebido) casou. Uma transação é parte
+// de no máximo uma renda (índice único parcial). amount_cents está sempre em reais: é o que entrou na conta. A
+// cotação (fx_rate, × 10.000) e o dia dela (fx_date) são os do dia de referência da renda no ciclo.
+export const fixedIncomeReceipts = sqliteTable(
+  "fixed_income_receipts",
+  {
+    id: text("id").primaryKey(),
+    fixedIncomeId: text("fixed_income_id")
+      .notNull()
+      .references(() => fixedIncomes.id),
+    cycleKey: text("cycle_key").notNull(),
+    transactionId: text("transaction_id").references(() => transactions.id),
+    amountCents: integer("amount_cents").notNull(),
+    receivedOn: text("received_on").notNull(),
+    fxRate: integer("fx_rate"),
+    fxDate: text("fx_date"),
+    confirmedBy: text("confirmed_by").notNull(),
+  },
+  (t) => [
+    check("fixed_income_receipts_amount_ck", sql`${t.amountCents} >= 0`),
+    uniqueIndex("fixed_income_receipts_transaction_uq")
+      .on(t.transactionId)
+      .where(sql`${t.transactionId} IS NOT NULL`),
+    index("fixed_income_receipts_income_cycle_idx").on(t.fixedIncomeId, t.cycleKey),
+  ],
+);
+
+// Cotação de referência (TASK-0902): global, a cotação é pública e não é dado do lar. rate é × 10.000 (5,4212 vira
+// 54212). A fonte é o Banco Central (PTAX de venda).
+export const fxRates = sqliteTable(
+  "fx_rates",
+  {
+    currency: text("currency").notNull(),
+    date: text("date").notNull(),
+    rate: integer("rate").notNull(),
+    source: text("source").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.currency, t.date] }), check("fx_rates_rate_ck", sql`${t.rate} > 0`)],
+);

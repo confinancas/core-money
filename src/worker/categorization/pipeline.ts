@@ -1,10 +1,18 @@
 import { COUNTERPARTY_KEY_SQL, chaveVazia, type RuleScope } from "../../shared/rule-match";
 import type { Db } from "../db/client";
+import { type CandidataDeEntrada, casamentosDoExtrato, type RendaDoExtrato } from "../income/casamento-puro";
+import {
+  escritasDosCasamentos,
+  SQL_CANDIDATAS_DO_LOTE,
+  SQL_RENDAS_DO_EXTRATO,
+} from "../income/statement-match";
 import { applyRuleToTransactionStmt, type RegraParaAplicar } from "./apply";
 
 // Pipeline de regras na importação (TASK-0302). Chamado pelo afterIngest, depois da classificação e do ciclo, só com os
-// ids inseridos. No máximo 2 idas ao D1: uma leitura (as linhas e os casamentos, num lote) e uma escrita (as regras).
-// Escopo remetente fica de fora nesta task (a TASK-0903 o acrescenta). As TASK-0303, 0902 e 0903 acrescentam passos aqui.
+// ids inseridos. No máximo 2 idas ao D1: uma leitura (as linhas, os casamentos e as entradas do extrato, num lote) e uma
+// escrita (as regras e os recebimentos). Escopo remetente fica de fora nesta task (a TASK-0903 o acrescenta).
+// Ordem: o casamento pelo extrato das entradas (TASK-0902) vem antes das regras; as duas partes são disjuntas (entrada
+// não recebe regra de categoria), e a entrada casada não entra em pendentes.
 
 export type ResultadoDoPipeline = {
   // Ids que a regra categorizou nesta chamada.
@@ -59,6 +67,15 @@ const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.i
   LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL
 `;
 
+// Entrada do lote que pode casar com uma renda pelo extrato (TASK-0902): as colunas vêm de SQL_CANDIDATAS_DO_LOTE.
+type LinhaCandidataDoLote = {
+  id: string;
+  description: string;
+  received_on: string;
+  cycle_key: string | null;
+  amount_cents: number;
+};
+
 const SQL_LINHAS = `SELECT t.id, t.movement, t.card_id, t.category_id FROM json_each(?) AS j
   CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?`;
 
@@ -74,14 +91,35 @@ export async function processNewTransactions(
   if (ids.length === 0) return { categorizedByRule: [], pending: [] };
   const json = JSON.stringify(ids);
 
-  const [linhasLidas, casamentosLidos] = await db.$client.batch([
+  const [linhasLidas, casamentosLidos, candidatasLidas, rendasLidas] = await db.$client.batch([
     db.$client.prepare(SQL_LINHAS).bind(json, householdId),
     db.$client.prepare(SQL_CASAMENTOS).bind(json, householdId, json, householdId),
+    db.$client.prepare(SQL_CANDIDATAS_DO_LOTE).bind(json, householdId),
+    db.$client.prepare(SQL_RENDAS_DO_EXTRATO).bind(householdId),
   ]);
   const linhas = (linhasLidas?.results ?? []) as LinhaDaImportacao[];
   const casamentos = (casamentosLidos?.results ?? []) as CasamentoDeRegra[];
+  const candidatas = (candidatasLidas?.results ?? []) as LinhaCandidataDoLote[];
+  const rendas = ((rendasLidas?.results ?? []) as { id: string; statement_text: string }[]).map(
+    (renda): RendaDoExtrato => ({ id: renda.id, statementText: renda.statement_text }),
+  );
 
-  const escritas: D1PreparedStatement[] = [];
+  // Entradas casadas com uma renda pelo texto do extrato (TASK-0902): recebimento e marca, na escrita deste lote.
+  const casadas = casamentosDoExtrato(
+    candidatas.map(
+      (linha): CandidataDeEntrada => ({
+        id: linha.id,
+        description: linha.description,
+        receivedOn: linha.received_on,
+        cycleKey: linha.cycle_key,
+        amountCents: linha.amount_cents,
+      }),
+    ),
+    rendas,
+  );
+  const idsCasados = new Set(casadas.map((casamento) => casamento.transactionId));
+
+  const escritas: D1PreparedStatement[] = escritasDosCasamentos(db, householdId, casadas, now);
   const categorizadas = new Set<string>();
   const viraramPagamento = new Set<string>();
   for (const casamento of casamentos) {
@@ -115,6 +153,7 @@ export async function processNewTransactions(
     const linha = porId.get(id);
     if (!linha || linha.category_id !== null) continue;
     if (linha.movement === PAGAMENTO_DE_FATURA || viraramPagamento.has(id) || categorizadas.has(id)) continue;
+    if (idsCasados.has(id)) continue;
     pending.push(id);
   }
   return { categorizedByRule: [...categorizadas], pending };
