@@ -20,5 +20,7 @@
       "migrations_dir": "migrations"
     }
   ],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Um Cron Trigger só, como despachante (plano-gratuito.md). O deploy de medição tira este bloco.
+  "triggers": { "crons": ["*/5 * * * *"] }
 }

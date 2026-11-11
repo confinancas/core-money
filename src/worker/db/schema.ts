@@ -568,3 +568,23 @@ export const notificationPrefs = sqliteTable(
     check("notification_prefs_enabled_ck", sql`${t.enabled} IN (0, 1)`),
   ],
 );
+
+// Fila da categorização pela IA (TASK-0303). Sem FK: o cron tira da fila o que sumiu, foi removido ou já foi resolvido.
+// last_error guarda o motivo da última falha (recusa, max_tokens, saida_invalida, sem_resposta, indisponivel, chave...).
+export const categorizationQueue = sqliteTable(
+  "categorization_queue",
+  {
+    transactionId: text("transaction_id").primaryKey(),
+    enqueuedAt: text("enqueued_at").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+  },
+  (t) => [index("categorization_queue_attempts_idx").on(t.attempts, t.enqueuedAt)],
+);
+
+// Pausa da fatia da categorização (TASK-0303, rodada 1): depois de um erro de provedor (fora ou chave recusada), a fatia
+// não chama a IA até este instante. Uma linha só, pelo nome do segredo que a IA usa.
+export const categorizationPausa = sqliteTable("categorization_pausa", {
+  name: text("name").primaryKey(),
+  pausarAte: text("pausar_ate").notNull(),
+});
