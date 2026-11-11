@@ -1,6 +1,7 @@
 import { render } from "@testing-library/react";
 import { createMemoryRouter, type InitialEntry, RouterProvider } from "react-router";
 import { FeaturesProvider } from "@/app/features";
+import { HideValuesProvider } from "@/components/ui/hide-values";
 import { criarRotas } from "@/routes";
 import { SessionProvider } from "@/session/SessionProvider";
 import type { SessionResponse } from "../../../../src/shared/session";
@@ -22,9 +23,11 @@ export function renderizarApp({ rota, assistente = true }: { rota: InitialEntry;
   const roteador = createMemoryRouter(criarRotas(), { initialEntries: [rota] });
   const resultado = render(
     <FeaturesProvider valores={{ ia: false, assistente, voz: false }}>
-      <SessionProvider valores={SESSAO_DE_TESTE}>
-        <RouterProvider router={roteador} />
-      </SessionProvider>
+      <HideValuesProvider>
+        <SessionProvider valores={SESSAO_DE_TESTE}>
+          <RouterProvider router={roteador} />
+        </SessionProvider>
+      </HideValuesProvider>
     </FeaturesProvider>,
   );
   return { ...resultado, roteador };
