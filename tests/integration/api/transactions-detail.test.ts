@@ -617,12 +617,43 @@ describe("rodada 1: entrada com nome de saída, lar nas junções e nome com esp
     expect(banco.custom_name).toBe("Cashback do banco");
   });
 
-  it("F1: rendimento positivo (entrada) também recusa tipo; o mesmo movimento com valor negativo não é entrada", async () => {
+  // Rendimento não é saída com nenhum sinal: positivo (o normal) e negativo (ajuste) recusam tipo e ocultar.
+  it("F1: rendimento não tem tipo nem se oculta, nem com valor positivo nem com negativo", async () => {
     const lar = await criarLar();
-    const entrada = await compraNaConta(lar, "rendimento", "[TEST] Rendimento", 1200);
-    const recusada = await alterar(appDoLar(lar), entrada, { spendType: "conforto" });
-    expect(recusada.status).toBe(422);
-    expect((await linhaDoBanco(entrada)).spend_type).toBeNull();
+    const app = appDoLar(lar);
+    for (const valor of [1200, -1200]) {
+      const id = await compraNaConta(lar, "rendimento", "[TEST] Rendimento", valor);
+      const tipo = await alterar(app, id, { spendType: "conforto" });
+      expect(tipo.status).toBe(422);
+      expect(((await tipo.json()) as { error: string }).error).toBe("movimento_invalido");
+      expect((await alterar(app, id, { hidden: true })).status).toBe(422);
+      expect((await linhaDoBanco(id)).spend_type).toBeNull();
+      expect((await linhaDoBanco(id)).hidden).toBe(0);
+    }
+  });
+
+  // F7: pagamento de fatura e transferência interna são entradas de conta mesmo com valor negativo (a spec exclui do
+  // tipo e do ocultar). O sinal não basta: o movimento tem de estar na lista de saída (mutações K14c e K14d).
+  it("F7: pagamento de fatura e transferência interna de valor negativo não têm tipo nem se ocultam", async () => {
+    const lar = await criarLar();
+    const app = appDoLar(lar);
+    for (const movimento of ["pagamento_fatura", "transferencia_interna"]) {
+      const id = await compraNaConta(lar, movimento, `[TEST] ${movimento}`, -10000);
+      const tipo = await alterar(app, id, { spendType: "fixos" });
+      expect(tipo.status).toBe(422);
+      expect(await tipo.json()).toEqual({
+        error: "movimento_invalido",
+        message: "Esta transação não tem tipo de gasto.",
+      });
+      const oculta = await alterar(app, id, { hidden: true });
+      expect(oculta.status).toBe(422);
+      expect(await oculta.json()).toEqual({
+        error: "movimento_invalido",
+        message: "Esta transação não pode ser ocultada aqui.",
+      });
+      expect((await linhaDoBanco(id)).spend_type).toBeNull();
+      expect((await linhaDoBanco(id)).hidden).toBe(0);
+    }
   });
 
   it("F1: estorno de cartão com valor positivo continua saída (tem tipo e se oculta)", async () => {

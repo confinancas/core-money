@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { ErrorState } from "@/components/ui/error-state";
 import { GreenTop } from "@/components/ui/green-top";
 import { SkeletonCard } from "@/components/ui/skeleton";
@@ -12,9 +12,14 @@ import { caminhoSeguro } from "./voltar";
 // Criar uma categoria (principal ou subcategoria de um nível). Depois de criar, volta a quem abriu com a nova selecionada.
 export function NovaCategoria() {
   const navegar = useNavigate();
+  const localizacao = useLocation();
   const [params] = useSearchParams();
   const voltar = caminhoSeguro(params.get("voltar"));
   const destino = voltar ?? "/categorias/escolher";
+  // Aberta pelo seletor de uma compra (o voltar leva ?transacao=): a volta troca esta entrada pelo seletor (replace), e
+  // leva junto a marca de histórico da compra. Sem isso, a seta da compra cairia aqui de novo (TASK-0403, F6).
+  const daCompra = voltar !== null && new URL(voltar, "http://app.invalid").searchParams.has("transacao");
+  const marcaDeHistorico = (localizacao.state as { temHistorico?: unknown } | null)?.temHistorico;
   const paiPedido = params.get("pai");
 
   const [categorias, setCategorias] = useState<CategoryDTO[] | null>(null);
@@ -55,7 +60,13 @@ export function NovaCategoria() {
     setErroCampos({});
     try {
       const criada = await createCategory(entrada);
-      navegar(destino, { state: { categoriaCriada: criada.id } });
+      navegar(destino, {
+        replace: daCompra,
+        state: {
+          categoriaCriada: criada.id,
+          ...(typeof marcaDeHistorico === "boolean" ? { temHistorico: marcaDeHistorico } : {}),
+        },
+      });
     } catch (erro) {
       if (erro instanceof ApiError && erro.code === "validacao" && erro.fields) {
         setErroCampos(erro.fields);

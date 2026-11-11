@@ -271,6 +271,8 @@ export function EscolherCategoria() {
             {!buscando && subcategorias.length > 0 && (
               <Link
                 to={caminhoNovaCategoria({ pai: categoria.id })}
+                replace={abertoPelaCompra}
+                state={estadoDaCompra}
                 className="flex min-h-[44px] items-center gap-2.5 pr-3.5 pl-9 text-[13px] font-semibold text-primary"
               >
                 <svg
@@ -344,6 +346,8 @@ export function EscolherCategoria() {
 
           <Link
             to={caminhoNovaCategoria({})}
+            replace={abertoPelaCompra}
+            state={estadoDaCompra}
             className="flex min-h-14 items-center gap-3 rounded-[18px] border border-dashed border-chip-border px-[18px] text-[15px] font-semibold text-primary-ink"
           >
             <svg

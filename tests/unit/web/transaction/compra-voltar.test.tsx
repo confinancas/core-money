@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, type InitialEntry, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeaturesProvider } from "@/app/features";
@@ -68,6 +68,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Cada teste monta o app de novo: sem limpar, a árvore do teste anterior sobra e duplica os links.
+  cleanup();
   vi.unstubAllGlobals();
 });
 
@@ -94,5 +96,16 @@ describe("seta da compra (F2)", () => {
     montar(["/inicio", "/compras/abc"], 1);
     const seta = await screen.findByRole("link", { name: "Voltar" });
     expect(seta).toHaveAttribute("href", "/cartoes");
+  });
+
+  // F6: a marca temHistorico do estado vale sobre o histórico do roteador. Veio do seletor (ou da criação de categoria),
+  // com a marca falsa, a seta vai à aba mesmo com uma entrada anterior: a Compra não pode ignorar a marca (mutação U9).
+  it("F6: a marca temHistorico do estado vale sobre o histórico: falsa vai à aba, mesmo com entrada anterior", async () => {
+    const roteador = montar(["/inicio", { pathname: "/compras/abc", state: { temHistorico: false } }], 1);
+    await screen.findByRole("heading", { level: 2, name: DETALHE.displayName });
+
+    fireEvent.click(screen.getByRole("link", { name: "Voltar" }));
+
+    await waitFor(() => expect(roteador.state.location.pathname).toBe("/cartoes"));
   });
 });

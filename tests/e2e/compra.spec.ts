@@ -68,6 +68,8 @@ function preparaCompras(): void {
       `DELETE FROM transactions WHERE id LIKE 'e2e-cp-%'`,
       `DELETE FROM bills WHERE id LIKE 'e2e-cp-%'`,
       `DELETE FROM rules WHERE household_id = ${q(LAR)} AND match_value LIKE 'E2E CP%'`,
+      // A categoria criada pelo teste de F6 some antes de cada teste: o nome não pode repetir (422) no teste seguinte.
+      `DELETE FROM categories WHERE household_id = ${q(LAR)} AND name LIKE '[TEST] Categoria F6%'`,
       `INSERT OR IGNORE INTO pluggy_connections (id, household_id, label, created_at) VALUES (${q(CONEXAO)}, ${q(LAR)}, '[TEST] Conexão E2E compra', ${q(agora)})`,
       `INSERT OR IGNORE INTO bank_items (id, connection_id, institution_name, institution_color, created_at) VALUES (${q(BANCO)}, ${q(CONEXAO)}, ${q(NOME_DO_BANCO)}, '#8A05BE', ${q(agora)})`,
       `UPDATE bank_items SET disconnected_at = NULL WHERE id = ${q(BANCO)}`,
@@ -118,6 +120,7 @@ test.afterAll(() => {
       `DELETE FROM bills WHERE id LIKE 'e2e-cp-%'`,
       `DELETE FROM rules WHERE household_id = ${q(LAR)} AND match_value LIKE 'E2E CP%'`,
       `DELETE FROM categories WHERE id LIKE 'e2e-cp-cat-%'`,
+      `DELETE FROM categories WHERE household_id = ${q(LAR)} AND name LIKE '[TEST] Categoria F6%'`,
       `DELETE FROM cards WHERE id = ${q(CARTAO)}`,
       `DELETE FROM accounts WHERE id = ${q(CONTA)}`,
       `DELETE FROM bank_items WHERE id = ${q(BANCO)}`,
@@ -261,9 +264,7 @@ test("layout: as caixas não se cruzam, ficam na ordem do protótipo e os alvos 
   await semRolagemHorizontal(page);
 });
 
-test("cor: o título branco e o texto laranja da categoria têm contraste suficiente sobre o fundo", async ({
-  page,
-}) => {
+test("cor: o título é branco e o texto da categoria usa os tokens do protótipo", async ({ page }) => {
   await page.goto(COMPRA);
   const titulo = page.getByRole("heading", { level: 1, name: "Compra" });
   const cabecalho = page.locator("header").filter({ has: titulo });
@@ -558,4 +559,56 @@ test("F4: uma gravação que falha não desfaz a outra que deu certo", async ({ 
       consultaSql("pronta", "SELECT hidden, spend_type FROM transactions WHERE id = 'e2e-cp-compra'"),
     )
     .toEqual([{ hidden: 1, spend_type: "prazeres" }]);
+});
+
+// F6: criar uma categoria pelo seletor aberto pela compra. A criação volta ao seletor (replace) e leva a marca de
+// histórico; depois de "Salvar categoria", a seta da compra volta à origem. Entra pelo Início e pela compra aberta direto.
+const NOME_DA_CATEGORIA_NOVA = "[TEST] Categoria F6 E2E";
+
+async function criarCategoriaPeloSeletor(page: Page): Promise<void> {
+  await page.getByRole("link", { name: /Sem categoria · revisar/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/escolher");
+  await page.getByRole("link", { name: /Nova categoria/ }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/nova");
+  await page.getByLabel("Nome", { exact: true }).fill(NOME_DA_CATEGORIA_NOVA);
+  await page.getByRole("button", { name: "Criar categoria" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/categorias/escolher");
+  await expect(page.getByRole("radio", { name: NOME_DA_CATEGORIA_NOVA })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await page.getByRole("button", { name: "Salvar categoria" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+  await expect(page.getByText(NOME_DA_CATEGORIA_NOVA, { exact: true })).toBeVisible();
+}
+
+test("F6: entra pelo Início, cria uma categoria pelo seletor e a seta da compra volta ao Início", async ({
+  page,
+}) => {
+  await page.goto("/inicio");
+  // O Início ainda é provisório (sem link para compras): a compra entra pelo histórico do navegador, como um toque
+  // num link do app, com uma entrada nova que tem chave (a marca de histórico).
+  await page.evaluate((caminho) => {
+    window.history.pushState({ usr: null, key: "e2e-f6-inicio", idx: 1 }, "", caminho);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+  }, COMPRA);
+  await expect.poll(() => new URL(page.url()).pathname).toBe(COMPRA);
+  await expect(page.getByRole("heading", { level: 2, name: ORIGINAL })).toBeVisible();
+
+  await criarCategoriaPeloSeletor(page);
+
+  await page.getByRole("link", { name: "Voltar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/inicio");
+});
+
+test("F6: compra aberta direto, criar uma categoria pelo seletor, e a seta leva ao Cartões", async ({
+  page,
+}) => {
+  await page.goto(COMPRA);
+  await expect(page.getByRole("heading", { level: 2, name: ORIGINAL })).toBeVisible();
+
+  await criarCategoriaPeloSeletor(page);
+
+  await page.getByRole("link", { name: "Voltar" }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/cartoes");
 });
