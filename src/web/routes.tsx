@@ -8,6 +8,7 @@ import { PlaceholderScreen } from "./app/PlaceholderScreen";
 import { Catalogo } from "./dev/Catalog";
 import { AceitarConvite } from "./screens/AceitarConvite";
 import { AdicionarConjuge } from "./screens/AdicionarConjuge";
+import { ConectarPluggy } from "./screens/bancos/ConectarPluggy";
 import { Cadastro } from "./screens/Cadastro";
 import { ConfiguracaoInicial } from "./screens/ConfiguracaoInicial";
 import { EscolherCategoria } from "./screens/categorias/EscolherCategoria";
@@ -195,7 +196,7 @@ export const ROTAS: RotaDaTabela[] = [
     frame: "full",
     tab: "configuracoes",
     title: "Conectar Meu Pluggy",
-    element: provisoria,
+    element: <ConectarPluggy />,
   },
 
   { path: "*", frame: "detail", title: "Página não encontrada", element: <NotFound /> },
