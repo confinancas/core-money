@@ -5,6 +5,7 @@ import { isPublicRoute } from "./auth/public-routes";
 import { requireSession, sessaoDoCookie } from "./auth/sessions";
 import { verificadorReal, type WebAuthnLoginVerifier, type WebAuthnVerifier } from "./auth/webauthn";
 import { categoriesRoutes } from "./categories/routes";
+import { categorizacaoRoutes } from "./categorization/routes";
 import { createDb } from "./db/client";
 import { type Meter, newMeter } from "./db/metered-d1";
 import type { AppEnv } from "./env";
@@ -113,6 +114,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/categories", categoriesRoutes(resolverDaSessao, options.agora));
   app.route("/rules", regrasRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
+  app.route("/categorization", categorizacaoRoutes(resolverDaSessao, options.agora));
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/fixed-incomes", fixedIncomesRoutes(resolverDaSessao, options.agora));
