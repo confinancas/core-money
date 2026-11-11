@@ -120,10 +120,9 @@ export function validateCategoryInput(
   }
 
   if (input.parentId !== null && idEmEdicao !== undefined && fields.parentId === undefined) {
-    const temSubcategoriasAtivas = existentes.some(
-      (categoria) => categoria.parentId === idEmEdicao && !categoria.archived,
-    );
-    if (temSubcategoriasAtivas) {
+    // Com subcategorias, ativas ou arquivadas: uma arquivada debaixo de subcategoria não pode ser reativada (TASK-0305).
+    const temSubcategorias = existentes.some((categoria) => categoria.parentId === idEmEdicao);
+    if (temSubcategorias) {
       fields.parentId = "Uma categoria com subcategorias não pode ficar dentro de outra.";
     }
   }

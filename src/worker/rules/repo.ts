@@ -263,3 +263,110 @@ export function disableRuleStmt(
     .prepare("UPDATE rules SET disabled_at = ? WHERE id = ? AND household_id = ? AND disabled_at IS NULL")
     .bind(now, ruleId, householdId);
 }
+
+// Lista de regras do lar (TASK-0305): só ativas, dos três escopos que a tela mostra (conta_destino fica de fora).
+// Uma ida ao D1 (db.$client.batch): o total e a página. Ordem created_at DESC, id DESC; o cursor é o último par visto.
+export type FiltroDaListaDeRegras = {
+  escopo: "todos" | "estabelecimento" | "destinatario" | "remetente";
+  busca: string;
+  cursor: { criadoEm: string; id: string } | null;
+};
+
+export type LinhaDaListaDeRegras = {
+  id: string;
+  scope: string;
+  matchValue: string;
+  createdFrom: string;
+  createdAt: string;
+  createdByName: string | null;
+  setCustomName: string | null;
+  setCategoryId: string | null;
+  setCategoryName: string | null;
+  setCategoryColor: string | null;
+  setSpendType: string | null;
+  setIncomeKind: string | null;
+  setIncomeSubtype: string | null;
+};
+
+export const TAMANHO_DA_PAGINA_DE_REGRAS = 50;
+
+export async function listarRegras(
+  db: Db,
+  householdId: string,
+  filtro: FiltroDaListaDeRegras,
+): Promise<{ total: number; linhas: LinhaDaListaDeRegras[]; temMais: boolean }> {
+  const condicoes = [
+    "r.household_id = ?",
+    "r.disabled_at IS NULL",
+    `r.scope IN ('estabelecimento', 'destinatario', 'remetente')`,
+  ];
+  const valores: unknown[] = [householdId];
+  if (filtro.escopo !== "todos") {
+    condicoes.push("r.scope = ?");
+    valores.push(filtro.escopo);
+  }
+  if (filtro.busca !== "") {
+    condicoes.push("r.match_value LIKE '%' || ? || '%'");
+    valores.push(filtro.busca);
+  }
+  const onde = condicoes.join(" AND ");
+
+  const contagem = db.$client
+    .prepare(`SELECT COUNT(*) AS total FROM rules AS r WHERE ${onde}`)
+    .bind(...valores);
+
+  const condicoesDaPagina = [...condicoes];
+  const valoresDaPagina = [...valores];
+  if (filtro.cursor !== null) {
+    condicoesDaPagina.push("(r.created_at < ? OR (r.created_at = ? AND r.id < ?))");
+    valoresDaPagina.push(filtro.cursor.criadoEm, filtro.cursor.criadoEm, filtro.cursor.id);
+  }
+  const pagina = db.$client
+    .prepare(
+      `SELECT r.id, r.scope, r.match_value, r.created_from, r.created_at, m.name AS created_by_name,
+        r.set_custom_name, r.set_category_id, c.name AS set_category_name, c.color AS set_category_color,
+        r.set_spend_type, r.set_income_kind, r.set_income_subtype
+       FROM rules AS r
+         LEFT JOIN members AS m ON m.id = r.created_by
+         LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = r.household_id
+       WHERE ${condicoesDaPagina.join(" AND ")}
+       ORDER BY r.created_at DESC, r.id DESC
+       LIMIT ${TAMANHO_DA_PAGINA_DE_REGRAS + 1}`,
+    )
+    .bind(...valoresDaPagina);
+
+  const [totalLinha, paginaLinhas] = await db.$client.batch([contagem, pagina]);
+  const total = (totalLinha?.results?.[0] as { total: number } | undefined)?.total ?? 0;
+  const brutas = (paginaLinhas?.results ?? []) as Array<{
+    id: string;
+    scope: string;
+    match_value: string;
+    created_from: string;
+    created_at: string;
+    created_by_name: string | null;
+    set_custom_name: string | null;
+    set_category_id: string | null;
+    set_category_name: string | null;
+    set_category_color: string | null;
+    set_spend_type: string | null;
+    set_income_kind: string | null;
+    set_income_subtype: string | null;
+  }>;
+  const temMais = brutas.length > TAMANHO_DA_PAGINA_DE_REGRAS;
+  const linhas = brutas.slice(0, TAMANHO_DA_PAGINA_DE_REGRAS).map((linha) => ({
+    id: linha.id,
+    scope: linha.scope,
+    matchValue: linha.match_value,
+    createdFrom: linha.created_from,
+    createdAt: linha.created_at,
+    createdByName: linha.created_by_name,
+    setCustomName: linha.set_custom_name,
+    setCategoryId: linha.set_category_id,
+    setCategoryName: linha.set_category_name,
+    setCategoryColor: linha.set_category_color,
+    setSpendType: linha.set_spend_type,
+    setIncomeKind: linha.set_income_kind,
+    setIncomeSubtype: linha.set_income_subtype,
+  }));
+  return { total, linhas, temMais };
+}

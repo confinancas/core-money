@@ -14,8 +14,11 @@ import { getSession, requireHousehold, type SessionResolver } from "../household
 import { apiError } from "../http/errors";
 import {
   disableRuleStmt,
+  type FiltroDaListaDeRegras,
   getRuleContextForTransaction,
+  type LinhaDaListaDeRegras,
   lerRegraPorId,
+  listarRegras,
   type TransacaoDoContexto,
   upsertRuleStmts,
 } from "./repo";
@@ -79,6 +82,49 @@ const rotuloDaTransacao = (transacao: TransacaoDoContexto, escopo: RuleScope | n
 
 const somaAplicadas = (resultados: readonly D1Result<unknown>[]): number =>
   resultados.reduce((total, resultado) => total + (resultado.meta?.changes ?? 0), 0);
+
+const ESCOPOS_DA_LISTA = ["todos", "estabelecimento", "destinatario", "remetente"] as const;
+
+// Cursor opaco: base64 de "criadoEm|id". Um cursor que não decodifica vira "invalido" (400).
+function codificaCursor(criadoEm: string, id: string): string {
+  return btoa(`${criadoEm}|${id}`);
+}
+
+function decodificaCursor(texto: string | undefined): { criadoEm: string; id: string } | null | "invalido" {
+  if (texto === undefined || texto === "") return null;
+  let bruto: string;
+  try {
+    bruto = atob(texto);
+  } catch {
+    return "invalido";
+  }
+  const separador = bruto.indexOf("|");
+  if (separador <= 0 || separador === bruto.length - 1) return "invalido";
+  return { criadoEm: bruto.slice(0, separador), id: bruto.slice(separador + 1) };
+}
+
+// Item da lista: o texto do casamento (estabelecimento ou a parte antes do "|" do destinatário/remetente).
+function paraItemDaLista(linha: LinhaDaListaDeRegras) {
+  const matchLabel =
+    linha.scope === "estabelecimento" ? linha.matchValue : (linha.matchValue.split("|")[0]?.trim() ?? "");
+  return {
+    id: linha.id,
+    scope: linha.scope,
+    matchLabel,
+    createdFrom: linha.createdFrom,
+    createdAt: linha.createdAt,
+    createdByName: linha.createdByName,
+    set: {
+      categoryId: linha.setCategoryId,
+      categoryName: linha.setCategoryName,
+      categoryColor: linha.setCategoryColor,
+      customName: linha.setCustomName,
+      spendType: linha.setSpendType,
+      incomeKind: linha.setIncomeKind,
+      incomeSubtype: linha.setIncomeSubtype,
+    },
+  };
+}
 
 export function transacoesRoutes(
   resolveSession: SessionResolver,
@@ -220,6 +266,35 @@ export function regrasRoutes(
   const rotas = new Hono<AppEnv>();
   rotas.use(requireHousehold(resolveSession));
 
+  // Lista das regras ativas do lar (TASK-0305): escopo, busca pelo estabelecimento ou pessoa, 50 por página. Só
+  // dados do lar da sessão; o cursor é opaco (base64 do último par created_at|id visto).
+  rotas.get("/", async (c) => {
+    const { householdId } = getSession(c);
+    const escopo = c.req.query("escopo") ?? "todos";
+    if (!ESCOPOS_DA_LISTA.includes(escopo as (typeof ESCOPOS_DA_LISTA)[number])) return dadosInvalidos(c);
+    const busca = (c.req.query("busca") ?? "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, "")
+      .trim();
+    const cursor = decodificaCursor(c.req.query("cursor"));
+    if (cursor === "invalido") return dadosInvalidos(c);
+    const filtro: FiltroDaListaDeRegras = {
+      escopo: escopo as FiltroDaListaDeRegras["escopo"],
+      busca,
+      cursor,
+    };
+    const lista = await listarRegras(c.var.db, householdId, filtro);
+    const ultimo = lista.temMais ? lista.linhas[lista.linhas.length - 1] : undefined;
+    return c.json(
+      {
+        total: lista.total,
+        items: lista.linhas.map(paraItemDaLista),
+        nextCursor: ultimo ? codificaCursor(ultimo.createdAt, ultimo.id) : null,
+      },
+      200,
+    );
+  });
+
   // Cria a regra do estabelecimento (compra) ou do destinatário (Pix e TED enviados). "Lembrar" resolve os iguais que
   // esperavam (sem a transação de origem); "Aplicar a todas" faz a primeira fatia do retroativo. Chave do servidor.
   rotas.post("/", async (c) => {
@@ -343,6 +418,12 @@ export function regrasRoutes(
   // Uma fatia do "Aplicar a todas": até 2.000 linhas por requisição. 409 quando a regra já foi desativada.
   rotas.post("/:id/apply-retroactive", async (c) => {
     const { householdId } = getSession(c);
+    // Só a regra de estabelecimento tem fatia retroativa (TASK-0305, decisão de nível 1): as outras devolvem 422,
+    // em vez de um 200 vazio que parece aplicado.
+    const regra = await lerRegraPorId(c.var.db, householdId, c.req.param("id"));
+    if (regra !== null && regra.scope !== "estabelecimento") {
+      return apiError(c, 422, "retroativo_indisponivel", "Esta regra não tem aplicação retroativa.");
+    }
     const resultado = await runRetroactiveSlice(
       c.var.db,
       householdId,
