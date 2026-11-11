@@ -10,25 +10,49 @@
 //   requests[].corpos: lista de corpos, usada um a um por rodada (ex.: alternar uma categoria para forçar a escrita).
 //   {i} na rota ou no corpo vira o número da rodada (1 a 12). Uma rota com {i} casa com qualquer número no lugar.
 //   requests[].via: rota só medida por um fluxo de navegador (flows), não por requisição direta.
+// Lar (TASK-0010): o lar é gravado uma vez e reaproveitado nas rodadas seguintes, se a impressão digital do banco (tabela
+// _medicao_cpu, fora das migrações) for igual à do arquivo e todas as requisições forem GET, sem fluxo de navegador. Os
+// outros casos apagam e gravam, como antes. A sessão de teste é renovada em toda rodada.
+// Evento perdido (TASK-0010): a rota que faltou no tail é medida de novo, uma vez, com o mesmo deploy e o mesmo tail.
 import { spawn } from "node:child_process";
 import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as lerJsonc } from "jsonc-parser";
+import {
+  AQUECIMENTO,
+  avaliaResultados,
+  escolheLar,
+  impressaoDoLar,
+  LIMITE_MS,
+  MEDIDAS,
+  mediaTail,
+  ordemDeEsvaziamento,
+  rotasParaRemedir,
+  sohLeitura,
+  TABELA_DA_MEDICAO,
+} from "./cpu-medicao.mjs";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const pastaDasTravas = resolve(raiz, "..", ".locks");
 const caminhoDaTrava = join(pastaDasTravas, "cloudflare-dev.lock");
 const WORKER = "matrimoney-dev";
 const BANCO = "matrimoney-dev-db";
-const LIMITE_MS = 10;
-const AQUECIMENTO = 2;
-const MEDIDAS = 10;
+const CHAVE_DO_LAR = "lar";
 const ESPERA_ANTES_DAS_REQUISICOES_MS = 5000;
 const ESPERA_DEPOIS_DAS_REQUISICOES_MS = 10000;
-// Uma requisição por segundo: em rajada o tail do Cloudflare perde eventos (medido na TASK-0003: 13 de 24 perdidos).
-const INTERVALO_ENTRE_REQUISICOES_MS = 1000;
+// 1,5 s entre requisições: em rajada o tail do Cloudflare perde eventos (medido na TASK-0003: 13 de 24 perdidos).
+const INTERVALO_ENTRE_REQUISICOES_MS = 1500;
 const wranglerJs = join(raiz, "node_modules", "wrangler", "bin", "wrangler.js");
 const viteJs = join(raiz, "node_modules", "vite", "bin", "vite.js");
 const ENTRADA_DE_MEDICAO = join(raiz, "scripts", "dev", "cpu-worker.ts");
@@ -192,47 +216,7 @@ function geraConfigDeDev(env, pedido) {
   return arquivo;
 }
 
-// Lê objetos JSON concatenados (um por evento, com ou sem quebra de linha), sem depender do formato da linha.
-function eventosDoTail(texto) {
-  const objetos = [];
-  let profundidade = 0;
-  let emTexto = false;
-  let escapado = false;
-  let inicio = -1;
-  for (let i = 0; i < texto.length; i++) {
-    const c = texto[i];
-    if (emTexto) {
-      if (escapado) escapado = false;
-      else if (c === "\\") escapado = true;
-      else if (c === '"') emTexto = false;
-      continue;
-    }
-    if (c === '"') emTexto = true;
-    else if (c === "{") {
-      if (profundidade === 0) inicio = i;
-      profundidade++;
-    } else if (c === "}") {
-      profundidade--;
-      if (profundidade === 0 && inicio >= 0) {
-        try {
-          objetos.push(JSON.parse(texto.slice(inicio, i + 1)));
-        } catch {
-          // um evento ilegível vira "faltou evento" na contagem
-        }
-        inicio = -1;
-      }
-    }
-  }
-  return objetos;
-}
-
 const esperar = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
-
-const mediana = (valores) => {
-  const ordenados = [...valores].sort((a, b) => a - b);
-  const meio = Math.floor(ordenados.length / 2);
-  return ordenados.length % 2 ? ordenados[meio] : (ordenados[meio - 1] + ordenados[meio]) / 2;
-};
 
 // {i} em textos, listas e objetos: a rodada entra no caminho, no corpo e nos cabeçalhos.
 const trocaI = (valor, i) => {
@@ -243,13 +227,6 @@ const trocaI = (valor, i) => {
   }
   return valor;
 };
-
-// Caminho com {i} vira um padrão: /api/rules/cpu-regra-{i} casa com cpu-regra-1, cpu-regra-2... (qualquer número).
-function padraoDoCaminho(caminho) {
-  const escapado = caminho.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // {id} casa com um segmento qualquer (o id do convite é um UUID gerado pelo Worker).
-  return new RegExp(`^${escapado.split("\\{i\\}").join("\\d+").split("\\{id\\}").join("[^/]+")}$`);
-}
 
 const base64Url = (bytes) => Buffer.from(bytes).toString("base64url");
 
@@ -286,50 +263,63 @@ function geraSessaoDeTeste() {
   return { token, hash: createHash("sha256").update(token).digest("hex") };
 }
 
-// Esvazia todas as tabelas do banco de medição, filhos antes dos pais (só dados [TEST]; o banco é de teste).
-async function esvaziaBanco(env, cfg) {
-  const consulta = await executa(
-    [
-      wranglerJs,
-      "d1",
-      "execute",
-      BANCO,
-      "-c",
-      cfg,
-      "--remote",
-      "--json",
-      "--command",
-      "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
-    ],
+// Consulta ao D1 de medição (o token já está no ambiente do processo filho). Devolve as linhas do primeiro comando.
+async function consultaD1(env, cfg, sql, mensagem) {
+  const resultado = await executa(
+    [wranglerJs, "d1", "execute", BANCO, "-c", cfg, "--remote", "--json", "--command", sql],
     ambienteDoWrangler(env),
   );
-  if (consulta.codigo !== 0) falha(`Leitura das tabelas falhou.\n${mascara(consulta.saida)}`);
-  const texto = consulta.saida;
-  const tabelas = JSON.parse(texto.slice(texto.indexOf("["), texto.lastIndexOf("]") + 1))[0]?.results ?? [];
-  const pais = new Map(tabelas.map((linha) => [linha.name, new Set()]));
-  for (const { name: filho, sql } of tabelas) {
-    for (const casa of String(sql ?? "").matchAll(/REFERENCES\s+[`"[]?(\w+)/gi)) {
-      const pai = casa[1];
-      if (pais.has(pai) && pai !== filho) pais.get(filho).add(pai);
-    }
+  if (resultado.codigo !== 0) falha(`${mensagem}\n${mascara(resultado.saida)}`);
+  const texto = resultado.saida;
+  return JSON.parse(texto.slice(texto.indexOf("["), texto.lastIndexOf("]") + 1))[0]?.results ?? [];
+}
+
+async function executaSql(env, cfg, sql, mensagem) {
+  const resultado = await executa(
+    [wranglerJs, "d1", "execute", BANCO, "-c", cfg, "--remote", "--command", sql],
+    ambienteDoWrangler(env),
+  );
+  if (resultado.codigo !== 0) falha(`${mensagem}\n${mascara(resultado.saida)}`);
+}
+
+// Esvazia todas as tabelas do banco de medição, filhos antes dos pais (só dados [TEST]; o banco é de teste).
+// A tabela da medição (_medicao_cpu) fica de fora: é a impressão digital do lar, e não é do app.
+async function esvaziaBanco(env, cfg) {
+  const tabelas = await consultaD1(
+    env,
+    cfg,
+    "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
+    "Leitura das tabelas falhou.",
+  );
+  for (const nome of ordemDeEsvaziamento(tabelas)) {
+    await executaSql(env, cfg, `DELETE FROM "${nome}"`, "Esvaziamento do banco de medição falhou.");
   }
-  const ordem = [];
-  while (pais.size > 0) {
-    const referenciadas = new Set([...pais.values()].flatMap((conjunto) => [...conjunto]));
-    const saem = [...pais.keys()].filter((nome) => !referenciadas.has(nome));
-    const lote = saem.length > 0 ? saem : [...pais.keys()];
-    for (const nome of lote) {
-      ordem.push(nome);
-      pais.delete(nome);
-    }
-  }
-  for (const nome of ordem) {
-    const apaga = await executa(
-      [wranglerJs, "d1", "execute", BANCO, "-c", cfg, "--remote", "--command", `DELETE FROM "${nome}"`],
-      ambienteDoWrangler(env),
-    );
-    if (apaga.codigo !== 0) falha(`Esvaziamento do banco de medição falhou.\n${mascara(apaga.saida)}`);
-  }
+}
+
+// Migrações do branch: só os .sql da pasta migrations (o meta do drizzle não entra).
+function lerMigracoes() {
+  const pasta = join(raiz, "migrations");
+  return readdirSync(pasta)
+    .filter((nome) => nome.endsWith(".sql"))
+    .sort()
+    .map((nome) => ({ nome, conteudo: readFileSync(join(pasta, nome), "utf8") }));
+}
+
+// Impressão gravada do lar. Cria a tabela da medição se faltar (fora das migrações do app); sem linha, devolve null.
+async function impressaoGravada(env, cfg) {
+  await executaSql(
+    env,
+    cfg,
+    `CREATE TABLE IF NOT EXISTS ${TABELA_DA_MEDICAO} (chave TEXT PRIMARY KEY, impressao TEXT NOT NULL, gravado_em TEXT NOT NULL)`,
+    "Criação da tabela de medição falhou.",
+  );
+  const linhas = await consultaD1(
+    env,
+    cfg,
+    `SELECT impressao FROM ${TABELA_DA_MEDICAO} WHERE chave = '${CHAVE_DO_LAR}'`,
+    "Leitura da impressão do lar falhou.",
+  );
+  return linhas[0]?.impressao ?? null;
 }
 
 async function main() {
@@ -398,33 +388,66 @@ async function main() {
     if (migracao.codigo !== 0) falha(`Migração remota falhou.\n${mascara(migracao.saida)}`);
     console.log("Migrações remotas ok.");
 
-    // Estado do banco de teste antes das rotas (só dados [TEST]): zera, depois o preparo da task, depois a sessão e a
-    // passkey de teste geradas nesta execução.
-    if (pedido.esvaziarBanco === true) await esvaziaBanco(env, cfg);
-    const comandos = [...(pedido.setupSql ?? [])];
+    // Lar: reaproveita o que está gravado quando a impressão digital bate e a rodada só lê; senão, apaga e grava.
+    const impressaoDoArquivo = impressaoDoLar({
+      setupSql: pedido.setupSql ?? [],
+      migracoes: lerMigracoes(),
+      esvaziarBanco: pedido.esvaziarBanco === true,
+      codigoDoEsvaziamento: esvaziaBanco.toString() + ordemDeEsvaziamento.toString(),
+    });
+    const impressaoDoBanco = await impressaoGravada(env, cfg);
+    const lar = escolheLar({
+      impressaoDoBanco,
+      impressaoDoArquivo,
+      requests: pedido.requests,
+      flows: pedido.flows,
+    });
+    console.log(
+      `Lar ${lar.modo === "reaproveitar" ? "reaproveitado" : "gravado"}: ${lar.motivo} (task ${pedido.task}).`,
+    );
+
     const agora = new Date();
     const expira = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
     const sessao = pedido.sessao === true ? geraSessaoDeTeste() : null;
     const passkeyDeLogin = (pedido.flows ?? []).some((fluxo) => fluxo.name === "login")
       ? geraPasskeyDeTeste()
       : null;
-    if (passkeyDeLogin) {
-      comandos.push(
-        `INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('${passkeyDeLogin.idDaPasskey}', 'cpu-membro-1', '${passkeyDeLogin.chavePublica}', 0, NULL, 'CPU Chromium', 'cadastro', '${agora.toISOString()}', NULL)`,
-      );
-    }
-    if (sessao) {
-      comandos.push(
-        `INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-sessao', 'cpu-membro-1', 'CPU-SEM-LOGIN', 0, NULL, 'CPU Chromium', 'cadastro', '${agora.toISOString()}', NULL)`,
+
+    if (lar.modo === "gravar") {
+      // Antes de mexer no lar, a impressão sai do banco: se o preparo falhar no meio, a próxima rodada grava de novo.
+      await executaSql(env, cfg, `DELETE FROM ${TABELA_DA_MEDICAO}`, "Limpeza da impressão do lar falhou.");
+      if (pedido.esvaziarBanco === true) await esvaziaBanco(env, cfg);
+      const comandos = [...(pedido.setupSql ?? [])];
+      if (passkeyDeLogin) {
+        comandos.push(
+          `INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('${passkeyDeLogin.idDaPasskey}', 'cpu-membro-1', '${passkeyDeLogin.chavePublica}', 0, NULL, 'CPU Chromium', 'cadastro', '${agora.toISOString()}', NULL)`,
+        );
+      }
+      if (sessao) {
+        comandos.push(
+          `INSERT INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-sessao', 'cpu-membro-1', 'CPU-SEM-LOGIN', 0, NULL, 'CPU Chromium', 'cadastro', '${agora.toISOString()}', NULL)`,
+          `INSERT INTO sessions (token_hash, member_id, passkey_id, created_at, last_seen_at, expires_at, notices_seen_at) VALUES ('${sessao.hash}', 'cpu-membro-1', 'cpu-passkey-sessao', '${agora.toISOString()}', '${agora.toISOString()}', '${expira}', NULL)`,
+        );
+      }
+      for (const sql of comandos) await executaSql(env, cfg, sql, "Preparo do banco de medição falhou.");
+      // Só uma rodada de leitura deixa o lar como o setupSql o deixou: só então a impressão volta para o banco.
+      if (sohLeitura(pedido)) {
+        await executaSql(
+          env,
+          cfg,
+          `INSERT INTO ${TABELA_DA_MEDICAO} (chave, impressao, gravado_em) VALUES ('${CHAVE_DO_LAR}', '${impressaoDoArquivo}', '${agora.toISOString()}')`,
+          "Gravação da impressão do lar falhou.",
+        );
+      }
+    } else if (sessao) {
+      // Reaproveitado: o lar fica como está. Só a sessão de teste é renovada, a cada rodada.
+      const renovaSessao = [
+        "DELETE FROM sessions WHERE passkey_id = 'cpu-passkey-sessao'",
+        `INSERT OR IGNORE INTO passkeys (id, member_id, public_key, counter, transports, device_name, added_via, created_at, last_used_at) VALUES ('cpu-passkey-sessao', 'cpu-membro-1', 'CPU-SEM-LOGIN', 0, NULL, 'CPU Chromium', 'cadastro', '${agora.toISOString()}', NULL)`,
         `INSERT INTO sessions (token_hash, member_id, passkey_id, created_at, last_seen_at, expires_at, notices_seen_at) VALUES ('${sessao.hash}', 'cpu-membro-1', 'cpu-passkey-sessao', '${agora.toISOString()}', '${agora.toISOString()}', '${expira}', NULL)`,
-      );
-    }
-    for (const sql of comandos) {
-      const preparo = await executa(
-        [wranglerJs, "d1", "execute", BANCO, "-c", cfg, "--remote", "--command", sql],
-        ambienteDoWrangler(env),
-      );
-      if (preparo.codigo !== 0) falha(`Preparo do banco de medição falhou.\n${mascara(preparo.saida)}`);
+      ];
+      for (const sql of renovaSessao)
+        await executaSql(env, cfg, sql, "Renovação da sessão de medição falhou.");
     }
 
     tailFilho = spawn(process.execPath, [wranglerJs, "tail", WORKER, "--format", "json"], {
@@ -439,9 +462,8 @@ async function main() {
     tailFilho.stderr.on("data", () => {});
     await esperar(ESPERA_ANTES_DAS_REQUISICOES_MS);
 
-    for (const rota of pedido.requests) {
-      // Rota com "via" é medida pelo fluxo de navegador indicado (abaixo): não é enviada daqui.
-      if (rota.via !== undefined) continue;
+    // Uma rota direta: AQUECIMENTO + MEDIDAS requisições, com a rodada no caminho, no corpo e nos cabeçalhos.
+    const enviaRota = async (rota) => {
       for (let i = 1; i <= AQUECIMENTO + MEDIDAS; i++) {
         const corpoDaRodada =
           rota.corpos !== undefined ? rota.corpos[(i - 1) % rota.corpos.length] : rota.body;
@@ -469,11 +491,11 @@ async function main() {
         }
         await esperar(INTERVALO_ENTRE_REQUISICOES_MS);
       }
-    }
+    };
 
-    // Fluxos de navegador (TASK-0103, cadastro com passkey; TASK-0104, entrada com passkey): rodam com o tail aberto. A
-    // URL e a configuração vão pelo ambiente do processo filho; a saída do fluxo nunca traz a URL (cpu-flows.mjs mascara).
-    for (const fluxo of pedido.flows ?? []) {
+    // Fluxo de navegador (TASK-0103, cadastro com passkey; TASK-0104, entrada com passkey, e os de TASK-0105 e TASK-0106):
+    // roda com o tail aberto. A URL e a configuração vão pelo ambiente do processo filho; a saída nunca traz a URL.
+    const rodaFluxo = async (fluxo) => {
       const ambienteDoFluxo = { ...ambienteDoWrangler(env), MM_CPU_URL: urlDoWorker, MM_CPU_CONFIG: cfg };
       if (["convite", "aparelho", "recuperacao"].includes(fluxo.name)) {
         // Convite, aparelho e recuperação agem pela sessão de teste do arquivo (sessao: true): o token vai só pelo ambiente.
@@ -493,57 +515,44 @@ async function main() {
       );
       if (rodada.codigo !== 0) falha(`Fluxo ${fluxo.name} falhou.\n${mascara(rodada.saida)}`);
       console.log(mascara(rodada.saida).trim());
+    };
+
+    for (const rota of pedido.requests) {
+      // Rota com "via" é medida pelo fluxo de navegador indicado (abaixo): não é enviada daqui.
+      if (rota.via !== undefined) continue;
+      await enviaRota(rota);
     }
+    for (const fluxo of pedido.flows ?? []) await rodaFluxo(fluxo);
 
     await esperar(ESPERA_DEPOIS_DAS_REQUISICOES_MS);
+    let resultados = mediaTail(pedido.requests, textoDoTail);
+
+    // Evento perdido: cada rota que faltou é medida de novo, uma vez, com o mesmo deploy e o mesmo tail aberto.
+    // Rota de fluxo de navegador: o fluxo que a mede roda de novo, uma vez, com as rodadas do arquivo.
+    const jaRemedidas = new Set();
+    const aRemedir = rotasParaRemedir(pedido.requests, resultados, jaRemedidas);
+    if (aRemedir.length > 0) {
+      console.log(
+        `Faltou evento do tail para: ${aRemedir.map((rota) => rota.name).join("; ")}. Medindo de novo, uma vez, com o mesmo deploy e o mesmo tail.`,
+      );
+      const fluxosDeNovo = new Set();
+      for (const rota of aRemedir) {
+        jaRemedidas.add(rota);
+        if (rota.via === undefined) {
+          await enviaRota(rota);
+          continue;
+        }
+        if (fluxosDeNovo.has(rota.via)) continue;
+        fluxosDeNovo.add(rota.via);
+        const fluxo = (pedido.flows ?? []).find((item) => item.name === rota.via);
+        if (!fluxo) falha(`A rota ${rota.name} é de um fluxo que não está no arquivo.`);
+        await rodaFluxo(fluxo);
+      }
+      await esperar(ESPERA_DEPOIS_DAS_REQUISICOES_MS);
+      resultados = mediaTail(pedido.requests, textoDoTail);
+    }
     tailFilho.kill();
     tailFilho = null;
-
-    const porRota = new Map();
-    for (const evento of eventosDoTail(textoDoTail)) {
-      const requisicao = evento?.event?.request;
-      if (typeof requisicao?.method !== "string" || typeof requisicao?.url !== "string") continue;
-      const chave = `${requisicao.method} ${new URL(requisicao.url).pathname}`;
-      if (!porRota.has(chave)) porRota.set(chave, []);
-      porRota.get(chave).push({ ts: Number(evento.eventTimestamp ?? 0), cpu: evento.cpuTime });
-    }
-
-    const resultados = [];
-    let faltou = false;
-    for (const rota of pedido.requests) {
-      // Os eventos da rota: a mesma rota (com {i} casando qualquer número), em ordem de chegada.
-      const padrao = padraoDoCaminho(rota.path);
-      const eventos = [];
-      for (const [chave, lista] of porRota) {
-        const separador = chave.indexOf(" ");
-        if (chave.slice(0, separador) !== rota.method) continue;
-        if (padrao.test(chave.slice(separador + 1))) eventos.push(...lista);
-      }
-      eventos.sort((a, b) => a.ts - b.ts);
-      const medidos = eventos.slice(AQUECIMENTO, AQUECIMENTO + MEDIDAS);
-      if (medidos.length < MEDIDAS || medidos.some((evento) => typeof evento.cpu !== "number")) {
-        faltou = true;
-        resultados.push({
-          name: rota.name,
-          method: rota.method,
-          path: rota.path,
-          n: medidos.length,
-          faltou: true,
-        });
-        continue;
-      }
-      const cpus = medidos.map((evento) => evento.cpu);
-      resultados.push({
-        name: rota.name,
-        method: rota.method,
-        path: rota.path,
-        n: cpus.length,
-        medianaMs: mediana(cpus),
-        maximaMs: Math.max(...cpus),
-        cpuMs: cpus,
-        faltou: false,
-      });
-    }
 
     console.log("");
     console.log("| Requisição | n | mediana (ms) | máxima (ms) |");
@@ -560,13 +569,17 @@ async function main() {
     mkdirSync(pastaDeResultados, { recursive: true });
     writeFileSync(
       join(pastaDeResultados, `cpu-${pedido.task}.json`),
-      `${JSON.stringify({ task: pedido.task, medidoEm: new Date().toISOString(), limiteMs: LIMITE_MS, requests: resultados }, null, 2)}\n`,
+      `${JSON.stringify({ task: pedido.task, medidoEm: new Date().toISOString(), limiteMs: LIMITE_MS, lar: lar.modo, requests: resultados }, null, 2)}\n`,
     );
 
-    if (faltou) falha("Faltou evento do tail para alguma requisição.");
-    const acima = resultados.filter((r) => r.medianaMs >= LIMITE_MS);
-    if (acima.length > 0) {
-      falha(`Mediana igual ou acima de ${LIMITE_MS} ms: ${acima.map((r) => r.name).join(", ")}.`);
+    const veredito = avaliaResultados(resultados);
+    if (veredito.faltaram.length > 0) {
+      falha(
+        `Faltou evento do tail para alguma requisição, mesmo depois da nova tentativa: ${veredito.faltaram.join(", ")}.`,
+      );
+    }
+    if (veredito.acima.length > 0) {
+      falha(`Mediana igual ou acima de ${LIMITE_MS} ms: ${veredito.acima.join(", ")}.`);
     }
   } finally {
     if (tailFilho) tailFilho.kill();
