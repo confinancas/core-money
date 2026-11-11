@@ -99,7 +99,7 @@ export function DocumentoIA() {
     <section className="flex min-h-dvh flex-col bg-bg">
       <Cabecalho />
       <form
-        className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-4 px-4 pt-5 pb-28 tablet:px-6"
+        className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-4 px-4 pt-5 pb-8 tablet:px-6"
         onSubmit={(evento) => {
           evento.preventDefault();
           void salvar();
@@ -161,12 +161,10 @@ export function DocumentoIA() {
           </p>
         )}
 
-        <div className="fixed inset-x-0 bottom-0 border-t border-divider bg-card px-4 pt-3 pb-7 tablet:px-6">
-          <div className="mx-auto w-full max-w-[720px]">
-            <Button type="submit" full loading={salvando} disabled={acima}>
-              Salvar documento
-            </Button>
-          </div>
+        <div className="pt-2">
+          <Button type="submit" full loading={salvando} disabled={acima}>
+            Salvar documento
+          </Button>
         </div>
       </form>
     </section>

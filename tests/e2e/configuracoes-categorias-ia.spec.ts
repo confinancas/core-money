@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { consultaSql, executaSql } from "./helpers/db";
 import { LAR_DA_INSTALACAO_PRONTA, signUpAndSignIn } from "./helpers/sessao";
+import { semearInstalacaoPronta } from "./helpers/setup";
 
 // Configurações › Categorias e IA (TASK-0305), nas três larguras (projetos celular, tablet e desktop do Playwright).
 // A instância pronta é compartilhada pelas specs: cada teste põe e tira só as próprias linhas, com o sufixo "0305" e os
@@ -40,6 +41,11 @@ async function preparaCategorias(page: Page): Promise<void> {
   await page.reload();
   await expect(page.getByRole("link", { name: PRINCIPAL, exact: true })).toBeVisible();
 }
+
+// A instância pronta precisa estar pronta mesmo quando esta spec roda sozinha (sem a spec de abertura antes).
+test.beforeAll(() => {
+  semearInstalacaoPronta();
+});
 
 test.beforeEach(async ({ page }) => {
   limpaDoArquivo();
@@ -90,14 +96,18 @@ test("cenário 5: arquivar a principal leva as subcategorias; reativar a princip
   await expect(page.getByText("As subcategorias também serão arquivadas.")).toBeVisible();
   await page.getByRole("button", { name: "Arquivar", exact: true }).click();
 
-  await expect(page.getByRole("button", { name: /Arquivadas \(3\)/ })).toBeVisible();
-  const arquivadas = consultaSql(
-    "pronta",
-    `SELECT COUNT(*) AS n FROM categories WHERE id LIKE 'e2e-0305-%' AND archived_at IS NOT NULL`,
-  );
-  expect(arquivadas[0]).toMatchObject({ n: 3 });
+  // O arquivar grava no banco antes de a tela mostrar o resultado; espera o banco, não a tela.
+  await expect
+    .poll(
+      () =>
+        consultaSql(
+          "pronta",
+          `SELECT COUNT(*) AS n FROM categories WHERE id LIKE 'e2e-0305-%' AND archived_at IS NOT NULL`,
+        )[0]?.n,
+    )
+    .toBe(3);
 
-  // Reativar a principal pela lista de arquivadas (no celular, a lista volta pela URL).
+  // No celular, o editor não mostra a lista: a lista volta pela URL, e ali as arquivadas aparecem.
   await page.goto("/configuracoes/categorias");
   await page.getByRole("button", { name: /Arquivadas \(3\)/ }).click();
   await page.getByRole("link", { name: PRINCIPAL, exact: true }).click();

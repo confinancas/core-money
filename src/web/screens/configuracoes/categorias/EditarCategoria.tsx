@@ -20,7 +20,6 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [erroCampos, setErroCampos] = useState<CategoryFieldErrors>({});
   const [confirmando, setConfirmando] = useState(false);
-  const [salvoEm, setSalvoEm] = useState<number>(0);
 
   const temSubcategorias = todas.some((c) => c.parentId === categoria.id && !c.archived);
 
@@ -31,7 +30,6 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
     setErroCampos({});
     try {
       await updateCategory(categoria.id, entrada);
-      setSalvoEm(Date.now());
       aoMudar();
     } catch (erro) {
       if (erro instanceof ApiError && erro.code === "validacao" && erro.fields) setErroCampos(erro.fields);
@@ -71,7 +69,18 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
   };
 
   return (
-    <div key={`${categoria.id}-${salvoEm}`} className="flex flex-col">
+    // O formulário recomeça quando os dados da categoria mudam (ou seja, quando a lista recarrega depois de salvar).
+    <div
+      key={[
+        categoria.id,
+        categoria.name,
+        categoria.color,
+        categoria.parentId ?? "",
+        categoria.aiHint ?? "",
+        categoria.archived,
+      ].join("|")}
+      className="flex flex-col"
+    >
       <CategoryForm
         categorias={todas}
         idEmEdicao={categoria.id}
