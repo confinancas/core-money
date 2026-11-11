@@ -91,6 +91,7 @@ export function EditarCategoria({ categoria, todas, aoMudar }: Props) {
       <CategoryForm
         categorias={todas}
         idEmEdicao={categoria.id}
+        empilhado
         inicial={{
           name: inicial.name,
           color: inicial.color,

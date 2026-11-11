@@ -47,3 +47,12 @@ describe("F1: salvar o editor não mexe no tipo padrão", () => {
     expect(corpo).toMatchObject({ name: "[TEST] Serviços gerais", color: "#1B84F2", parentId: null });
   });
 });
+
+describe("F3: no editor ao lado da lista, o formulário fica em coluna no tablet", () => {
+  it("a prévia e os campos não ficam lado a lado (sem tablet:flex-row no corpo do formulário)", () => {
+    const { container } = render(<EditarCategoria categoria={servicos} todas={[servicos]} aoMudar={() => {}} />);
+    const corpo = container.querySelector("form > div");
+    expect(corpo).not.toBeNull();
+    expect(corpo?.className).not.toContain("tablet:flex-row");
+  });
+});
