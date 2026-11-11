@@ -157,7 +157,13 @@ export function Regras() {
             <SkeletonCard />
           )
         ) : pagina.items.length === 0 ? (
-          <EmptyState title="Nenhuma regra ainda. Elas aparecem quando vocês confirmam uma categoria." />
+          <EmptyState
+            title={
+              buscaAplicada === ""
+                ? "Nenhuma regra ainda. Elas aparecem quando vocês confirmam uma categoria."
+                : "Nenhuma regra com esse nome."
+            }
+          />
         ) : (
           <Card className="flex flex-col overflow-hidden p-0" aria-label="Regras">
             {pagina.items.map((regra) => (
