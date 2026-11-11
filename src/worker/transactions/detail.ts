@@ -9,10 +9,10 @@ import { assertSpendTypeAllowed } from "../spend-types/resolve";
 // sessão (id de outro lar é "não encontrada"). A descrição original nunca é gravada aqui. A categoria não passa por
 // aqui: é a rota PUT /api/transactions/:id/category (apply.ts).
 
-// Movimentos que podem ser ocultados (gasto de terceiros). Entrada e pagamento de fatura não.
-const MOVIMENTOS_OCULTAVEIS: readonly string[] = [
+// Saída (TASK-0802, movimentosComTipo): um movimento de saída com valor negativo, ou o estorno. Tipo de gasto e ocultar
+// só valem para saída. Movimento de saída com valor positivo (o "outro" de cashback) é entrada: 422, como as outras.
+const MOVIMENTOS_DE_SAIDA: readonly string[] = [
   "compra",
-  "estorno",
   "pix_enviado",
   "ted_enviada",
   "debito",
@@ -20,17 +20,11 @@ const MOVIMENTOS_OCULTAVEIS: readonly string[] = [
   "outro",
 ];
 
-// Movimentos que têm tipo de gasto (TASK-0802): saídas de conta ou de cartão, e o estorno. Entrada, pagamento de
-// fatura e transferência não têm tipo.
-const MOVIMENTOS_COM_TIPO: readonly string[] = [
-  "compra",
-  "estorno",
-  "pix_enviado",
-  "ted_enviada",
-  "debito",
-  "boleto",
-  "outro",
-];
+function ehSaida(linha: { movement: string; amountCents: number }): boolean {
+  return (
+    linha.movement === "estorno" || (linha.amountCents < 0 && MOVIMENTOS_DE_SAIDA.includes(linha.movement))
+  );
+}
 
 // Uma consulta só: a transação com categoria (e a mãe), sugestão da IA, cartão ou conta, fatura, ciclo e o dia de
 // início do lar. O lar entra no WHERE e em cada junção, e a transação removida não aparece.
@@ -227,7 +221,7 @@ export async function patchTransaction(
   }
 
   if (corpo.spendType !== undefined) {
-    if (!MOVIMENTOS_COM_TIPO.includes(atual.movement)) {
+    if (!ehSaida(atual)) {
       return {
         tipo: "recusada",
         codigo: "movimento_invalido",
@@ -249,7 +243,7 @@ export async function patchTransaction(
   }
 
   if (corpo.hidden !== undefined) {
-    if (!MOVIMENTOS_OCULTAVEIS.includes(atual.movement)) {
+    if (!ehSaida(atual)) {
       return {
         tipo: "recusada",
         codigo: "movimento_invalido",

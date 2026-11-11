@@ -578,3 +578,124 @@ describe("casos de borda do detalhe", () => {
     expect(corpo.cycle).toEqual({ key: "2026-10", startsOn: "2026-10-15", endsOn: "2026-11-14" });
   });
 });
+
+// Rodada 1 (F1 a F5): a entrada com nome de saída não tem tipo nem se oculta; os lares não se misturam nas junções
+// (categoria, sugestão e ciclo); o nome é contado sem os espaços das pontas.
+describe("rodada 1: entrada com nome de saída, lar nas junções e nome com espaços", () => {
+  // Cashback de +5,00 na conta: movimento "outro" com valor positivo (a entrada que a API tem de recusar).
+  async function cashbackNaConta(lar: Lar, valor: number, movimento = "outro"): Promise<string> {
+    return compraNaConta(lar, movimento, "[TEST] Cashback", valor);
+  }
+
+  it("F1: o cashback (outro, +5,00) não tem tipo, não se oculta, e o nome grava", async () => {
+    const lar = await criarLar();
+    const id = await cashbackNaConta(lar, 500);
+    const app = appDoLar(lar);
+
+    const detalhe = (await (await obter(app, id)).json()) as { spendType: unknown };
+    expect(detalhe.spendType).toBeNull();
+
+    const tipo = await alterar(app, id, { spendType: "fixos" });
+    expect(tipo.status).toBe(422);
+    expect(await tipo.json()).toEqual({
+      error: "movimento_invalido",
+      message: "Esta transação não tem tipo de gasto.",
+    });
+
+    const oculta = await alterar(app, id, { hidden: true });
+    expect(oculta.status).toBe(422);
+    expect(await oculta.json()).toEqual({
+      error: "movimento_invalido",
+      message: "Esta transação não pode ser ocultada aqui.",
+    });
+
+    expect((await alterar(app, id, { customName: "Cashback do banco" })).status).toBe(200);
+    const banco = await linhaDoBanco(id);
+    expect(banco.spend_type).toBeNull();
+    expect(banco.spend_type_source).toBeNull();
+    expect(banco.hidden).toBe(0);
+    expect(banco.custom_name).toBe("Cashback do banco");
+  });
+
+  it("F1: rendimento positivo (entrada) também recusa tipo; o mesmo movimento com valor negativo não é entrada", async () => {
+    const lar = await criarLar();
+    const entrada = await compraNaConta(lar, "rendimento", "[TEST] Rendimento", 1200);
+    const recusada = await alterar(appDoLar(lar), entrada, { spendType: "conforto" });
+    expect(recusada.status).toBe(422);
+    expect((await linhaDoBanco(entrada)).spend_type).toBeNull();
+  });
+
+  it("F1: estorno de cartão com valor positivo continua saída (tem tipo e se oculta)", async () => {
+    const lar = await criarLar();
+    const id = await compraNoCartao(lar, { movement: "estorno", valor: 5000 });
+    const app = appDoLar(lar);
+    expect((await alterar(app, id, { spendType: "conforto" })).status).toBe(200);
+    expect((await alterar(app, id, { hidden: true })).status).toBe(200);
+  });
+
+  it("K2: categoria e sugestão de outro lar não aparecem no detalhe", async () => {
+    const lar = await criarLar();
+    const outro = await criarOutroLar();
+    const categoriaAlheia = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO categories (id, household_id, name, color, parent_id, default_spend_type, ai_hint, sort, archived_at) VALUES (?, ?, '[TEST] Categoria de outro lar', '#22B8E0', NULL, NULL, NULL, 0, NULL)",
+    )
+      .bind(categoriaAlheia, outro.householdId)
+      .run();
+    const id = await compraNoCartao(lar, { categoryId: categoriaAlheia, aiCategoryId: categoriaAlheia });
+
+    const corpo = (await (await obter(appDoLar(lar), id)).json()) as {
+      category: unknown;
+      aiSuggestion: unknown;
+    };
+    expect(corpo.category).toBeNull();
+    expect(corpo.aiSuggestion).toBeNull();
+  });
+
+  // K2 (mãe): a subcategoria deste lar aponta para uma mãe de outro lar. O nome da mãe não pode aparecer.
+  it("K2 (mãe): a mãe de outro lar não aparece como 'dentro de' da categoria deste lar", async () => {
+    const lar = await criarLar();
+    const outro = await criarOutroLar();
+    const maeAlheia = crypto.randomUUID();
+    const subcategoria = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO categories (id, household_id, name, color, parent_id, default_spend_type, ai_hint, sort, archived_at) VALUES (?, ?, '[TEST] Mãe de outro lar', '#22B8E0', NULL, NULL, NULL, 0, NULL)",
+      ).bind(maeAlheia, outro.householdId),
+      env.DB.prepare(
+        "INSERT INTO categories (id, household_id, name, color, parent_id, default_spend_type, ai_hint, sort, archived_at) VALUES (?, ?, '[TEST] Sub deste lar', '#22B8E0', ?, NULL, NULL, 0, NULL)",
+      ).bind(subcategoria, lar.householdId, maeAlheia),
+    ]);
+    const id = await compraNoCartao(lar, { categoryId: subcategoria });
+
+    const corpo = (await (await obter(appDoLar(lar), id)).json()) as {
+      category: { name: string; parentName: string | null } | null;
+    };
+    expect(corpo.category).toEqual({ id: subcategoria, name: "[TEST] Sub deste lar", parentName: null });
+  });
+
+  it("K3: o ciclo não usa a linha de cycles de outro lar com a mesma chave", async () => {
+    const lar = await criarLar();
+    const outro = await criarOutroLar();
+    // Outro lar tem o ciclo 2026-10 com outras datas; o deste lar não tem linha e cai no dia de início (11).
+    await env.DB.prepare(
+      "INSERT INTO cycles (household_id, key, starts_on, ends_on) VALUES (?, '2026-10', '2026-10-01', '2026-10-31')",
+    )
+      .bind(outro.householdId)
+      .run();
+    const id = await compraNoCartao(lar);
+    const corpo = (await (await obter(appDoLar(lar), id)).json()) as { cycle: unknown };
+    expect(corpo.cycle).toEqual({ key: "2026-10", startsOn: "2026-10-11", endsOn: "2026-11-10" });
+  });
+
+  it("K4: o nome conta sem os espaços das pontas: 80 letras com espaços passam; 81 com espaços recusam", async () => {
+    const lar = await criarLar();
+    const id = await compraNoCartao(lar);
+    const app = appDoLar(lar);
+    const aceito = await alterar(app, id, { customName: ` ${"a".repeat(80)} ` });
+    expect(aceito.status).toBe(200);
+    expect((await linhaDoBanco(id)).custom_name).toBe("a".repeat(80));
+    const recusado = await alterar(app, id, { customName: ` ${"b".repeat(81)} ` });
+    expect(recusado.status).toBe(422);
+  });
+});
