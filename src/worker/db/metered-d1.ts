@@ -1,7 +1,10 @@
 // Embrulha o binding do D1 e conta o uso de cada consulta (ADR-008).
 // calls: idas ao D1 (all, run, first, raw, exec, dump e batch; um batch conta 1).
 // statements: comandos executados (um batch de 3 conta 3).
-// unmeteredStatements: comandos sem linhas devolvidas (raw, exec, dump); entram em calls e statements.
+// rowsRead / rowsWritten / sizeBytes: o `meta` que o D1 devolve em all(), run() e batch() (e em first(), que passa por all()).
+// estimatedRows: as linhas que raw() devolveu. O D1 não manda `meta` em raw(), então cada linha devolvida conta como lida
+// (uma estimativa por baixo, marcada na API). O Drizzle lê por raw() em todo select (TASK-0109).
+// unmeteredStatements: exec e dump, que não devolvem linhas nem `meta` (entram em calls e statements).
 
 export type Meter = {
   calls: number;
@@ -9,6 +12,7 @@ export type Meter = {
   rowsRead: number;
   rowsWritten: number;
   sizeBytes: number;
+  estimatedRows: number;
   unmeteredStatements: number;
 };
 
@@ -18,6 +22,7 @@ export const newMeter = (): Meter => ({
   rowsRead: 0,
   rowsWritten: 0,
   sizeBytes: 0,
+  estimatedRows: 0,
   unmeteredStatements: 0,
 });
 
@@ -65,8 +70,13 @@ export function meteredD1(db: D1Database, meter: Meter): D1Database {
       },
       async raw(options?: { columnNames?: boolean }) {
         ida();
-        semMedida();
-        return options?.columnNames ? stmt.raw({ columnNames: true }) : stmt.raw();
+        meter.statements++;
+        const linhas = options?.columnNames ? await stmt.raw({ columnNames: true }) : await stmt.raw();
+        // Com columnNames, a primeira linha é o cabeçalho: não é linha lida.
+        const quantas = options?.columnNames ? Math.max(linhas.length - 1, 0) : linhas.length;
+        meter.rowsRead += quantas;
+        meter.estimatedRows += quantas;
+        return linhas;
       },
     };
     inner.set(wrapped, stmt);
