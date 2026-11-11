@@ -20,6 +20,8 @@ export function DocumentoIA() {
   const [salvoEm, setSalvoEm] = useState<string | null>(null);
   const [conflito, setConflito] = useState(false);
   const [meuTexto, setMeuTexto] = useState<string | null>(null);
+  // A versão salva que veio no 409 (current): "Ver a versão salva" usa essa, sem nova leitura.
+  const [versaoSalva, setVersaoSalva] = useState<DocumentoDaIA | null>(null);
 
   function carregar() {
     setFalhou(false);
@@ -74,9 +76,12 @@ export function DocumentoIA() {
         setSalvoEm(resultado.documento.updatedAt);
         setTexto(resultado.documento.text);
         setConflito(false);
+        // Salvou de novo: a cópia do texto anterior sai da tela.
+        setMeuTexto(null);
       } else {
         setConflito(true);
         setMeuTexto(texto);
+        setVersaoSalva(resultado.atual);
       }
     } catch {
       setErro("Não deu para salvar. Tente de novo.");
@@ -86,13 +91,12 @@ export function DocumentoIA() {
   }
 
   function verVersaoSalva() {
-    // O texto digitado já está em meuTexto; a versão salva entra no lugar dele.
-    void fetchAiDocument().then((atual) => {
-      setTexto(atual.text);
-      setBase(atual.updatedAt);
-      setSalvoEm(atual.updatedAt);
-      setConflito(false);
-    });
+    // O texto digitado fica em meuTexto (a caixa de cópia continua na tela); a versão salva entra no lugar dele.
+    if (versaoSalva === null) return;
+    setTexto(versaoSalva.text);
+    setBase(versaoSalva.updatedAt);
+    setSalvoEm(versaoSalva.updatedAt);
+    setConflito(false);
   }
 
   return (
@@ -143,7 +147,7 @@ export function DocumentoIA() {
           {salvoEm !== null && <span className="text-ink-2">Salvo em {formataData(salvoEm)}</span>}
         </div>
 
-        {meuTexto !== null && conflito && (
+        {meuTexto !== null && (
           <div className="flex flex-col gap-2">
             <span className="text-[13px] text-ink-2">Seu texto, para copiar se precisar:</span>
             <textarea
