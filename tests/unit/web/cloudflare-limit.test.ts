@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiFetch, CODIGO_DE_LIMITE, isCloudflareLimitResponse } from "@/lib/api";
-import { lerLimiteAtingido, limpaLimiteAtingido } from "@/usage/limite-store";
+import {
+  ApiError,
+  apiFetch,
+  CODIGO_DE_LIMITE,
+  definirAcaoDeSessaoExpirada,
+  isCloudflareLimitResponse,
+} from "@/lib/api";
+import { avisaLimiteAtingido, lerLimiteAtingido, limpaLimiteAtingido } from "@/usage/limite-store";
 
 // Limite do plano gratuito (TASK-0109, cenário 10): a página 1027 da Cloudflare e o 429 do D1 viram o código
 // limite_atingido; um JSON da API nunca conta como limite.
@@ -73,5 +79,41 @@ describe("apiFetch e o limite", () => {
 
     expect((erro as ApiError).code).toBe("dados_invalidos");
     expect(lerLimiteAtingido()).toBeNull();
+  });
+});
+
+// Rodada 1 (TASK-0109): uma resposta boa da API limpa o aviso; a leitura de fundo não leva a /entrar no 401.
+describe("rodada 1: resposta boa limpa o aviso e a leitura de fundo não redireciona", () => {
+  it("uma resposta 200 limpa o aviso de limite guardado", async () => {
+    avisaLimiteAtingido("requisicoes");
+    comFetch(async () => Response.json({ ok: true }));
+
+    await apiFetch("/api/health");
+
+    expect(lerLimiteAtingido()).toBeNull();
+  });
+
+  it("no 401 com semRedirecionarNaSessao, a sessão expirada não é acionada", async () => {
+    comFetch(async () => Response.json({ error: "nao_autenticado" }, { status: 401 }));
+    const acao = vi.fn();
+    const restaura = definirAcaoDeSessaoExpirada(acao);
+    try {
+      await apiFetch("/api/usage", {}, { semRedirecionarNaSessao: true }).catch(() => undefined);
+      expect(acao).not.toHaveBeenCalled();
+    } finally {
+      restaura();
+    }
+  });
+
+  it("no 401 sem a opção, a sessão expirada continua sendo acionada", async () => {
+    comFetch(async () => Response.json({ error: "nao_autenticado" }, { status: 401 }));
+    const acao = vi.fn();
+    const restaura = definirAcaoDeSessaoExpirada(acao);
+    try {
+      await apiFetch("/api/usage").catch(() => undefined);
+      expect(acao).toHaveBeenCalledTimes(1);
+    } finally {
+      restaura();
+    }
   });
 });

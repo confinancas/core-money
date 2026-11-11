@@ -1,17 +1,23 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { brand } from "../../shared/brand";
-import type { MotivoDoLimite } from "./limite-store";
+import { limpaLimiteAtingido, type MotivoDoLimite } from "./limite-store";
 import { UpgradeHelp } from "./UpgradeHelp";
 
 // Tela do limite atingido (TASK-0109): fica no lugar do conteúdo, dentro da moldura. As telas são estáticas e continuam
 // abrindo; o casal nunca vê a página de erro da Cloudflare sem explicação.
+// "Tentar de novo" (TASK-0109, rodada 1): limpa o aviso e recarrega a página, que refaz a sessão, o uso e a tela.
+export function tentarDeNovoDoLimite(): void {
+  limpaLimiteAtingido();
+  window.location.reload();
+}
+
 export function LimitReached({
   motivo,
-  aoTentarDeNovo,
+  aoTentarDeNovo = tentarDeNovoDoLimite,
 }: {
   motivo: MotivoDoLimite;
-  aoTentarDeNovo: () => void;
+  aoTentarDeNovo?: () => void;
 }) {
   const [ajudaAberta, setAjudaAberta] = useState(false);
   const causa =

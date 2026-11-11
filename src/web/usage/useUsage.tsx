@@ -35,7 +35,8 @@ export function UsoProvider({ children }: { children: ReactNode }) {
   // Falha de leitura mantém o último valor: o aviso de limite (se for o caso) já aparece pela moldura.
   const atualizar = useCallback(async () => {
     try {
-      const resposta = await apiFetch<UsageResponse>("/api/usage");
+      // Leitura de fundo: no 401 não leva a /entrar (quem decide a sessão é a sonda e o RequireSession).
+      const resposta = await apiFetch<UsageResponse>("/api/usage", {}, { semRedirecionarNaSessao: true });
       ultimaLeitura.current = Date.now();
       setUso(resposta);
     } catch {

@@ -1,5 +1,5 @@
 import { type ApiErrorBody, isApiErrorBody } from "../../shared/api";
-import { avisaLimiteAtingido } from "../usage/limite-store";
+import { avisaLimiteAtingido, limpaLimiteAtingido } from "../usage/limite-store";
 
 const MENSAGEM_PADRAO = "Algo deu errado. Tente de novo.";
 
@@ -107,7 +107,15 @@ export function apiEnviar<T>(caminho: string, metodo: "POST" | "PUT", corpo: unk
 }
 
 // Chamada à API do mesmo site: cookies da mesma origem, JSON. Não mostra detalhe técnico: a mensagem é da convenção.
-export async function apiFetch<T>(caminho: string, init: RequestInit = {}): Promise<T> {
+// Opções de uma chamada. semRedirecionarNaSessao: a leitura de fundo (o uso do plano, na moldura) não leva a pessoa a
+// /entrar no 401: quem decide a sessão é a sonda e o RequireSession (TASK-0109, rodada 1).
+export type OpcoesDaChamada = { semRedirecionarNaSessao?: boolean };
+
+export async function apiFetch<T>(
+  caminho: string,
+  init: RequestInit = {},
+  opcoes: OpcoesDaChamada = {},
+): Promise<T> {
   const cabecalhos = new Headers(init.headers);
   if (!cabecalhos.has("accept")) cabecalhos.set("accept", "application/json");
 
@@ -142,7 +150,8 @@ export async function apiFetch<T>(caminho: string, init: RequestInit = {}): Prom
       if (
         resposta.status === 401 &&
         erro.error === "nao_autenticado" &&
-        caminho !== CAMINHO_DA_SONDA_DA_SESSAO
+        caminho !== CAMINHO_DA_SONDA_DA_SESSAO &&
+        !opcoes.semRedirecionarNaSessao
       ) {
         levaParaEntrar();
       }
@@ -156,6 +165,9 @@ export async function apiFetch<T>(caminho: string, init: RequestInit = {}): Prom
     }
     throw new ApiError(resposta.status, "erro_http", MENSAGEM_PADRAO);
   }
+
+  // Uma resposta boa da API mostra que o limite passou: o aviso guardado sai (TASK-0109, rodada 1).
+  limpaLimiteAtingido();
 
   // 204 não tem corpo: o resultado é undefined, e não um erro de JSON (correção herdada da TASK-0005).
   if (resposta.status === 204) return undefined as T;

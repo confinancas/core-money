@@ -2,7 +2,7 @@ import { type ReactNode, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { NewDeviceNotice } from "../../components/NewDeviceNotice";
 import { LimitReached } from "../../usage/LimitReached";
-import { lerLimiteAtingido, limpaLimiteAtingido, ouvirLimiteAtingido } from "../../usage/limite-store";
+import { lerLimiteAtingido, ouvirLimiteAtingido } from "../../usage/limite-store";
 import { UsageBanner } from "../../usage/UsageBanner";
 import { UsoProvider } from "../../usage/useUsage";
 import { useFeatures } from "../features";
@@ -22,9 +22,10 @@ export function AppFrame({ frame, aba, children }: { frame: Frame; aba: Aba | nu
   // Limite do plano gratuito atingido (TASK-0109): o conteúdo sai e a tela LimitReached entra no lugar, na moldura.
   const limite = useSyncExternalStore(ouvirLimiteAtingido, lerLimiteAtingido);
 
-  if (frame === "bare") return <>{children}</>;
+  // A Abertura (bare) também explica o limite: sem a moldura, mas com a mesma tela (TASK-0109, rodada 1).
+  if (frame === "bare") return limite ? <LimitReached motivo={limite} /> : children;
 
-  const conteudo = limite ? <LimitReached motivo={limite} aoTentarDeNovo={limpaLimiteAtingido} /> : children;
+  const conteudo = limite ? <LimitReached motivo={limite} /> : children;
 
   // Os avisos (TASK-0106 e TASK-0109) ficam no topo do conteúdo, nas três molduras com conteúdo do app.
   const moldura =

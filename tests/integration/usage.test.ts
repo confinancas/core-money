@@ -373,3 +373,55 @@ describe("sem sessão", () => {
     expect(escrita.status).toBe(401);
   });
 });
+
+// Rodada 1 (TASK-0109): o último tamanho medido é o do dia mais recente; o cron que lança conta e propaga o erro; e o
+// erro do Drizzle com "quota" num parâmetro não vira limite (responde 500).
+describe("rodada 1: último tamanho, cron que lança e falha do Drizzle", () => {
+  it("o tamanho do banco é o do dia mais recente que mediu, e não o do dia mais antigo", async () => {
+    await criaLarDeDuas();
+    await semeiaUso("2026-10-30", { size_bytes: 100_000 });
+    await semeiaUso("2026-11-01", { size_bytes: 200_000 });
+    await semeiaUso(hoje(), { size_bytes: 0 });
+
+    const corpo = await usoDaApi(appMedido(), COOKIE_DO_TITULAR);
+
+    expect(corpo.resources.find((item) => item.id === "size_bytes")?.used).toBe(200_000);
+  });
+
+  it("o cron que lança: a execução conta 1 requisição e o erro sobe para quem chamou", async () => {
+    const cron = meteredScheduled(async () => {
+      throw new Error("falha de teste no cron");
+    });
+    const ctx = createExecutionContext();
+
+    await expect(cron({} as ScheduledController, env, ctx)).rejects.toThrow("falha de teste no cron");
+    await waitOnExecutionContext(ctx);
+
+    expect((await linhaDo(hoje()))?.requests).toBe(1);
+  });
+
+  it("chave estrangeira com 'quota' num parâmetro do Drizzle responde 500, e não o limite do plano", async () => {
+    await criaLarDeDuas();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const app = createApp({
+      rotasDoApp: (rotas) => {
+        rotas.get("/teste-de-fk", async (c) => {
+          await c.var.db.insert(members).values({
+            id: "[TEST] membro-sem-lar",
+            householdId: "[TEST] lar-que-nao-existe",
+            name: "[TEST] Quota do consórcio",
+            email: "quota@example.com",
+            role: "conjuge",
+            createdAt: new Date().toISOString(),
+          });
+          return c.json({ ok: true }, 200);
+        });
+      },
+    });
+
+    const resposta = await callApi(app, "GET", "/api/teste-de-fk", undefined, { cookie: COOKIE_DO_TITULAR });
+
+    expect(resposta.status).toBe(500);
+    expect(log).not.toHaveBeenCalledWith("limite_d1");
+  });
+});

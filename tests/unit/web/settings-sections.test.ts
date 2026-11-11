@@ -77,7 +77,16 @@ describe("colunas por largura", () => {
     const registro = [...SETTINGS_SECTIONS, falsa];
 
     expect(colunasDasSecoes(registro, "celular").map(ids)).toEqual([
-      ["casal", "falsa-de-teste", "ciclo", "distribuicao-da-renda", "renda-fixa", "sincronizacao", "plano-cloudflare", "dados"],
+      [
+        "casal",
+        "falsa-de-teste",
+        "ciclo",
+        "distribuicao-da-renda",
+        "renda-fixa",
+        "sincronizacao",
+        "plano-cloudflare",
+        "dados",
+      ],
     ]);
     expect(colunasDasSecoes(registro, "tablet").map(ids)).toEqual([
       ["casal", "ciclo", "distribuicao-da-renda"],

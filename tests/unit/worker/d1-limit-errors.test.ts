@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { D1_LIMIT_PATTERNS, isD1DailyLimitError } from "../../../src/worker/usage/d1-limit-errors";
+import {
+  causaDoErro,
+  D1_LIMIT_PATTERNS,
+  isD1DailyLimitError,
+} from "../../../src/worker/usage/d1-limit-errors";
 
-// Erro de limite diário do D1 (TASK-0109, cenário 9): os padrões ficam em um arquivo, e a cadeia de causas é lida.
+// Erro de limite diário do D1 (TASK-0109, cenário 9): só a causa conta; o embrulho do Drizzle (SQL e parâmetros)
+// não dispara; e os erros passageiros do D1 (CPU, memória) não são limite diário.
 describe("isD1DailyLimitError", () => {
   it("reconhece os textos de limite diário dos padrões", () => {
     expect(D1_LIMIT_PATTERNS.length).toBe(3);
@@ -14,6 +19,21 @@ describe("isD1DailyLimitError", () => {
     const original = new Error("D1_ERROR: exceeded daily limit");
     const embrulhado = new Error("Failed query: select 1", { cause: original });
     expect(isD1DailyLimitError(embrulhado)).toBe(true);
+    expect(causaDoErro(embrulhado)).toBe(original);
+  });
+
+  it("falso positivo da rodada 1: parâmetro com 'quota' num erro de chave estrangeira não é limite", () => {
+    const original = new Error("FOREIGN KEY constraint failed");
+    const embrulhado = new Error(
+      "Failed query: insert into members (name) values (?)\nparams: [TEST] Quota do consórcio",
+      { cause: original },
+    );
+    expect(isD1DailyLimitError(embrulhado)).toBe(false);
+  });
+
+  it("falso positivo da rodada 1: erro passageiro do D1 por CPU ou memória não é limite diário", () => {
+    expect(isD1DailyLimitError(new Error("D1 DB exceeded its CPU time limit and was reset"))).toBe(false);
+    expect(isD1DailyLimitError(new Error("D1 DB exceeded its memory limit"))).toBe(false);
   });
 
   it("outros erros não são de limite", () => {

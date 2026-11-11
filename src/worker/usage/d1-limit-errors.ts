@@ -1,14 +1,22 @@
-// Erro de limite diário do D1 (TASK-0109). O texto exato do D1 não tem documentação estável: os padrões ficam
-// isolados aqui, para ajuste quando o caso real aparecer.
-export const D1_LIMIT_PATTERNS: readonly RegExp[] = [/daily .*limit/i, /exceeded .*limit/i, /quota/i];
+// Erro de limite diário do D1 (TASK-0109). Só a causa conta: o erro do Drizzle embrulha o do D1 e leva o SQL e os
+// parâmetros da consulta, e um parâmetro de texto (um nome, por exemplo) não pode disparar o limite. Os padrões ficam
+// aqui, para ajuste quando o caso real aparecer; "exceeded its CPU time limit" e a memória não são limite diário.
+export const D1_LIMIT_PATTERNS: readonly RegExp[] = [/daily .*limit/i, /exceeded (the )?daily/i, /quota/i];
 
-// Drizzle embrulha o erro do D1 e guarda a causa original: lê a mensagem de cada um da cadeia (até 4 níveis).
-export function isD1DailyLimitError(erro: unknown): boolean {
+// A causa é o erro mais fundo da cadeia (até 4 níveis); sem cadeia, é o próprio erro.
+export function causaDoErro(erro: unknown): unknown {
   let atual: unknown = erro;
-  for (let nivel = 0; nivel < 4 && atual !== undefined && atual !== null; nivel++) {
-    const mensagem = typeof atual === "object" && "message" in atual ? String(atual.message) : String(atual);
-    if (D1_LIMIT_PATTERNS.some((padrao) => padrao.test(mensagem))) return true;
-    atual = typeof atual === "object" && "cause" in atual ? atual.cause : undefined;
+  for (let nivel = 0; nivel < 4; nivel++) {
+    const proximo = typeof atual === "object" && atual !== null && "cause" in atual ? atual.cause : undefined;
+    if (proximo === undefined || proximo === null) break;
+    atual = proximo;
   }
-  return false;
+  return atual;
+}
+
+export function isD1DailyLimitError(erro: unknown): boolean {
+  const causa = causaDoErro(erro);
+  const mensagem =
+    typeof causa === "object" && causa !== null && "message" in causa ? String(causa.message) : String(causa);
+  return D1_LIMIT_PATTERNS.some((padrao) => padrao.test(mensagem));
 }

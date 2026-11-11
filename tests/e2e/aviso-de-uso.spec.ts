@@ -247,4 +247,28 @@ test.describe("aviso de uso do plano gratuito", () => {
     ).toBeVisible();
     await page.unroute("**/api/members");
   });
+
+  // Rodada 1 (TASK-0109): a Abertura (moldura bare, o start_url do PWA) explica o limite; não mostra "Não foi possível
+  // carregar". Com a API de volta, "Tentar de novo" recarrega e a Abertura leva ao início.
+  test("rodada 1: a Abertura com a página 1027 explica o limite, e 'Tentar de novo' leva ao início", async ({
+    page,
+  }) => {
+    await page.route("**/api/**", (rota) =>
+      rota.fulfill({
+        status: 429,
+        contentType: "text/html; charset=UTF-8",
+        body: "<!DOCTYPE html><html><body>error code: 1027</body></html>",
+      }),
+    );
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "Limite do plano gratuito atingido" })).toBeVisible();
+    await expect(page.getByText("Não foi possível carregar")).toHaveCount(0);
+    await expect(page.getByText("Os dados voltam às 21h (horário de Brasília)")).toBeVisible();
+    await alvoDeToqueDeNoMinimo44(page.getByRole("button", { name: "Tentar de novo" }));
+
+    await page.unroute("**/api/**");
+    await page.getByRole("button", { name: "Tentar de novo" }).click();
+    await expect(page).toHaveURL(/\/inicio$/);
+  });
 });
