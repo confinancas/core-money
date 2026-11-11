@@ -158,10 +158,22 @@ export function EscolherCategoria() {
     return `/categorias/nova?${new URLSearchParams({ ...extra, voltar: caminhoAtual }).toString()}`;
   }
 
+  // Aberto pela compra (com transacao): a volta troca esta entrada pela tela da compra (replace), e não empilha outra.
+  // O temHistorico da compra segue no estado, para a seta dela saber se há para onde voltar (TASK-0403, F2).
+  const estadoDaCompra = (() => {
+    const temHistorico = (localizacao.state as { temHistorico?: unknown } | null)?.temHistorico;
+    return typeof temHistorico === "boolean" ? { temHistorico } : {};
+  })();
+  const abertoPelaCompra = transacao !== null && voltar !== null;
+
   // Volta com a categoria escolhida (sem estado, se não há voltar).
   function concluir(categoria: string) {
-    if (voltar !== null) navegar(voltar, { state: { categoriaEscolhida: categoria } });
-    else navegar(-1);
+    if (voltar !== null) {
+      navegar(voltar, {
+        replace: abertoPelaCompra,
+        state: { categoriaEscolhida: categoria, ...estadoDaCompra },
+      });
+    } else navegar(-1);
   }
 
   // Repete a fatia do retroativo até zerar. Falha no meio: fica o "Tentar de novo". Se outra regra assumiu o
@@ -259,6 +271,8 @@ export function EscolherCategoria() {
             {!buscando && subcategorias.length > 0 && (
               <Link
                 to={caminhoNovaCategoria({ pai: categoria.id })}
+                replace={abertoPelaCompra}
+                state={estadoDaCompra}
                 className="flex min-h-[44px] items-center gap-2.5 pr-3.5 pl-9 text-[13px] font-semibold text-primary"
               >
                 <svg
@@ -289,7 +303,18 @@ export function EscolherCategoria() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
-      <GreenTop variant="form" title="Categoria" close={{ to: destinoDeVoltar(aba), label: "Fechar" }} />
+      <GreenTop
+        variant="form"
+        title="Categoria"
+        close={{
+          to: destinoDeVoltar(aba),
+          label: "Fechar",
+          // O X de quem abriu pela compra volta para a compra, trocando esta entrada (replace), como a volta com categoria.
+          aoClicar: abertoPelaCompra
+            ? () => navegar(voltar ?? "/inicio", { replace: true, state: estadoDaCompra })
+            : undefined,
+        }}
+      />
 
       <div className="grid flex-1 content-start gap-5 px-4 pt-4 pb-6 tablet:grid-cols-2 tablet:px-6 tablet:pt-5 desktop:grid-cols-3 desktop:px-8">
         <div className="flex min-w-0 flex-col gap-3.5 tablet:col-start-1 tablet:row-start-1 desktop:col-start-1 desktop:row-start-1">
@@ -321,6 +346,8 @@ export function EscolherCategoria() {
 
           <Link
             to={caminhoNovaCategoria({})}
+            replace={abertoPelaCompra}
+            state={estadoDaCompra}
             className="flex min-h-14 items-center gap-3 rounded-[18px] border border-dashed border-chip-border px-[18px] text-[15px] font-semibold text-primary-ink"
           >
             <svg
