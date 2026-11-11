@@ -4,6 +4,7 @@ import { type AppOptions, createApp } from "./app";
 import { despachar } from "./cron/despachante";
 import type { Env } from "./env";
 import { flushUsage } from "./usage/flush";
+import { meteredScheduled } from "./usage/scheduled";
 
 export type CriarWorkerOptions = {
   marca: BrandConfig;
@@ -24,9 +25,10 @@ export function criarWorker({ marca, versao, rotasDoApp }: CriarWorkerOptions) {
   });
   return {
     fetch: app.fetch,
-    // Um Cron Trigger só: o despachante decide o que roda nesta execução (TASK-0303).
-    scheduled: (evento, env, ctx) => {
-      ctx.waitUntil(despachar(env, new Date(evento.scheduledTime)));
-    },
+    // Um Cron Trigger só: o despachante decide o que roda nesta execução (TASK-0303). O embrulho de medição de uso
+    // (TASK-0109) espera o handler e grava a linha do dia com o db medido.
+    scheduled: meteredScheduled(async (evento, env, _ctx, db) => {
+      await despachar(env, new Date(evento.scheduledTime), db);
+    }),
   } satisfies ExportedHandler<Env>;
 }

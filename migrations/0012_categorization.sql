@@ -1,3 +1,8 @@
+CREATE TABLE `categorization_pausa` (
+	`name` text PRIMARY KEY NOT NULL,
+	`pausar_ate` text NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `categorization_queue` (
 	`transaction_id` text PRIMARY KEY NOT NULL,
 	`enqueued_at` text NOT NULL,

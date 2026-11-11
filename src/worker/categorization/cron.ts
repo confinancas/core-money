@@ -1,6 +1,7 @@
 // Fatia da categorização no cron (TASK-0303). Cabe em 10 ms de CPU e em 50 chamadas externas: no máximo 5 ida e volta ao
-// D1 (chave, fila, contexto e 2 gravações) e 2 chamadas ao Claude. Sem chave, a execução termina numa leitura, sem
-// escrever nada. Quem grava category_id é só applyAiSuggestionStmt, pelo histórico.
+// D1 (chave, lote da fila com a pausa, contexto e 2 gravações) e 2 chamadas ao Claude. Sem chave, a execução termina
+// numa leitura, sem escrever nada. Com a pausa valendo (depois de um erro do provedor), termina com 2 leituras (chave e
+// pausa), sem escrita e sem chamada. Quem grava category_id é só applyAiSuggestionStmt, pelo histórico.
 
 import { createDb, type Db } from "../db/client";
 import { type Meter, newMeter } from "../db/metered-d1";
@@ -15,6 +16,9 @@ import {
   gravarRespostaStmts,
   type LinhaDaFila,
   limparFilaStmt,
+  MINUTOS_DE_PAUSA,
+  pausaGravarStmt,
+  pausaLeituraStmt,
   registrarFalhaStmts,
   retentativaStmt,
 } from "./queue";
@@ -23,35 +27,35 @@ export const LOTE = 25;
 export const CHAMADAS_POR_EXECUCAO = 2;
 const LIMITE_DE_FRESCOS = LOTE * CHAMADAS_POR_EXECUCAO;
 
+// db e meter: o despachante passa o db do embrulho de medição de uso (TASK-0109); sem ele, a fatia mede por conta própria.
 export type DepsDaFatia = {
   now: () => Date;
   createClient: (apiKey: string) => ClienteDaIA;
   getApiKey: (db: Db, env: Env) => Promise<LeituraDoSegredo>;
-  meter: Meter;
+  db?: Db;
+  meter?: Meter;
 };
 
 export type ResultadoDaFatia = {
-  situacao: "sem_chave" | "chave_ilegivel" | "fila_vazia" | "processada" | "parada";
+  situacao: "sem_chave" | "chave_ilegivel" | "pausada" | "fila_vazia" | "processada" | "parada";
   lotes: number;
   ok: number;
   semSugestao: number;
   semResposta: number;
 };
 
-const lerChave = (db: Db, env: Env): Promise<LeituraDoSegredo> => readSecret(db, env, "claude_api_key");
-
 // Cada lote: a chamada ao Claude e, depois, uma gravação. Recusa, corte e saída inválida contam tentativa; API fora e
-// chave inválida param a execução sem contar.
+// chave inválida param a execução sem contar, e deixam uma pausa de 30 minutos.
 export async function runCategorizationSlice(
   env: Env,
   deps: Partial<DepsDaFatia> = {},
 ): Promise<ResultadoDaFatia> {
   const agora = (deps.now ?? (() => new Date()))();
   const nowIso = agora.toISOString();
-  const db = createDb(env.DB, deps.meter ?? newMeter());
+  const db = deps.db ?? createDb(env.DB, deps.meter ?? newMeter());
   const vazio: ResultadoDaFatia = { situacao: "processada", lotes: 0, ok: 0, semSugestao: 0, semResposta: 0 };
 
-  const chave = await (deps.getApiKey ?? lerChave)(db, env);
+  const chave = await (deps.getApiKey ?? ((d: Db, e: Env) => readSecret(d, e, "claude_api_key")))(db, env);
   if (chave.status === "ausente") return { ...vazio, situacao: "sem_chave" };
   if (chave.status === "ilegivel") {
     console.warn("categorization: chave ilegivel, a fatia para");
@@ -61,11 +65,17 @@ export async function runCategorizationSlice(
     deps.createClient ?? ((apiKey: string) => createClaudeClient(apiKey, env.ANTHROPIC_BASE_URL))
   )(chave.value);
 
-  const [, frescosLidos, retentativaLida] = await db.$client.batch([
-    limparFilaStmt(db),
-    frescosStmt(db, LIMITE_DE_FRESCOS),
-    retentativaStmt(db),
+  // Um lote só: a pausa, a limpeza da fila (com a reconferência) e as leituras. Com a pausa valendo, a limpeza e as
+  // leituras não rodam (cláusulas NOT EXISTS), e a fatia para aqui.
+  const [pausaLida, , frescosLidos, retentativaLida] = await db.$client.batch([
+    pausaLeituraStmt(db),
+    limparFilaStmt(db, nowIso),
+    frescosStmt(db, LIMITE_DE_FRESCOS, nowIso),
+    retentativaStmt(db, nowIso),
   ]);
+  const pausaAte = (pausaLida?.results?.[0] as { pausar_ate?: string } | undefined)?.pausar_ate ?? null;
+  if (pausaAte !== null && pausaAte > nowIso) return { ...vazio, situacao: "pausada" };
+
   const frescos = (frescosLidos?.results ?? []) as LinhaDaFila[];
   const retentativa = (retentativaLida?.results ?? []) as LinhaDaFila[];
   if (frescos.length === 0 && retentativa.length === 0) return { ...vazio, situacao: "fila_vazia" };
@@ -117,9 +127,15 @@ export async function runCategorizationSlice(
       continue;
     }
 
+    // API fora e chave recusada: nenhuma tentativa conta, a pausa de 30 minutos segura as próximas execuções (que não
+    // leem a fila). Recusa, corte, saída inválida e requisição inválida contam uma tentativa e seguem.
     const parar = resultado.erro === "indisponivel" || resultado.erro === "chave";
     const contaTentativa = !parar;
-    await db.$client.batch(registrarFalhaStmts(db, { ids, erro: resultado.erro, contaTentativa }));
+    const pausarAte = new Date(agora.getTime() + MINUTOS_DE_PAUSA * 60_000).toISOString();
+    await db.$client.batch([
+      ...registrarFalhaStmts(db, { ids, erro: resultado.erro, contaTentativa }),
+      ...(parar ? [pausaGravarStmt(db, pausarAte)] : []),
+    ]);
     const uso = resultado.uso;
     console.info(
       `categorization: lote=${lote.length} ok=0 sem_sugestao=0 erro=${resultado.erro} status=${resultado.status ?? "-"} cache_read=${uso?.cacheRead ?? 0} cache_write=${uso?.cacheWrite ?? 0} input=${uso?.input ?? 0} output=${uso?.output ?? 0}`,

@@ -581,3 +581,10 @@ export const categorizationQueue = sqliteTable(
   },
   (t) => [index("categorization_queue_attempts_idx").on(t.attempts, t.enqueuedAt)],
 );
+
+// Pausa da fatia da categorização (TASK-0303, rodada 1): depois de um erro de provedor (fora ou chave recusada), a fatia
+// não chama a IA até este instante. Uma linha só, pelo nome do segredo que a IA usa.
+export const categorizationPausa = sqliteTable("categorization_pausa", {
+  name: text("name").primaryKey(),
+  pausarAte: text("pausar_ate").notNull(),
+});

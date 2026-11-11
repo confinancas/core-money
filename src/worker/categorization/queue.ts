@@ -1,6 +1,7 @@
 // Fila da categorização (TASK-0303): o que entra, o que sai e o que o cron lê e grava. Todas as instruções desta fila
 // são de categorization/, e só applyAiSuggestionStmt (apply.ts) grava category_id a partir da sugestão. Os textos de
 // SQL usam o alias t da tabela transactions e o alias q da categorization_queue.
+import { NEEDS_CATEGORY_SQL, NEEDS_INCOME_SQL } from "../../shared/categorization";
 import type { Db } from "../db/client";
 import { applyAiSuggestionStmt } from "./apply";
 import type { LinhaParaIA } from "./context";
@@ -8,6 +9,10 @@ import type { GravavelDaIA } from "./output-schema";
 
 // Depois de três tentativas, a transação sai da fila e fica sem sugestão (aparece como "Sem sugestão" na fila do casal).
 export const TENTATIVAS_MAXIMAS = 3;
+
+// Nome da linha de pausa da IA (uma só, a da chave do Claude) e quanto dura a pausa depois de um erro do provedor.
+export const NOME_DA_PAUSA = "claude";
+export const MINUTOS_DE_PAUSA = 30;
 
 // Entra na fila o que é saída sem categoria e precisa de uma, ou entrada candidata sem tipo. As ocultas entram (a fila
 // do casal as esconde). Removidas não entram. O INSERT OR IGNORE não reabre uma linha que já está na fila.
@@ -27,19 +32,38 @@ export function enqueuePendingStmt(
 }
 
 // Histórico (TASK-0303): a transação de um ciclo mais antigo que o anterior ao de hoje nasce com is_backfill = 1, e a
-// marca não muda depois. O anterior é o último ciclo com ends_on antes de hoje (em São Paulo).
-// O pipeline decide quais ids são do histórico (ciclo anterior ao de hoje), com o ciclo lido na mesma ida.
+// marca não muda depois. O pipeline decide os ids (ciclo anterior ao de hoje, com o ciclo lido na mesma ida). Aqui o
+// json_each é o laço de fora, com CROSS JOIN: cada id é buscado pela chave primária e o lar é conferido na linha. Sem o
+// CROSS JOIN, o planejador usa o índice do lar e lê o lar inteiro (teste de custo com lar de 3.000 e 100 ids).
 export function markBackfillStmt(
   db: Db,
   entrada: { householdId: string; transactionIds: readonly string[] },
 ): D1PreparedStatement {
   return db.$client
     .prepare(
-      `UPDATE transactions SET is_backfill = 1
-        WHERE household_id = ? AND id IN (SELECT value FROM json_each(?))`,
+      `UPDATE transactions SET is_backfill = 1 WHERE id IN (
+          SELECT t.id FROM json_each(?) AS j CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?)`,
     )
-    .bind(entrada.householdId, JSON.stringify(entrada.transactionIds));
+    .bind(JSON.stringify(entrada.transactionIds), entrada.householdId);
 }
+
+// Pausa (rodada 1): a fatia lê a linha da pausa no mesmo lote da fila. Enquanto a pausa vale, a limpeza e as leituras
+// da fila não rodam (cláusula NOT EXISTS, que o banco resolve numa vez, sem varrer a fila).
+export const pausaLeituraStmt = (db: Db): D1PreparedStatement =>
+  db.$client
+    .prepare("SELECT pausar_ate AS pausar_ate FROM categorization_pausa WHERE name = ?")
+    .bind(NOME_DA_PAUSA);
+
+export function pausaGravarStmt(db: Db, pausarAte: string): D1PreparedStatement {
+  return db.$client
+    .prepare(
+      `INSERT INTO categorization_pausa (name, pausar_ate) VALUES (?, ?)
+        ON CONFLICT(name) DO UPDATE SET pausar_ate = excluded.pausar_ate`,
+    )
+    .bind(NOME_DA_PAUSA, pausarAte);
+}
+
+const PAUSA_VALE = `NOT EXISTS (SELECT 1 FROM categorization_pausa AS p WHERE p.name = '${NOME_DA_PAUSA}' AND p.pausar_ate > ?)`;
 
 // Linha da fila com os campos da transação, lida pelo cron.
 export type LinhaDaFila = LinhaParaIA & { household_id: string; is_backfill: number; attempts: number };
@@ -52,29 +76,33 @@ const SELECT_DA_FILA = `SELECT t.id AS id, t.household_id AS household_id, t.mov
     q.attempts AS attempts
   FROM categorization_queue AS q
   JOIN transactions AS t ON t.id = q.transaction_id
-  WHERE t.removed_at IS NULL AND t.category_id IS NULL AND t.income_kind IS NULL`;
+  WHERE t.removed_at IS NULL AND t.category_id IS NULL AND t.income_kind IS NULL AND ${PAUSA_VALE}`;
 
-// Tira da fila o que já foi resolvido (casal, regra), o que sumiu e o que foi removido.
-export function limparFilaStmt(db: Db): D1PreparedStatement {
-  return db.$client.prepare(
-    `DELETE FROM categorization_queue WHERE transaction_id IN (
+// Tira da fila o que já foi resolvido (casal, regra), o que sumiu, o que foi removido e o que não pede mais sugestão
+// (reconferência: a classificação pode ter trocado o movimento depois da importação). Não roda enquanto a pausa vale.
+export function limparFilaStmt(db: Db, agora: string): D1PreparedStatement {
+  return db.$client
+    .prepare(
+      `DELETE FROM categorization_queue WHERE ${PAUSA_VALE} AND transaction_id IN (
         SELECT q.transaction_id FROM categorization_queue AS q LEFT JOIN transactions AS t ON t.id = q.transaction_id
-        WHERE t.id IS NULL OR t.removed_at IS NOT NULL OR t.category_id IS NOT NULL OR t.income_kind IS NOT NULL)`,
-  );
+        WHERE t.id IS NULL OR t.removed_at IS NOT NULL OR t.category_id IS NOT NULL OR t.income_kind IS NOT NULL
+          OR NOT ((t.category_id IS NULL AND ${NEEDS_CATEGORY_SQL}) OR ${NEEDS_INCOME_SQL}))`,
+    )
+    .bind(agora);
 }
 
 // Os itens da primeira tentativa, os mais recentes primeiro (até o limite da execução).
-export function frescosStmt(db: Db, limite: number): D1PreparedStatement {
+export function frescosStmt(db: Db, limite: number, agora: string): D1PreparedStatement {
   return db.$client
     .prepare(`${SELECT_DA_FILA} AND q.attempts = 0 ORDER BY t.local_date DESC, t.id LIMIT ?`)
-    .bind(limite);
+    .bind(agora, limite);
 }
 
 // Um item em retentativa (1 ou 2 tentativas), o mais antigo na fila. Vai sozinho num lote.
-export function retentativaStmt(db: Db): D1PreparedStatement {
-  return db.$client.prepare(
-    `${SELECT_DA_FILA} AND q.attempts BETWEEN 1 AND 2 ORDER BY q.enqueued_at LIMIT 1`,
-  );
+export function retentativaStmt(db: Db, agora: string): D1PreparedStatement {
+  return db.$client
+    .prepare(`${SELECT_DA_FILA} AND q.attempts BETWEEN 1 AND 2 ORDER BY q.enqueued_at LIMIT 1`)
+    .bind(agora);
 }
 
 const LIMPEZA_DAS_TENTATIVAS = `DELETE FROM categorization_queue WHERE attempts >= ${TENTATIVAS_MAXIMAS}

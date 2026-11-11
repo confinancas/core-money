@@ -362,8 +362,12 @@ describe("sem sugestão, recusa, corte, falhas e ausência de chave", () => {
     const primeira = await rodar({ decidir: tudoIgual, parada: "indisponivel" }).resultado;
     expect(primeira.situacao).toBe("parada");
     expect(await fila(id)).toEqual({ attempts: 0, last_error: "indisponivel" });
-    const segunda = await rodar({ decidir: tudoIgual }).resultado;
-    expect(segunda.situacao).toBe("processada");
+    // Rodada 1: a pausa de 30 minutos segura as execuções seguintes, que não leem a fila nem chamam a IA.
+    const segunda = await rodar({ decidir: tudoIgual }, { agora: "2026-11-10T12:05:00.000Z" }).resultado;
+    expect(segunda.situacao).toBe("pausada");
+    expect(await fila(id)).toEqual({ attempts: 0, last_error: "indisponivel" });
+    const terceira = await rodar({ decidir: tudoIgual }, { agora: "2026-11-10T12:31:00.000Z" }).resultado;
+    expect(terceira.situacao).toBe("processada");
     expect(await naFila(id)).toBe(0);
   });
 

@@ -38,8 +38,15 @@ export type ResultadoDaChamada =
   | { ok: true; porRef: Map<string, GravavelDaIA>; codigoInvalido: number; uso: UsoDaChamada }
   | { ok: false; erro: ErroDaIA; status: number | null; uso: UsoDaChamada | null };
 
-export function createClaudeClient(apiKey: string, baseURL?: string): ClienteDaIA {
-  const cliente = new Anthropic({ apiKey, baseURL, maxRetries: 0, timeout: TEMPO_LIMITE_MS });
+// fetchImpl: só o teste passa um falso (contar as requisições); em produção, o fetch padrão.
+export function createClaudeClient(apiKey: string, baseURL?: string, fetchImpl?: typeof fetch): ClienteDaIA {
+  const cliente = new Anthropic({
+    apiKey,
+    baseURL,
+    maxRetries: 0,
+    timeout: TEMPO_LIMITE_MS,
+    ...(fetchImpl ? { fetch: fetchImpl } : {}),
+  });
   return cliente as unknown as ClienteDaIA;
 }
 

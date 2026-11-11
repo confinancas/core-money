@@ -78,7 +78,14 @@ const ENTRADAS: Record<string, { kind: string; precisaRenda: boolean }> = {
   transferencia: { kind: "transferencia", precisaRenda: false },
 };
 
+const SUBTIPOS: readonly string[] = ["venda", "rendimento", "cashback", "outro"];
 const ehTexto = (valor: unknown): valor is string => typeof valor === "string";
+
+// Null ou ausente é "sem valor". Texto só vale se estiver na lista da própria tabela (propriedade própria, não herdada).
+const ehEntradaValida = (valor: unknown): boolean =>
+  valor === null || valor === undefined || (ehTexto(valor) && Object.hasOwn(ENTRADAS, valor));
+const ehSubtipoValido = (valor: unknown): boolean =>
+  valor === null || valor === undefined || (ehTexto(valor) && SUBTIPOS.includes(valor));
 const ehObjeto = (valor: unknown): valor is Record<string, unknown> =>
   typeof valor === "object" && valor !== null && !Array.isArray(valor);
 
@@ -118,6 +125,11 @@ export function parseSuggestions(
     if (certeza === undefined) {
       porRef.set(item.ref, SEM_SUGESTAO);
       continue;
+    }
+    // entrada e subtipo só valem dentro da lista da saída estruturada. Valor fora dela (inclusive uma propriedade herdada
+    // de objeto, como "constructor") é saída inválida: conta tentativa, e não grava nada do lote.
+    if (!ehEntradaValida(item.entrada) || !ehSubtipoValido(item.subtipo)) {
+      return { ok: false, erro: "saida_invalida" };
     }
     const motivo = motivoDaSugestao(item.motivo);
 

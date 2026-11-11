@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d930e198-6e4e-4b85-8109-f95bfff0f199",
+  "id": "ba778bcc-217c-453b-957d-e06b2da10749",
   "prevId": "bf60d401-ea0e-43b2-a2a5-3118e421e71e",
   "tables": {
     "accounts": {
@@ -646,6 +646,30 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "categorization_pausa": {
+      "name": "categorization_pausa",
+      "columns": {
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pausar_ate": {
+          "name": "pausar_ate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
