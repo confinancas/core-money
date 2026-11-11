@@ -13,10 +13,22 @@ type Props = {
   to?: string;
   // Estado que vai junto com o Link (location.state), como o `fromTab` das telas de detalhe.
   state?: unknown;
+  // Com `to`, o clique chama esta ação e não segue o link: quem decide para onde ir é a tela (TASK-0403: a seta volta
+  // no histórico). O href continua o de `to`, para quem abre o link em outra aba.
+  aoClicarNoLink?: () => void;
 };
 
 // Botão redondo de 44 px sobre o verde do topo.
-export function TopIconButton({ label, icon, badge = 0, pressed, onClick, to, state }: Props) {
+export function TopIconButton({
+  label,
+  icon,
+  badge = 0,
+  pressed,
+  onClick,
+  to,
+  state,
+  aoClicarNoLink,
+}: Props) {
   const estilo = cn(
     "relative inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-white/28 bg-white/18 text-white",
   );
@@ -33,7 +45,20 @@ export function TopIconButton({ label, icon, badge = 0, pressed, onClick, to, st
 
   if (to !== undefined) {
     return (
-      <Link to={to} state={state} aria-label={label} className={estilo}>
+      <Link
+        to={to}
+        state={state}
+        aria-label={label}
+        className={estilo}
+        onClick={
+          aoClicarNoLink
+            ? (evento) => {
+                evento.preventDefault();
+                aoClicarNoLink();
+              }
+            : undefined
+        }
+      >
         {conteudo}
       </Link>
     );

@@ -3,7 +3,8 @@ import { IconeFechar, IconeSeta } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { TopIconButton } from "./top-icon-button";
 
-type Rota = { to: string; label: string };
+// aoClicar: quando a tela decide o caminho (a seta volta no histórico), o clique chama esta ação em vez de seguir `to`.
+type Rota = { to: string; label: string; aoClicar?: () => void };
 
 type Props = {
   variant?: "tab" | "detail" | "form";
@@ -54,7 +55,12 @@ export function GreenTop({
       ) : (
         <div className="flex items-center gap-3">
           {back ? (
-            <TopIconButton label={back.label} to={back.to} icon={<IconeSeta />} />
+            <TopIconButton
+              label={back.label}
+              to={back.to}
+              aoClicarNoLink={back.aoClicar}
+              icon={<IconeSeta />}
+            />
           ) : close ? (
             <TopIconButton label={close.label} to={close.to} icon={<IconeFechar />} />
           ) : (
