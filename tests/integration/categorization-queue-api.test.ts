@@ -762,7 +762,6 @@ describe("rodada 1: lacunas e cenários que faltavam", () => {
   });
 });
 
-
 describe("rodada 1: o aceite só grava em linha pendente (nota da Fable)", () => {
   it("oculta, do histórico e que virou pagamento de fatura voltam em skipped, sem categoria nem regra", async () => {
     const lar = await criarLar();
@@ -771,12 +770,107 @@ describe("rodada 1: o aceite só grava em linha pendente (nota da Fable)", () =>
     const historico = await pendente(lar, "[TEST] ACEITE HISTORICO", { aiCategoryId: SERVICOS(lar) });
     await env.DB.prepare("UPDATE transactions SET is_backfill = 1 WHERE id = ?").bind(historico).run();
     const fatura = await pendente(lar, "[TEST] ACEITE FATURA", { aiCategoryId: SERVICOS(lar) });
-    await env.DB.prepare("UPDATE transactions SET movement = 'pagamento_fatura' WHERE id = ?").bind(fatura).run();
+    await env.DB.prepare("UPDATE transactions SET movement = 'pagamento_fatura' WHERE id = ?")
+      .bind(fatura)
+      .run();
     const ids = [oculta, historico, fatura];
     const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: ids });
     expect(r.corpo.accepted).toEqual([]);
     expect(r.corpo.skipped).toEqual(ids);
     for (const id of ids) expect((await lerTransacao(id)).category_id).toBeNull();
-    expect(await contar("SELECT COUNT(*) AS total FROM rules WHERE household_id = ?", lar.householdId)).toBe(0);
+    expect(await contar("SELECT COUNT(*) AS total FROM rules WHERE household_id = ?", lar.householdId)).toBe(
+      0,
+    );
+  });
+});
+
+describe("rodada 1: mutações que sobreviviam à suíte", () => {
+  it("filtro da página: o filtro cartão não traz o Pix", async () => {
+    const lar = await criarLar();
+    await pendente(lar, "[TEST] FILTRO PIX", { movement: "pix_enviado", aiCategoryId: SERVICOS(lar) });
+    const compra = await pendente(lar, "[TEST] FILTRO CARTAO", { na: "cartao", aiCategoryId: LAZER(lar) });
+    const r = await chamar(appDoLar(lar), "GET", "/api/categorization/queue?filtro=cartao");
+    expect(itensDaFila(r.corpo).map((l) => l.transactionId)).toEqual([compra]);
+  });
+
+  it("aceite: linha removida vai para skipped e não recebe categoria", async () => {
+    const lar = await criarLar();
+    const id = await pendente(lar, "[TEST] ACEITE REMOVIDA", { aiCategoryId: SERVICOS(lar) });
+    await env.DB.prepare("UPDATE transactions SET removed_at = ? WHERE id = ?").bind(AGORA, id).run();
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: [id] });
+    expect(r.corpo.accepted).toEqual([]);
+    expect(r.corpo.skipped).toEqual([id]);
+    expect((await lerTransacao(id)).category_id).toBeNull();
+  });
+
+  it("desfazer: uma categoria diferente da gravada não desfaz a linha", async () => {
+    const lar = await criarLar();
+    const id = await pendente(lar, "[TEST] DESFAZER CATEGORIA", { aiCategoryId: SERVICOS(lar) });
+    const app = appDoLar(lar);
+    await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [id] });
+    const r = await chamar(app, "POST", "/api/categorization/undo", {
+      items: [{ transactionId: id, categoryId: LAZER(lar) }],
+    });
+    expect(r.corpo.skipped).toEqual([id]);
+    expect((await lerTransacao(id)).category_id).toBe(SERVICOS(lar));
+  });
+
+  it("desativar regra: a regra de confirmação de outra pessoa continua ativa", async () => {
+    const lar = await criarLar();
+    const membroB = await membroDoLar(lar);
+    const regra = await criarRegra(
+      { householdId: lar.householdId, memberId: membroB },
+      {
+        scope: "estabelecimento",
+        matchValue: "TEST REGRA DE B",
+        setCategoryId: LAZER(lar),
+        createdFrom: "confirmacao",
+      },
+    );
+    const id = await pendente(lar, "[TEST] REGRA DE B", { aiCategoryId: SERVICOS(lar) });
+    await env.DB.prepare(
+      "UPDATE transactions SET category_id = ?, categorized_at = ?, categorized_by = ?, rule_id = ? WHERE id = ?",
+    )
+      .bind(SERVICOS(lar), AGORA, lar.memberId, regra, id)
+      .run();
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/undo", {
+      items: [{ transactionId: id, categoryId: SERVICOS(lar) }],
+    });
+    expect(r.corpo.undone).toEqual([id]);
+    expect(
+      await contar("SELECT COUNT(*) AS total FROM rules WHERE id = ? AND disabled_at IS NULL", regra),
+    ).toBe(1);
+  });
+
+  it("volta: as linhas de uma regra de outra pessoa não voltam quando eu desfaço a minha", async () => {
+    const lar = await criarLar();
+    const membroB = await membroDoLar(lar);
+    const regra = await criarRegra(
+      { householdId: lar.householdId, memberId: membroB },
+      {
+        scope: "estabelecimento",
+        matchValue: establishmentKey("[TEST] VOLTA DE B") ?? "",
+        setCategoryId: LAZER(lar),
+        createdFrom: "confirmacao",
+      },
+    );
+    const minha = await pendente(lar, "[TEST] VOLTA DE B", { aiCategoryId: SERVICOS(lar) });
+    const dela = await pendente(lar, "[TEST] VOLTA DE B", { aiCategoryId: LAZER(lar) });
+    for (const [id, categoria, por] of [
+      [minha, SERVICOS(lar), lar.memberId],
+      [dela, LAZER(lar), "regra"],
+    ] as const) {
+      await env.DB.prepare(
+        "UPDATE transactions SET category_id = ?, categorized_at = ?, categorized_by = ?, rule_id = ? WHERE id = ?",
+      )
+        .bind(categoria, AGORA, por, regra, id)
+        .run();
+    }
+    await chamar(appDoLar(lar), "POST", "/api/categorization/undo", {
+      items: [{ transactionId: minha, categoryId: SERVICOS(lar) }],
+    });
+    const linha = await lerTransacao(dela);
+    expect(linha.category_id).toBe(LAZER(lar));
+    expect(linha.categorized_by).toBe("regra");
   });
 });
