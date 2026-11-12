@@ -105,6 +105,9 @@ export type IngestInput = {
   bankItemId: string;
   rows: MappedTransaction[];
   now: string;
+  // Início da execução (sync_runs.started_at). Com ele, devolve as atualizadas que já tinham sido lidas nesta execução
+  // (TASK-0205, A3): a repetição de uma fatia, e não a releitura diária do que existe desde antes.
+  inicioDaExecucao?: string;
 };
 
 const emGrupos = <T>(itens: T[], tamanho: number): T[][] => {
@@ -217,8 +220,8 @@ export function upsertBillsStmts(
 export async function ingestTransactions(
   db: Db,
   entrada: IngestInput,
-): Promise<{ insertedIds: string[]; updatedIds: string[] }> {
-  const { householdId, bankItemId, now } = entrada;
+): Promise<{ insertedIds: string[]; updatedIds: string[]; atualizadasDaExecucao: string[] }> {
+  const { householdId, bankItemId, now, inicioDaExecucao } = entrada;
   if (entrada.rows.length > MAX_LINHAS) {
     throw new RangeError(`ingestTransactions aceita até ${MAX_LINHAS} linhas por chamada.`);
   }
@@ -227,6 +230,8 @@ export async function ingestTransactions(
   const linhas = [...new Map(entrada.rows.map((linha) => [linha.external_id, linha])).values()];
   const insertedIds: string[] = [];
   const updatedIds: string[] = [];
+  // Última leitura (last_seen_at) de cada linha que já existia, antes desta gravação.
+  const ultimaLeitura = new Map<string, string>();
 
   if (linhas.length > 0) {
     // Os existentes por external_id, em grupos de 90 ids, e o calendário do lar: tudo numa ida ao D1.
@@ -236,15 +241,16 @@ export async function ingestTransactions(
     ).map((grupo) =>
       db.$client
         .prepare(
-          `SELECT id, external_id FROM transactions WHERE bank_item_id = ? AND external_id IN (${grupo.map(() => "?").join(", ")})`,
+          `SELECT id, external_id, last_seen_at FROM transactions WHERE bank_item_id = ? AND external_id IN (${grupo.map(() => "?").join(", ")})`,
         )
         .bind(bankItemId, ...grupo),
     );
     const leitura = await db.$client.batch([...buscas, ...leituraCalendarioStmts(db, householdId)]);
     const existentes = new Map<string, string>();
     for (const resultado of leitura.slice(0, buscas.length)) {
-      for (const linha of resultado.results as { id: string; external_id: string }[]) {
+      for (const linha of resultado.results as { id: string; external_id: string; last_seen_at: string }[]) {
         existentes.set(linha.external_id, linha.id);
+        ultimaLeitura.set(linha.id, linha.last_seen_at);
       }
     }
     const { ciclos, diaDoLar } = calendarioDaLeitura(leitura[buscas.length], leitura[buscas.length + 1]);
@@ -329,5 +335,11 @@ export async function ingestTransactions(
   }
 
   await afterIngest(db, { householdId, bankItemId, insertedIds, updatedIds, now });
-  return { insertedIds, updatedIds };
+  // Atualizadas que já estavam gravadas com a leitura desta execução (a mesma execução gravou antes, numa tentativa
+  // anterior da fatia). A releitura diária de linhas de dias antes não entra.
+  const atualizadasDaExecucao =
+    inicioDaExecucao === undefined
+      ? []
+      : updatedIds.filter((id) => (ultimaLeitura.get(id) ?? "") >= inicioDaExecucao);
+  return { insertedIds, updatedIds, atualizadasDaExecucao };
 }

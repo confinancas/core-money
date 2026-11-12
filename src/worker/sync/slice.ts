@@ -342,16 +342,18 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
         };
   const trecho = pagina.results.slice(cursor.offset, cursor.offset + LINHAS_POR_FATIA);
   const { ingestTransactions } = await gravacao();
-  const { insertedIds, updatedIds } = await ingestTransactions(db, {
+  const { insertedIds, atualizadasDaExecucao } = await ingestTransactions(db, {
     householdId: run.household_id,
     bankItemId: run.bank_item_id,
     rows: trecho.map((transacao) => mapTransaction(transacao, contaDaTransacao)),
     now: dep.nowIso,
+    inicioDaExecucao: run.started_at,
   });
-  // Só a repetição de uma fatia completa o que a tentativa anterior deixou pela metade. Numa leitura normal, a linha
-  // que já existia não volta à fila da IA nem tem o is_backfill regravado (TASK-0205, N9).
-  if (updatedIds.length > 0 && dep.tentativa > 1) {
-    await completarTipos(db, run.household_id, updatedIds, dep.nowIso);
+  // Só as linhas que nasceram nesta execução completam regras e tipo (a repetição de uma fatia que a tentativa anterior
+  // deixou pela metade). A releitura diária de linhas de antes não volta à fila da IA nem tem o is_backfill regravado
+  // (TASK-0205, N9 e A3).
+  if (atualizadasDaExecucao.length > 0) {
+    await completarTipos(db, run.household_id, atualizadasDaExecucao, dep.nowIso);
   }
 
   // Leituras da janela: só a primeira página de cada leitura conta (a fatia que relê a mesma página não soma de novo).

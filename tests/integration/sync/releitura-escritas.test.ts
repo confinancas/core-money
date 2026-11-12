@@ -49,7 +49,12 @@ async function rodaMedido(runId: string, agora: string): Promise<Meter> {
   let seq = 0;
   for (let i = 0; i < 400; i++) {
     const medidor = newMeter();
-    const resultado = await runSyncSlice(AMBIENTE, { db: createDb(env.DB, medidor), fetch }, { runId, seq, tentativa: 1 }, agora);
+    const resultado = await runSyncSlice(
+      AMBIENTE,
+      { db: createDb(env.DB, medidor), fetch },
+      { runId, seq, tentativa: 1 },
+      agora,
+    );
     total.rowsWritten += medidor.rowsWritten;
     total.rowsRead += medidor.rowsRead;
     if (resultado.tipo !== "continua") break;
@@ -61,7 +66,12 @@ async function rodaMedido(runId: string, agora: string): Promise<Meter> {
 describe("releitura diária sem mudança: escritas (A1)", () => {
   it("relê 100 movimentos já gravados: escritas no máximo uma por transação, mais o que a execução grava", async () => {
     const banco = await semearBanco();
-    const primeira = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", MEIA_NOITE_SP_DIA_1)) as string;
+    const primeira = (await startRun(
+      createDb(env.DB, newMeter()),
+      banco.itemId,
+      "diaria",
+      MEIA_NOITE_SP_DIA_1,
+    )) as string;
     await rodaMedido(primeira, MEIA_NOITE_SP_DIA_1);
     const contagem = await env.DB.prepare("SELECT COUNT(*) AS n FROM transactions WHERE bank_item_id = ?")
       .bind(banco.itemId)
@@ -74,7 +84,9 @@ describe("releitura diária sem mudança: escritas (A1)", () => {
     // Cada janela lida gravou uma escrita por linha (o last_seen_at): são três janelas de 50 linhas (conta, cartão e
     // parcelas futuras, que o Pluggy falso repete), 150 escritas. Mais 16 da estrutura da execução (contas, cartões,
     // faturas, cursor). Antes da correção, cada linha lida regravava as 7 entradas de índice: cerca de 1.050 escritas.
-    console.info(`MEDICAO-0205 releitura de 100 movimentos: rows_written=${medido.rowsWritten} rows_read=${medido.rowsRead}`);
+    console.info(
+      `MEDICAO-0205 releitura de 100 movimentos: rows_written=${medido.rowsWritten} rows_read=${medido.rowsRead}`,
+    );
     expect(medido.rowsWritten).toBeLessThanOrEqual(150 + 40);
   });
 });
