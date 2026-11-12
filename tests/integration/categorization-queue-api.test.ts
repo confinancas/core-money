@@ -591,7 +591,7 @@ describe("rodada 1: lacunas e cenários que faltavam", () => {
     const app = appDoLar(lar);
     const r = await chamar(app, "GET", "/api/categorization/queue");
     expect((r.corpo.suggested as Record<string, number>).todos).toBe(0);
-    const linha = itensDaFila(r.corpo)[0] as { suggestion: unknown };
+    const linha = itensDaFila(r.corpo)[0] as unknown as { suggestion: unknown };
     expect(linha.suggestion).toBeNull();
     const aceite = await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [id] });
     expect(aceite.corpo.skipped).toEqual([id]);
@@ -756,7 +756,7 @@ describe("rodada 1: lacunas e cenários que faltavam", () => {
       .bind(id)
       .run();
     const r = await chamar(appDoLar(lar), "GET", "/api/categorization/queue");
-    const linha = itensDaFila(r.corpo)[0] as { suggestion: unknown };
+    const linha = itensDaFila(r.corpo)[0] as unknown as { suggestion: unknown };
     expect(linha.suggestion).toBeNull();
     expect((r.corpo.suggested as Record<string, number>).entradas).toBe(0);
   });
