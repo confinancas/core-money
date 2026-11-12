@@ -1,6 +1,8 @@
 // Detalhe de um banco conectado (TASK-0206): um db.batch de 4 leituras com índice, do banco do lar da sessão.
 // Banco de outro lar não aparece: a leitura do item já é filtrada pelo lar da conexão, e as outras três só andam
 // com o id do banco que essa leitura confirmou (a rota responde 404 antes de usar as outras).
+
+import type { DetalheDoBancoDto } from "../../shared/bank-item-view";
 import type { Db } from "../db/client";
 import { situacaoDoBanco } from "../sync/situacao";
 
@@ -54,36 +56,7 @@ export type LinhaDoItem = {
   ultimo_erro: string | null;
 };
 
-export type DetalheDoBanco = {
-  id: string;
-  institutionName: string;
-  institutionColor: string | null;
-  connection: { id: string; label: string };
-  status: string;
-  disconnectedAt: string | null;
-  consentExpiresAt: string | null;
-  lastSyncAt: string | null;
-  running: boolean;
-  failed: boolean;
-  canRetry: boolean;
-  accounts: { id: string; kind: string; name: string; balanceCents: number; balanceAt: string }[];
-  cards: {
-    id: string;
-    name: string;
-    last4: string;
-    openBill: { closesOn: string; amountCents: number | null } | null;
-  }[];
-  runs: {
-    id: string;
-    kind: string;
-    startedAt: string;
-    finishedAt: string | null;
-    status: string | null;
-    newTransactions: number;
-    progressPct: number;
-    errorCode: string | null;
-  }[];
-};
+export type DetalheDoBanco = DetalheDoBancoDto;
 
 // null: o banco não existe ou é de outro lar (a rota responde 404).
 export async function getBankItemDetail(

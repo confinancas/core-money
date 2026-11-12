@@ -8,6 +8,7 @@ import { PlaceholderScreen } from "./app/PlaceholderScreen";
 import { Catalogo } from "./dev/Catalog";
 import { AceitarConvite } from "./screens/AceitarConvite";
 import { AdicionarConjuge } from "./screens/AdicionarConjuge";
+import { BancoDetalhe } from "./screens/bancos/BancoDetalhe";
 import { ConectarPluggy } from "./screens/bancos/ConectarPluggy";
 import { Cadastro } from "./screens/Cadastro";
 import { Cartao } from "./screens/Cartao";
@@ -104,7 +105,7 @@ export const ROTAS: RotaDaTabela[] = [
     frame: "detail",
     tab: "configuracoes",
     title: "Banco conectado",
-    element: provisoria,
+    element: <BancoDetalhe />,
   },
   {
     path: "/configuracoes/casal",

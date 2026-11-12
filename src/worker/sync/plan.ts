@@ -104,7 +104,7 @@ export function dailyWindows(
   }
   // Cartão: 45 dias, ou mais quando a última sincronização é mais antiga.
   const dosCartao = somaDias(today, -DIAS_DO_CARTAO_NA_DIARIA);
-  return [{ from: comRecoleta < dosCartao ? comRecoleta : dosCartao, to: today }, futureWindow(today)];
+  return [{ from: menorDeData(comRecoleta, dosCartao), to: today }, futureWindow(today)];
 }
 
 // Janelas de 30 dias que cobrem os últimos `meses` meses, da mais nova para a mais antiga. A primeira termina hoje;

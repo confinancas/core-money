@@ -170,6 +170,10 @@ describe("Conectar Meu Pluggy: bancos, CPF e selo da conexão", () => {
     expect(subtituloDoBanco(banco({ consentExpiresAt: "2026-11-25T00:00:00.000Z" }), AGORA)).toBe(
       "Consentimento expira em 25/11 · renovar",
     );
+    // Vencido (TASK-0203, achado): texto de vencido, sem "expira" nem "renovar".
+    expect(subtituloDoBanco(banco({ consentExpiresAt: "2026-11-01T00:00:00.000Z" }), AGORA)).toBe(
+      "Consentimento vencido",
+    );
     expect(subtituloDoBanco(banco({ consentExpiresAt: null }), AGORA)).toBe("Ativo");
     expect(subtituloDoBanco(banco({ status: "acao_necessaria" }), AGORA)).toBe("Precisa de atenção");
     expect(subtituloDoBanco(banco({ disconnectedAt: "2026-11-01T00:00:00.000Z" }), AGORA)).toBe(

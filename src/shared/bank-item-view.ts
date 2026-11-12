@@ -193,3 +193,53 @@ export function freshnessPill(lastSyncAt: string | null, hoje: string): Pilula {
     ? { texto: "Em dia", tom: "sucesso" }
     : { texto: "Atrasada", tom: "aviso" };
 }
+
+// Forma do GET /api/bank-items/:id (TASK-0206). O servidor monta o mesmo objeto (src/worker/bank/detail.ts).
+export type ContaDoBanco = {
+  id: string;
+  kind: string;
+  name: string;
+  balanceCents: number;
+  balanceAt: string;
+};
+
+export type CartaoDoBanco = {
+  id: string;
+  name: string;
+  last4: string;
+  openBill: { closesOn: string; amountCents: number | null } | null;
+};
+
+export type ExecucaoDoBanco = {
+  id: string;
+  kind: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: string | null;
+  newTransactions: number;
+  progressPct: number;
+  errorCode: string | null;
+};
+
+export type DetalheDoBancoDto = {
+  id: string;
+  institutionName: string;
+  institutionColor: string | null;
+  connection: { id: string; label: string };
+  status: string;
+  disconnectedAt: string | null;
+  consentExpiresAt: string | null;
+  lastSyncAt: string | null;
+  running: boolean;
+  failed: boolean;
+  canRetry: boolean;
+  accounts: ContaDoBanco[];
+  cards: CartaoDoBanco[];
+  runs: ExecucaoDoBanco[];
+};
+
+export type ConferenciaDoConsentimento = {
+  renewed: boolean;
+  consentExpiresAt: string | null;
+  itemMissing: boolean;
+};
