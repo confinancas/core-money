@@ -5,6 +5,7 @@ import { createDb } from "../../../src/worker/db/client";
 import { newMeter } from "../../../src/worker/db/metered-d1";
 import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch";
 import type { Env } from "../../../src/worker/env";
+import { despachar, TAREFAS_DO_CRON } from "../../../src/worker/cron/despachante";
 import { scheduleDailySync } from "../../../src/worker/sync/daily";
 import { startRun } from "../../../src/worker/sync/runs";
 import { callApi, semearPronto } from "../helpers/app";
@@ -119,6 +120,25 @@ function appDoLar(householdId: string, agora: string) {
 async function semearProntoUmaVez() {
   await semearPronto(env.DB);
 }
+
+describe("cenário 1 pelo despachante do cron", () => {
+  it("despachar às 00:00 de São Paulo cria uma execução diária por banco; às 00:05 nenhuma nova", async () => {
+    const a = await semearBanco();
+    const b = await semearBanco();
+    // As tarefas registradas no despachante, sem a cotação do dólar (que chama o Banco Central): o teste pega a
+    // remoção do agendamento da lista real.
+    const tarefas = TAREFAS_DO_CRON.filter((t) => t.nome === "agendar-sincronizacao" || t.nome === "categorizacao");
+    expect(tarefas.map((t) => t.nome)).toContain("agendar-sincronizacao");
+    await despachar(AMBIENTE_COM_FILA, new Date(MEIA_NOITE), undefined, tarefas);
+    expect(await diariasDoBanco(a.itemId)).toBe(1);
+    expect(await diariasDoBanco(b.itemId)).toBe(1);
+    await fechaExecucoes(a.itemId, CINCO_DA_MANHA_SP);
+    await fechaExecucoes(b.itemId, CINCO_DA_MANHA_SP);
+    await despachar(AMBIENTE_COM_FILA, new Date("2026-11-10T08:05:00.000Z"), undefined, tarefas);
+    expect(await diariasDoBanco(a.itemId)).toBe(1);
+    expect(await diariasDoBanco(b.itemId)).toBe(1);
+  });
+});
 
 describe("agendamento da sincronização diária (cenários 1 a 4)", () => {
   it("cenário 1: dois bancos ativos são agendados às 00:00 de São Paulo; às 00:05 e às 23:55, nenhuma nova", async () => {
