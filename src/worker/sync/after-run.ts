@@ -6,6 +6,7 @@
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import { reconcileHousehold } from "../bank/classify";
 import type { Db } from "../db/client";
+import { conciliaAposExecucao } from "./regras";
 
 export type EntradaDoAfterRun = {
   householdId: string;
@@ -16,6 +17,6 @@ export type EntradaDoAfterRun = {
 };
 
 export async function afterRun(db: Db, entrada: EntradaDoAfterRun): Promise<void> {
-  if (entrada.kind === "historico") return;
+  if (!conciliaAposExecucao(entrada.kind)) return;
   await reconcileHousehold(db, entrada.householdId, todayInSaoPaulo(new Date(entrada.now)), entrada.now);
 }

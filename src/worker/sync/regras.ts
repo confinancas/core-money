@@ -9,6 +9,12 @@ export function shouldSchedule(ranToday: boolean, open: boolean): boolean {
   return !ranToday && !open;
 }
 
+// Depois de cada execução, o afterRun concilia a janela de hoje, salvo na importação (que concilia nas fatias da fase
+// conciliar). Decisão isolada para o teste de unidade (TASK-0205, A4, F8).
+export function conciliaAposExecucao(kind: string): boolean {
+  return kind !== "historico";
+}
+
 export const LIMITE_DO_SUMICO_EM_PERCENTUAL = 30;
 export const MINIMO_DE_SUMICOS_PARA_CONFERIR = 5;
 

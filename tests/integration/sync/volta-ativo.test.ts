@@ -30,3 +30,22 @@ describe("volta a ativo numa sincronização boa (N1)", () => {
     expect(linha?.status).toBe("ativo");
   });
 });
+
+describe("só a sincronização diária e a manual devolvem a ativo (A4, F5)", () => {
+  it("uma importação boa não devolve a ativo o banco instável", async () => {
+    const banco = await semearBanco();
+    await env.DB.prepare("UPDATE bank_items SET status = 'instavel' WHERE id = ?").bind(banco.itemId).run();
+    const runId = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "historico", DIA_2)) as string;
+    await rodar(
+      runId,
+      pluggyFalsoComTransacoes(() => []),
+      0,
+      1,
+      DIA_2,
+    );
+    const linha = await env.DB.prepare("SELECT status FROM bank_items WHERE id = ?")
+      .bind(banco.itemId)
+      .first<{ status: string }>();
+    expect(linha?.status).toBe("instavel");
+  });
+});
