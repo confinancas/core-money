@@ -1,3 +1,4 @@
+import { brand } from "../../../../shared/brand";
 import { Card } from "../../../components/ui/card";
 
 // Permissões (TASK-0206): texto fixo do protótipo. O app só lê; a lista não vem do Pluggy.
@@ -5,7 +6,7 @@ const LINHAS = [
   { titulo: "Saldos e extrato", detalhe: "Conta corrente e caixinha" },
   { titulo: "Cartões e faturas", detalhe: "Compras, parcelas, fechamento e vencimento" },
   { titulo: "Dados cadastrais", detalhe: "Nome e CPF do titular, para identificar a conta" },
-  { titulo: "Pagamentos e transferências", detalhe: "Não autorizado. O Matrimoney nunca move dinheiro." },
+  { titulo: "Pagamentos e transferências", detalhe: `Não autorizado. O ${brand.name} nunca move dinheiro.` },
 ];
 
 export function PermissionsCard() {
