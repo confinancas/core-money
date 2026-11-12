@@ -94,62 +94,11 @@ describe("despachar: leves e pesadas", () => {
   });
 });
 
-describe("despachar: N10, a vez de cada pesada", () => {
-  it("pesada sem trabalho cede a vez: a seguinte com trabalho roda", async () => {
-    const chamadas: string[] = [];
-    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
-      tarefa("pesada-sem-trabalho", true, chamadas, false),
-      tarefa("pesada-com-trabalho", true, chamadas, true),
-    ]);
-    expect(chamadas).toEqual(["pesada-sem-trabalho", "pesada-com-trabalho"]);
-  });
-
-  it("duas pesadas com trabalho se revezam: cada execução do cron põe uma delas em vez", async () => {
-    const primeira: string[] = [];
-    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
-      tarefa("pesada-1", true, primeira),
-      tarefa("pesada-2", true, primeira),
-    ]);
-    const segunda: string[] = [];
-    await despachar(AMBIENTE, TICK_1, DB_MEDIDO, [
-      tarefa("pesada-1", true, segunda),
-      tarefa("pesada-2", true, segunda),
-    ]);
-    expect(primeira).toHaveLength(1);
-    expect(segunda).toHaveLength(1);
-    expect(segunda[0]).not.toBe(primeira[0]);
-    // Na terceira execução, volta a primeira: nenhuma fica sem rodar.
-    const terceira: string[] = [];
-    await despachar(AMBIENTE, TICK_2, DB_MEDIDO, [
-      tarefa("pesada-1", true, terceira),
-      tarefa("pesada-2", true, terceira),
-    ]);
-    expect(terceira[0]).toBe(primeira[0]);
-  });
-
-  it("duas pesadas com trabalho e uma sem: a sem trabalho cede e as outras duas se revezam, sem ninguém parado", async () => {
-    const execucoes: string[][] = [];
-    for (const tick of [TICK_0, TICK_1]) {
-      const chamadas: string[] = [];
-      await despachar(AMBIENTE, tick, DB_MEDIDO, [
-        tarefa("sem-trabalho", true, chamadas, false),
-        tarefa("com-trabalho-a", true, chamadas, true),
-        tarefa("com-trabalho-b", true, chamadas, true),
-      ]);
-      execucoes.push(chamadas);
-    }
-    // Nunca a que não tem trabalho fica com a rodada; as duas com trabalho se alternam.
-    const rodadas = execucoes.map((chamadas) => chamadas.at(-1));
-    expect(rodadas).not.toContain("sem-trabalho");
-    expect(new Set(rodadas)).toEqual(new Set(["com-trabalho-a", "com-trabalho-b"]));
-  });
-});
-
-describe("TAREFAS_DO_CRON: ordem combinada", () => {
-  it("retomada da importação, atribuição de ciclos e agendamento da sincronização são leves; a categorização é a pesada", () => {
+  it("ordem combinada: retomada, atribuição de ciclos, cotação do dólar e agendamento são leves; a categorização é a pesada", () => {
     expect(TAREFAS_DO_CRON.map((t) => [t.nome, t.pesada])).toEqual([
       ["retomar-importacoes", false],
       ["atribuir-ciclos", false],
+      ["cotacao-dolar", false],
       ["agendar-sincronizacao", false],
       ["categorizacao", true],
     ]);

@@ -1,25 +1,33 @@
-// Despachante do cron (TASK-0303, com as tarefas da importação e da sincronização). Um Cron Trigger só, a cada 5 minutos
-// (plano gratuito). As tarefas leves rodam sempre. As pesadas: uma por execução. A CPU não se mede dentro do Worker, então
-// a rodada das pesadas para na primeira que trabalhou. Quem não tem trabalho cede a vez à seguinte (TASK-0205, N10); o
-// ponto de partida gira a cada execução do cron (um passo de cinco minutos), para que as que têm trabalho se revezem.
+// Despachante do cron (TASK-0303, com as tarefas da importação (TASK-0204), a cotação do dólar (TASK-0902) e a
+// sincronização diária (TASK-0205)). Um Cron Trigger só, a cada 5 minutos (plano gratuito). As tarefas leves rodam em toda
+// execução. As pesadas: uma por execução, porque a CPU não se mede dentro do Worker. Quem não tem trabalho cede a vez à
+// seguinte (TASK-0205, N10); o ponto de partida gira a cada execução do cron (um passo de cinco minutos).
 import { runCategorizationSlice } from "../categorization/cron";
 import type { Db } from "../db/client";
 import type { Env } from "../env";
+import { fillPendingFxRates } from "../income/fx";
 import { agendarSincronizacao } from "../sync/daily";
 import { atribuirCiclos, retomarImportacoes } from "./tarefas";
 
 export type TarefaDoCron = {
   nome: string;
   pesada: boolean;
-  // Devolve se a tarefa trabalhou (a pesada que trabalha encerra a rodada das pesadas).
-  executar: (env: Env, agora: Date, db?: Db) => Promise<boolean>;
+  // A pesada devolve true quando trabalhou (encerra a rodada das pesadas). As leves ignoram o retorno.
+  executar: (env: Env, agora: Date, db?: Db) => Promise<unknown>;
 };
 
-// Ordem de prioridade das leves: retomada da importação, atribuição de ciclos (lê zero linhas sem trabalho) e o
-// agendamento da sincronização diária. A categorização é a única pesada.
+// Ordem de prioridade: as leves antes (retomada da importação, atribuição de ciclos, cotação do dólar, agendamento da
+// sincronização diária) e a categorização, a única pesada.
 export const TAREFAS_DO_CRON: readonly TarefaDoCron[] = [
   retomarImportacoes,
   atribuirCiclos,
+  {
+    // Leve (TASK-0902): busca a cotação do dólar pendente, no máximo 2 chamadas ao Banco Central por execução.
+    nome: "cotacao-dolar",
+    pesada: false,
+    executar: (env, agora, db) =>
+      fillPendingFxRates(env, { now: agora, fetch: (...args) => globalThis.fetch(...args), db }),
+  },
   agendarSincronizacao,
   {
     nome: "categorizacao",
@@ -52,7 +60,7 @@ export async function despachar(
     if (tarefa === undefined) break;
     try {
       const trabalhou = await tarefa.executar(env, agora, db);
-      if (trabalhou) break;
+      if (trabalhou === true) break;
     } catch (erro) {
       // Só o nome do erro: a mensagem pode trazer pedaços de dado. A CPU da pesada que falhou já foi gasta: para aqui.
       console.error(`cron ${tarefa.nome}: falhou`, erro instanceof Error ? erro.name : "erro");

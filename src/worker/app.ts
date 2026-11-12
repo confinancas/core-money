@@ -13,6 +13,7 @@ import type { SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
 import { fixedIncomesRoutes } from "./income/fixed-incomes-routes";
+import { receiptsRoutes } from "./income/receipts-routes";
 import { membersRoutes } from "./members/routes";
 import { notificationPrefsRoutes, notificationsRoutes } from "./notifications/routes";
 import { pluggyConnectionsRoutes } from "./pluggy/routes";
@@ -128,6 +129,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/fixed-incomes", fixedIncomesRoutes(resolverDaSessao, options.agora));
+  // Recebimentos e renda do ciclo (TASK-0902): /api/cycle/income e /api/fixed-incomes/:id/receipts.
+  app.route("/", receiptsRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
   app.route("/usage", usageRoutes(resolverDaSessao, options.agora));
   app.route("/settings/paid-plan", planoPagoRoutes(resolverDaSessao));

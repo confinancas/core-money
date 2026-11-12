@@ -1,6 +1,8 @@
 // Renda fixa (TASK-0901): os salários e outras entradas com dia certo. Valores em centavos inteiros na moeda
 // (US$ 2.000,00 = 200000). A validação é a mesma na API e no formulário.
 
+import type { UltimaCotacao } from "./income";
+
 export const CURRENCIES = ["BRL", "USD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
@@ -182,14 +184,14 @@ export type FixedIncomeDto = {
   arrival: Arrival;
   statementText: string | null;
   keptUsdIsInvestment: boolean;
-  // A última cotação de cada renda em dólar: a TASK-0902 preenche. Aqui é sempre nulo.
-  lastFx: null;
+  // A cotação do recebimento mais recente da renda (TASK-0902). Nulo sem recebimento com cotação.
+  lastFx: UltimaCotacao | null;
 };
 
 export type ExpectedPerCycleDto = {
   brlCents: number;
   usdCents: number;
-  // Dólar convertido em real: a TASK-0902 preenche. Aqui é sempre nulo.
+  // Dólar convertido em real, pela cotação de cada renda (TASK-0902). Nulo se alguma renda em dólar ainda não tem cotação.
   usdInBrlCents: number | null;
 };
 
