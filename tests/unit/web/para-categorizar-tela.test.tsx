@@ -123,4 +123,16 @@ describe("tela Para categorizar (rodada 1)", () => {
     expect(screen.queryByText("Serviços · pouca certeza")).toBeNull();
     expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
   });
+
+  it("Ver mais: dois cliques trazem a próxima página uma vez só", async () => {
+    acoes.fetchQueue.mockResolvedValueOnce({ ...resposta([LINHA_PIX]), nextCursor: "cursor-1" });
+    acoes.fetchQueue.mockImplementationOnce(() => new Promise(() => {}));
+    montar();
+    const usuario = userEvent.setup();
+    const botao = await screen.findByRole("button", { name: "Ver mais" });
+    await usuario.click(botao);
+    await usuario.click(botao);
+    expect(acoes.fetchQueue).toHaveBeenCalledTimes(2);
+    expect(acoes.fetchQueue).toHaveBeenLastCalledWith("todos", "cursor-1");
+  });
 });
