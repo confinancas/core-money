@@ -66,4 +66,35 @@ describe("tipo de gasto e nome na fila", () => {
     expect(linha.spend_type).toBe("fixos");
     expect(linha.spend_type_source).toBe("regra");
   });
+
+  it("A10: um igual que esperava recebe o nome e o tipo da regra da chave", async () => {
+    const lar = await criarLar();
+    const chave = establishmentKey("[TEST] ACADEMIA GAMA") ?? "";
+    await criarRegra(lar, {
+      scope: "estabelecimento",
+      matchValue: chave,
+      setCustomName: "[TEST] Academia",
+      setSpendType: "fixos",
+    });
+    const antiga = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -9000,
+      descricao: "[TEST] ACADEMIA GAMA",
+      localDate: "2026-11-01",
+    });
+    const nova = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -9000,
+      descricao: "[TEST] ACADEMIA GAMA",
+      localDate: "2026-11-09",
+      aiCategoryId: categoriaDoLar(lar, "servicos"),
+    });
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: [nova] });
+    expect((r.corpo.alsoResolved as { transactionId: string }[]).map((x) => x.transactionId)).toEqual([antiga]);
+    const linha = await lerTransacao(antiga);
+    expect(linha.category_id).toBe(categoriaDoLar(lar, "servicos"));
+    expect(linha.custom_name).toBe("[TEST] Academia");
+    expect(linha.spend_type).toBe("fixos");
+    expect(linha.spend_type_source).toBe("regra");
+  });
 });

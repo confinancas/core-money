@@ -445,6 +445,21 @@ const CANDIDATAS_DA_VOLTA = `SELECT x.id FROM transactions AS x INDEXED BY trans
     SELECT x.id FROM (SELECT 1 AS ok WHERE EXISTS (SELECT 1 FROM rules AS r WHERE r.id IN (SELECT rule_id FROM regras_do_alvo) AND r.scope = 'destinatario')) AS gate
       CROSS JOIN transactions AS x ON x.household_id = ? AND x.movement IN ('pix_enviado', 'ted_enviada')`;
 
+// Campos da regra ativa da chave da linha (o nome e o tipo que a regra grava nos iguais).
+const regraDaLinha = (
+  coluna: string,
+): string => `(SELECT r.${coluna} FROM rules AS r WHERE r.household_id = t.household_id
+    AND r.disabled_at IS NULL AND r.scope = ${ESCOPO_DA_LINHA} AND r.match_value = ${CHAVE_DA_LINHA})`;
+const NOME_DA_REGRA_DA_LINHA = regraDaLinha("set_custom_name");
+const TIPO_DA_REGRA_DA_LINHA = regraDaLinha("set_spend_type");
+const TIPO_DOS_IGUAIS_VALE = `(${TIPO_DA_REGRA_DA_LINHA} IS NOT NULL
+    AND NOT (t.card_id IS NOT NULL AND ${TIPO_DA_REGRA_DA_LINHA} IN ('metas', 'investimentos')))`;
+const HERDADO_DA_LINHA = tipoDaCategoriaSql(CATEGORIA_DA_REGRA_DA_LINHA, "t");
+const TIPO_DOS_IGUAIS = `spend_type = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type
+      WHEN ${TIPO_DOS_IGUAIS_VALE} THEN ${TIPO_DA_REGRA_DA_LINHA} ELSE ${HERDADO_DA_LINHA.tipo} END,
+    spend_type_source = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type_source
+      WHEN ${TIPO_DOS_IGUAIS_VALE} THEN 'regra' ELSE ${HERDADO_DA_LINHA.origem} END`;
+
 // Aprender com a confirmação, no mesmo lote do aceite, depois das instruções de aceitar:
 // (1) a regra ativa da chave sem categoria válida (só de nome, ou com categoria arquivada) recebe a categoria da
 //     transação mais recente da chave; (2) uma regra por chave nova ("confirmacao", criada por esta pessoa), sem
@@ -499,7 +514,9 @@ export function learnFromConfirmationStmts(
         `WITH ${cteAceitas()}, chaves AS (SELECT DISTINCT escopo, chave FROM aceitas)
         UPDATE transactions AS t SET category_id = ${CATEGORIA_DA_REGRA_DA_LINHA},
           categorized_at = ?, categorized_by = 'regra', rule_id = ${ID_DA_REGRA_DA_LINHA},
-          ${setDoTipoDaCategoria(CATEGORIA_DA_REGRA_DA_LINHA, "t", false).join(", ")}
+          custom_name = CASE WHEN t.custom_name IS NULL AND ${NOME_DA_REGRA_DA_LINHA} IS NOT NULL
+            THEN ${NOME_DA_REGRA_DA_LINHA} ELSE t.custom_name END,
+          ${TIPO_DOS_IGUAIS}
         WHERE t.id IN (${CANDIDATAS_DOS_IGUAIS}) AND t.removed_at IS NULL
           AND t.movement IN ${MOVIMENTOS_COM_REGRA}
           AND (t.category_id IS NULL OR t.categorized_by = 'ia')
