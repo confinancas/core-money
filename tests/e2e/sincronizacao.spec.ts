@@ -32,7 +32,9 @@ test.afterAll(() => {
   executaSql("pronta", LIMPEZA);
 });
 
-test("Configurações mostra a última atualização com sucesso como 'Última: hoje às HH:MM'", async ({ page }) => {
+test("Configurações mostra a última atualização com sucesso como 'Última: hoje às HH:MM'", async ({
+  page,
+}) => {
   test.setTimeout(120_000);
   const agora = new Date();
   const instante = agora.toISOString();

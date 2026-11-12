@@ -437,13 +437,42 @@ describe("leitura da janela e o que sumiu (cenários 8 a 10)", () => {
   it("cenário 10 (poucas linhas): janela que voltou vazia com 3 linhas locais não marca nada (só a guarda da janela vazia segura)", async () => {
     const banco = await semearBanco();
     const conta = contaDoBanco(banco);
-    const tres: Tx[] = Array.from({ length: 3 }, (_, i) => ({ id: `[TEST]-p${i}`, conta, data: "2026-11-05", valor: -(7 + i) }));
-    const primeira = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DOZE_HORAS_UTC)) as string;
-    await rodar(primeira, pluggyComTransacoes((c) => (c === conta ? tres : [])), 0, 1, DOZE_HORAS_UTC);
+    const tres: Tx[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `[TEST]-p${i}`,
+      conta,
+      data: "2026-11-05",
+      valor: -(7 + i),
+    }));
+    const primeira = (await startRun(
+      createDb(env.DB, newMeter()),
+      banco.itemId,
+      "diaria",
+      DOZE_HORAS_UTC,
+    )) as string;
+    await rodar(
+      primeira,
+      pluggyComTransacoes((c) => (c === conta ? tres : [])),
+      0,
+      1,
+      DOZE_HORAS_UTC,
+    );
 
-    const segunda = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", TREZE_HORAS_UTC)) as string;
-    await rodar(segunda, pluggyComTransacoes(() => []), 0, 1, TREZE_HORAS_UTC);
-    const vivas = await env.DB.prepare("SELECT COUNT(*) AS n FROM transactions WHERE bank_item_id = ? AND removed_at IS NULL")
+    const segunda = (await startRun(
+      createDb(env.DB, newMeter()),
+      banco.itemId,
+      "diaria",
+      TREZE_HORAS_UTC,
+    )) as string;
+    await rodar(
+      segunda,
+      pluggyComTransacoes(() => []),
+      0,
+      1,
+      TREZE_HORAS_UTC,
+    );
+    const vivas = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM transactions WHERE bank_item_id = ? AND removed_at IS NULL",
+    )
       .bind(banco.itemId)
       .first<{ n: number }>();
     expect(vivas?.n).toBe(3);
