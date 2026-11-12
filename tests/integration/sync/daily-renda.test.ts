@@ -1,10 +1,10 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { computeCycleIncome } from "../../../src/worker/income/cycle-income";
-import { addTransactionReceiptStmts } from "../../../src/worker/income/receipts";
 import { createDb } from "../../../src/worker/db/client";
 import { newMeter } from "../../../src/worker/db/metered-d1";
 import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch";
+import { computeCycleIncome } from "../../../src/worker/income/cycle-income";
+import { addTransactionReceiptStmts } from "../../../src/worker/income/receipts";
 import { startRun } from "../../../src/worker/sync/runs";
 import { AGORA, type Banco, rodar, semearBanco, urlDe } from "./importacao-helpers";
 
@@ -49,7 +49,11 @@ function pluggyComTransacoes(porConta: (conta: string) => Tx[]): typeof fetch {
 }
 
 // Renda fixa [TEST] do lar e o recebimento ligado à transação, pelo mesmo caminho que o extrato usa.
-async function ligaRecebimento(banco: Banco, transacaoExterna: string, cicloDaTransacao: string): Promise<string> {
+async function ligaRecebimento(
+  banco: Banco,
+  transacaoExterna: string,
+  cicloDaTransacao: string,
+): Promise<string> {
   const rendaId = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text,
@@ -78,7 +82,11 @@ async function ligaRecebimento(banco: Banco, transacaoExterna: string, cicloDaTr
 }
 
 async function rendaDoCiclo(banco: Banco, cicloDaTransacao: string, rendaId: string) {
-  const resposta = await computeCycleIncome(createDb(env.DB, newMeter()), banco.householdId, cicloDaTransacao);
+  const resposta = await computeCycleIncome(
+    createDb(env.DB, newMeter()),
+    banco.householdId,
+    cicloDaTransacao,
+  );
   const renda = resposta?.fixedIncomes.find((item) => item.id === rendaId);
   return {
     recebido: renda?.broughtCents ?? 0,
@@ -88,7 +96,12 @@ async function rendaDoCiclo(banco: Banco, cicloDaTransacao: string, rendaId: str
 }
 
 // A entrada casada e uma outra transação na mesma janela: a leitura não fica vazia (a guarda de leitura vazia não entra).
-const entrada = (conta: string, valor: number): Tx => ({ id: "[TEST]-renda", conta, data: "2026-11-05", valor });
+const entrada = (conta: string, valor: number): Tx => ({
+  id: "[TEST]-renda",
+  conta,
+  data: "2026-11-05",
+  valor,
+});
 const outra = (conta: string): Tx => ({ id: "[TEST]-outra", conta, data: "2026-11-06", valor: -20 });
 
 describe("renda do ciclo pela sincronização diária (TASK-0902, herdado)", () => {
@@ -97,7 +110,12 @@ describe("renda do ciclo pela sincronização diária (TASK-0902, herdado)", () 
     const conta = `${banco.itemId}-corrente`;
 
     // Dia 1: a entrada de R$ 3.000,00 entra pela sincronização.
-    const primeira = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DOZE_HORAS_UTC)) as string;
+    const primeira = (await startRun(
+      createDb(env.DB, newMeter()),
+      banco.itemId,
+      "diaria",
+      DOZE_HORAS_UTC,
+    )) as string;
     await rodar(
       primeira,
       pluggyComTransacoes((c) => (c === conta ? [entrada(conta, 3000), outra(conta)] : [])),
@@ -115,7 +133,12 @@ describe("renda do ciclo pela sincronização diária (TASK-0902, herdado)", () 
     expect((await rendaDoCiclo(banco, ciclo, rendaId)).recebido).toBe(300000);
 
     // Dia 2: o banco devolve a mesma entrada com R$ 3.100,00. A renda do ciclo acompanha o valor atual.
-    const segunda = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", TREZE_HORAS_UTC)) as string;
+    const segunda = (await startRun(
+      createDb(env.DB, newMeter()),
+      banco.itemId,
+      "diaria",
+      TREZE_HORAS_UTC,
+    )) as string;
     await rodar(
       segunda,
       pluggyComTransacoes((c) => (c === conta ? [entrada(conta, 3100), outra(conta)] : [])),
@@ -126,8 +149,19 @@ describe("renda do ciclo pela sincronização diária (TASK-0902, herdado)", () 
     expect((await rendaDoCiclo(banco, ciclo, rendaId)).recebido).toBe(310000);
 
     // Dia 3: a entrada some do banco. A leitura da janela não traz nada: o recebimento deixa de contar.
-    const terceira = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DEZESSEIS_HORAS_UTC)) as string;
-    await rodar(terceira, pluggyComTransacoes((c) => (c === conta ? [outra(conta)] : [])), 0, 1, DEZESSEIS_HORAS_UTC);
+    const terceira = (await startRun(
+      createDb(env.DB, newMeter()),
+      banco.itemId,
+      "diaria",
+      DEZESSEIS_HORAS_UTC,
+    )) as string;
+    await rodar(
+      terceira,
+      pluggyComTransacoes((c) => (c === conta ? [outra(conta)] : [])),
+      0,
+      1,
+      DEZESSEIS_HORAS_UTC,
+    );
     expect(await rendaDoCiclo(banco, ciclo, rendaId)).toEqual({ recebido: 0, recebimentos: 0, trazido: 0 });
     const marcada = await env.DB.prepare("SELECT removed_at FROM transactions WHERE external_id = ?")
       .bind("[TEST]-renda")

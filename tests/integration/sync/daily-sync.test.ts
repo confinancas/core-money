@@ -1,11 +1,11 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../../src/worker/app";
+import { despachar, TAREFAS_DO_CRON } from "../../../src/worker/cron/despachante";
 import { createDb } from "../../../src/worker/db/client";
 import { newMeter } from "../../../src/worker/db/metered-d1";
 import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch";
 import type { Env } from "../../../src/worker/env";
-import { despachar, TAREFAS_DO_CRON } from "../../../src/worker/cron/despachante";
 import { scheduleDailySync } from "../../../src/worker/sync/daily";
 import { startRun } from "../../../src/worker/sync/runs";
 import { callApi, semearPronto } from "../helpers/app";
@@ -127,7 +127,9 @@ describe("cenário 1 pelo despachante do cron", () => {
     const b = await semearBanco();
     // As tarefas registradas no despachante, sem a cotação do dólar (que chama o Banco Central): o teste pega a
     // remoção do agendamento da lista real.
-    const tarefas = TAREFAS_DO_CRON.filter((t) => t.nome === "agendar-sincronizacao" || t.nome === "categorizacao");
+    const tarefas = TAREFAS_DO_CRON.filter(
+      (t) => t.nome === "agendar-sincronizacao" || t.nome === "categorizacao",
+    );
     expect(tarefas.map((t) => t.nome)).toContain("agendar-sincronizacao");
     await despachar(AMBIENTE_COM_FILA, new Date(MEIA_NOITE), undefined, tarefas);
     expect(await diariasDoBanco(a.itemId)).toBe(1);

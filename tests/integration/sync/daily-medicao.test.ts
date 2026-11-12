@@ -6,7 +6,7 @@ import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch"
 import type { Env } from "../../../src/worker/env";
 import { scheduleDailySync } from "../../../src/worker/sync/daily";
 import { runSyncSlice } from "../../../src/worker/sync/slice";
-import { AMBIENTE, AGORA, semearBanco, urlDe } from "./importacao-helpers";
+import { AGORA, AMBIENTE, semearBanco, urlDe } from "./importacao-helpers";
 
 // Custo da sincronização diária no D1 local (TASK-0205, passo 5): um lar com quatro bancos, cada um com 50 movimentos
 // na janela da leitura diária. Mede rows_read e rows_written de cada fatia (o medidor do D1) e põe um teto. O teto tem
@@ -101,10 +101,11 @@ describe("sincronização diária, lar com quatro bancos: custo no D1 local (tet
 
     // Teto com folga sobre o medido na rodada de 2026-11-11: rows_read 25.720 e rows_written 7.964 (24 fatias). O teto
     // de leituras (40.000) e o de escritas (12.000) ficam acima dele; a escrita diária do lar cabe no teto de 60% do D1.
-    console.info(`MEDICAO-0205 agendamento+4 bancos: rows_read=${lidas} rows_written=${escritas} fatias=${fatias}`);
+    console.info(
+      `MEDICAO-0205 agendamento+4 bancos: rows_read=${lidas} rows_written=${escritas} fatias=${fatias}`,
+    );
     expect(lidas).toBeLessThanOrEqual(40_000);
     expect(escritas).toBeLessThanOrEqual(12_000);
     expect(fatias).toBeGreaterThan(0);
   });
 });
-

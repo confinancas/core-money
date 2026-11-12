@@ -15,8 +15,7 @@ const AMBIENTE = {} as Env;
 const DB_MEDIDO = { marcador: "db-medido" } as unknown as Db;
 // Instantes de cinco em cinco minutos: o ponto de partida do giro alterna entre execuções seguidas.
 const TICK_0 = new Date(PASSO_DO_CRON_MS * 1000);
-const TICK_1 = new Date(PASSO_DO_CRON_MS * 1001);
-const TICK_2 = new Date(PASSO_DO_CRON_MS * 1002);
+const _TICK_1 = new Date(PASSO_DO_CRON_MS * 1001);
 
 const tarefa = (nome: string, pesada: boolean, chamadas: string[], trabalha = true): TarefaDoCron => ({
   nome,
@@ -92,7 +91,6 @@ describe("despachar: leves e pesadas", () => {
     ]);
     expect(recebidos).toEqual([DB_MEDIDO]);
   });
-});
 
   it("ordem combinada: retomada, atribuição de ciclos, cotação do dólar e agendamento são leves; a categorização é a pesada", () => {
     expect(TAREFAS_DO_CRON.map((t) => [t.nome, t.pesada])).toEqual([
