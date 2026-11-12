@@ -32,6 +32,18 @@ const DOZE_HORAS_UTC = "2026-11-10T12:00:00.000Z";
 const TREZE_HORAS_UTC = "2026-11-10T13:00:00.000Z";
 const DEZESSEIS_HORAS_UTC = "2026-11-10T16:00:00.000Z";
 
+// Banco com a importação concluída (uma execução historico ok, de um dia antes): o agendamento e o "Baixar agora" usam a
+// sincronização diária (TASK-0205, A5). Sem ela, o banco recebe a importação de novo.
+async function bancoImportado(): Promise<Banco> {
+  const banco = await semearBanco();
+  await env.DB.prepare(
+    "INSERT INTO sync_runs (id, bank_item_id, kind, started_at, finished_at, status, cursor_json, heartbeat_at) VALUES (?, ?, 'historico', '2026-10-01T12:00:00.000Z', '2026-10-01T12:30:00.000Z', 'ok', '{\"seq\":0,\"phase\":\"fim\"}', NULL)",
+  )
+    .bind(crypto.randomUUID(), banco.itemId)
+    .run();
+  return banco;
+}
+
 const fila: unknown[] = [];
 // Ambiente com a fila falsa: o agendamento envia as fatias para a lista, sem a Cloudflare.
 const AMBIENTE_COM_FILA = Object.assign({}, AMBIENTE, {
@@ -123,8 +135,8 @@ async function semearProntoUmaVez() {
 
 describe("cenário 1 pelo despachante do cron", () => {
   it("despachar às 00:00 de São Paulo cria uma execução diária por banco; às 00:05 nenhuma nova", async () => {
-    const a = await semearBanco();
-    const b = await semearBanco();
+    const a = await bancoImportado();
+    const b = await bancoImportado();
     // As tarefas registradas no despachante, sem a cotação do dólar (que chama o Banco Central): o teste pega a
     // remoção do agendamento da lista real.
     const tarefas = TAREFAS_DO_CRON.filter(
@@ -144,8 +156,8 @@ describe("cenário 1 pelo despachante do cron", () => {
 
 describe("agendamento da sincronização diária (cenários 1 a 4)", () => {
   it("cenário 1: dois bancos ativos são agendados às 00:00 de São Paulo; às 00:05 e às 23:55, nenhuma nova", async () => {
-    const a = await semearBanco();
-    const b = await semearBanco();
+    const a = await bancoImportado();
+    const b = await bancoImportado();
     expect(await scheduleDailySync(AMBIENTE_COM_FILA, { agora: new Date(MEIA_NOITE) })).toBe(2);
     expect(await diariasDoBanco(a.itemId)).toBe(1);
     expect(await diariasDoBanco(b.itemId)).toBe(1);
@@ -160,7 +172,7 @@ describe("agendamento da sincronização diária (cenários 1 a 4)", () => {
   });
 
   it("cenário 2: meia-noite de São Paulo, não de UTC: às 21:00 de São Paulo (00:00 UTC), com a execução do dia feita, nada novo", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     await scheduleDailySync(AMBIENTE_COM_FILA, { agora: new Date(MEIA_NOITE) });
     await fechaExecucoes(banco.itemId, CINCO_DA_MANHA_SP);
     expect(await scheduleDailySync(AMBIENTE_COM_FILA, { agora: new Date(VINTE_E_UMA_SP) })).toBe(0);
@@ -168,14 +180,14 @@ describe("agendamento da sincronização diária (cenários 1 a 4)", () => {
   });
 
   it("cenário 3: cron perdido à meia-noite: às 09:10 agenda uma vez, e a segunda chamada não agenda de novo", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     expect(await scheduleDailySync(AMBIENTE_COM_FILA, { agora: new Date(NOVE_E_DEZ_SP) })).toBe(1);
     expect(await scheduleDailySync(AMBIENTE_COM_FILA, { agora: new Date(NOVE_E_DEZ_SP) })).toBe(0);
     expect(await diariasDoBanco(banco.itemId)).toBe(1);
   });
 
   it("cenário 4: virada do dia: execução às 23:50 de 10/11 (02:50 UTC de 11/11) não conta para 11/11", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DOIS_E_CINQUENTA_UTC);
     await fechaExecucoes(banco.itemId, DOIS_E_CINQUENTA_UTC);
     expect(await scheduleDailySync(AMBIENTE_COM_FILA, { agora: new Date("2026-11-11T03:00:00.000Z") })).toBe(
@@ -185,7 +197,7 @@ describe("agendamento da sincronização diária (cenários 1 a 4)", () => {
   });
 
   it("chamadas ao D1 do agendamento sem nada a fazer: uma leitura", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DOZE_HORAS_UTC);
     await fechaExecucoes(banco.itemId, DOZE_HORAS_UTC);
     const medidor = newMeter();
@@ -202,7 +214,7 @@ describe("agendamento da sincronização diária (cenários 1 a 4)", () => {
 describe("desconectado e sem chaves (cenários 5 e 13)", () => {
   it("cenário 5: banco desconectado não é agendado e o 'Baixar agora' responde 409 banco_desconectado", async () => {
     await semearProntoUmaVez();
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     await escritas("UPDATE bank_items SET disconnected_at = ? WHERE id = ?", DOZE_HORAS_UTC, banco.itemId);
     expect(await scheduleDailySync(AMBIENTE_COM_FILA, { agora: new Date(MEIA_NOITE) })).toBe(0);
     const resposta = await callApi(
@@ -219,7 +231,7 @@ describe("desconectado e sem chaves (cenários 5 e 13)", () => {
 
   it("cenário 13: sem chaves não agenda, o 'Baixar agora' responde 409 sem_chaves; com as chaves de volta, agenda", async () => {
     await semearProntoUmaVez();
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const guardado = await env.DB.prepare("SELECT client_id_enc, iv FROM pluggy_connections WHERE id = ?")
       .bind(banco.connectionId)
       .first<{ client_id_enc: string; iv: string }>();
@@ -252,7 +264,7 @@ describe("desconectado e sem chaves (cenários 5 e 13)", () => {
 describe("Baixar agora (cenários 6 e 7)", () => {
   it("cenário 6: depois de uma falha que repete (instável), 202 e a execução manual; dois toques ao mesmo tempo, uma execução", async () => {
     await semearProntoUmaVez();
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const anterior = await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DOZE_HORAS_UTC);
     await escritas(
       "UPDATE sync_runs SET finished_at = ?, status = 'instavel', error_code = 'banco_instavel' WHERE id = ?",
@@ -276,7 +288,7 @@ describe("Baixar agora (cenários 6 e 7)", () => {
 
   it("cenário 6: última com sucesso: 409 sem_falha; erro de chaves: 409 falha_precisa_de_acao", async () => {
     await semearProntoUmaVez();
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const execucao1 = await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DOZE_HORAS_UTC);
     await escritas(
       "UPDATE sync_runs SET finished_at = ?, status = 'ok' WHERE id = ?",
@@ -313,8 +325,8 @@ describe("Baixar agora (cenários 6 e 7)", () => {
 
   it("cenário 6: outro lar não vê o banco: 404", async () => {
     await semearProntoUmaVez();
-    const banco = await semearBanco();
-    const outro = await semearBanco();
+    const banco = await bancoImportado();
+    const outro = await bancoImportado();
     const resposta = await callApi(
       appDoLar(outro.householdId, TREZE_HORAS_UTC),
       "POST",
@@ -328,7 +340,7 @@ describe("Baixar agora (cenários 6 e 7)", () => {
 
   it("cenário 7: com a diária aberta, 409 atualizacao_em_andamento", async () => {
     await semearProntoUmaVez();
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     await startRun(createDb(env.DB, newMeter()), banco.itemId, "diaria", DOZE_HORAS_UTC);
     const resposta = await callApi(
       appDoLar(banco.householdId, TREZE_HORAS_UTC),
@@ -345,7 +357,7 @@ describe("Baixar agora (cenários 6 e 7)", () => {
 
 describe("leitura da janela e o que sumiu (cenários 8 a 10)", () => {
   it("cenário 8: releitura com as mesmas transações não insere nada e termina ok", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const txs: Tx[] = [
       { id: "[TEST]-t1", conta: contaDoBanco(banco), data: "2026-11-05", valor: -40 },
       { id: "[TEST]-t2", conta: contaDoBanco(banco), data: "2026-11-06", valor: -25 },
@@ -371,7 +383,7 @@ describe("leitura da janela e o que sumiu (cenários 8 a 10)", () => {
   });
 
   it("cenário 9: compra pendente t1 que volta como t2 sai dos cálculos; t2 entra; a conta não duplica", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const conta = contaDoBanco(banco);
     const fetchA = pluggyComTransacoes((c) =>
       c === conta ? [{ id: "[TEST]-t1", conta, data: "2026-11-05", valor: -40 }] : [],
@@ -413,7 +425,7 @@ describe("leitura da janela e o que sumiu (cenários 8 a 10)", () => {
   });
 
   it("cenário 10: janela que voltou vazia com 12 linhas locais não marca nada", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const conta = contaDoBanco(banco);
     const doze: Tx[] = Array.from({ length: 12 }, (_, i) => ({
       id: `[TEST]-v${i}`,
@@ -457,7 +469,7 @@ describe("leitura da janela e o que sumiu (cenários 8 a 10)", () => {
   });
 
   it("cenário 10 (poucas linhas): janela que voltou vazia com 3 linhas locais não marca nada (só a guarda da janela vazia segura)", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const conta = contaDoBanco(banco);
     const tres: Tx[] = Array.from({ length: 3 }, (_, i) => ({
       id: `[TEST]-p${i}`,
@@ -501,7 +513,7 @@ describe("leitura da janela e o que sumiu (cenários 8 a 10)", () => {
   });
 
   it("cenário 11: 40 de 100 ausentes: nada marcado e error_code conferir_sumidas (o status segue ok)", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const conta = contaDoBanco(banco);
     const cem: Tx[] = Array.from({ length: 100 }, (_, i) => ({
       id: `[TEST]-m${i}`,
@@ -554,7 +566,7 @@ describe("leitura da janela e o que sumiu (cenários 8 a 10)", () => {
 describe("status, volta a ativo e fila (cenários 12, N6 e N9)", () => {
   it("cenário 12: GET /api/sync/status mostra lastSync (a mais recente) e os nomes dos bancos", async () => {
     await semearProntoUmaVez();
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const execucao1 = (await startRun(
       createDb(env.DB, newMeter()),
       banco.itemId,
@@ -588,7 +600,7 @@ describe("status, volta a ativo e fila (cenários 12, N6 e N9)", () => {
   });
 
   it("N6: item OUTDATED deixa o banco instável; uma diária boa depois devolve a ativo; a que viu OUTDATED não", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const conta = contaDoBanco(banco);
     const primeira = (await startRun(
       createDb(env.DB, newMeter()),
@@ -628,7 +640,7 @@ describe("status, volta a ativo e fila (cenários 12, N6 e N9)", () => {
   });
 
   it("N9: a releitura diária não põe de volta na fila da IA a linha sem categoria", async () => {
-    const banco = await semearBanco();
+    const banco = await bancoImportado();
     const conta = contaDoBanco(banco);
     const txs: Tx[] = [{ id: "[TEST]-n9", conta, data: "2026-11-05", valor: -33 }];
     const fetch = pluggyComTransacoes((c) => (c === conta ? txs : []));

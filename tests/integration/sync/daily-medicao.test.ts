@@ -58,6 +58,13 @@ async function larComQuatroBancos(): Promise<{ householdId: string; bancos: stri
       .run();
     bancos.push(itemId);
   }
+  for (const itemId of bancos) {
+    await env.DB.prepare(
+      "INSERT INTO sync_runs (id, bank_item_id, kind, started_at, finished_at, status, cursor_json, heartbeat_at) VALUES (?, ?, 'historico', '2026-10-01T12:00:00.000Z', '2026-10-01T12:30:00.000Z', 'ok', '{\"seq\":0,\"phase\":\"fim\"}', NULL)",
+    )
+      .bind(crypto.randomUUID(), itemId)
+      .run();
+  }
   return { householdId: primeiro.householdId, bancos };
 }
 

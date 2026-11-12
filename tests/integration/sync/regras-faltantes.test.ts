@@ -17,6 +17,7 @@ import { pluggyFalsoComTransacoes } from "./pluggy-com-transacoes";
 const DIA_1 = "2026-11-10T12:00:00.000Z";
 const DIA_2 = "2026-11-10T13:00:00.000Z";
 const DIA_3 = "2026-11-10T14:00:00.000Z";
+const ONTEM = "2026-11-09T12:00:00.000Z";
 const MEIA_NOITE_SP = "2026-11-10T03:00:00.000Z";
 
 const AMBIENTE_COM_FILA = Object.assign({}, AMBIENTE, {
@@ -129,9 +130,9 @@ describe("A4: o agendamento conta só a diária de hoje", () => {
       createDb(env.DB, newMeter()),
       banco.itemId,
       "historico",
-      DIA_1,
+      ONTEM,
     )) as string;
-    await fechaExecucao(historico, DIA_1, "ok");
+    await fechaExecucao(historico, ONTEM, "ok");
     const manual = (await startRun(createDb(env.DB, newMeter()), banco.itemId, "manual", DIA_2)) as string;
     await fechaExecucao(manual, DIA_2, "ok");
     const agendados = await scheduleDailySync(

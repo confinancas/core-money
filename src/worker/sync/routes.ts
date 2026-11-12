@@ -47,6 +47,8 @@ export const SQL_BANCOS_DO_LAR = `SELECT b.id AS bank_item_id, b.institution_nam
 export const SQL_BANCO_DO_LAR = `SELECT b.id AS bank_item_id, b.disconnected_at, c.client_id_enc, c.iv, c.client_secret_enc,
     c.client_secret_iv,
     EXISTS (SELECT 1 FROM sync_runs r WHERE r.bank_item_id = b.id AND r.finished_at IS NULL) AS aberta,
+    EXISTS (SELECT 1 FROM sync_runs r WHERE r.bank_item_id = b.id AND r.kind = 'historico'
+      AND r.finished_at IS NOT NULL AND r.status IN ('ok', 'repetiu')) AS importado,
     (SELECT r.status FROM sync_runs r WHERE r.bank_item_id = b.id AND r.finished_at IS NOT NULL
        ORDER BY r.finished_at DESC LIMIT 1) AS ultimo_status,
     (SELECT r.error_code FROM sync_runs r WHERE r.bank_item_id = b.id AND r.finished_at IS NOT NULL
@@ -177,6 +179,7 @@ export function bankItemsSyncRoutes(
       client_secret_enc: string | null;
       client_secret_iv: string | null;
       aberta: number;
+      importado: number;
       ultimo_status: string | null;
       ultimo_erro: string | null;
     }>();
@@ -203,7 +206,9 @@ export function bankItemsSyncRoutes(
       return apiError(c, 409, "falha_precisa_de_acao", "Repetir não resolve: veja o que falta neste banco.");
     }
 
-    const runId = await startRun(db, bankItemId, "manual", agora().toISOString());
+    // Sem importação encerrada com sucesso, o "Baixar agora" refaz a importação (TASK-0205, A5).
+    const tipo = banco.importado === 1 ? "manual" : "historico";
+    const runId = await startRun(db, bankItemId, tipo, agora().toISOString());
     if (runId === null) return apiError(c, 409, "atualizacao_em_andamento", "Já está atualizando.");
     // Se a fila falhar, a execução fica aberta e o cron a retoma (retomar-importacoes).
     try {

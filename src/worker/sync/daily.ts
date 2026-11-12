@@ -12,9 +12,15 @@ import { startRun } from "./runs";
 
 // Um banco por linha. Desconectado não entra; sem chaves (client_id_enc nulo) não entra. Quem rodou hoje ou tem execução
 // aberta vem marcado. Os dois subconjuntos usam os índices sync_runs_bank_item_started_idx e sync_runs_open_idx.
+// Enquanto o banco não tem uma importação (historico) encerrada com sucesso, a execução agendada é a importação de novo
+// (TASK-0205, A5): a sincronização diária sozinha só relê a janela recente e não recupera o histórico perdido. "Rodou hoje"
+// vale para a diária e para a importação.
 export const SQL_AGENDAR = `SELECT b.id AS bank_item_id,
-    EXISTS (SELECT 1 FROM sync_runs r WHERE r.bank_item_id = b.id AND r.kind = 'diaria' AND r.started_at >= ?) AS rodou_hoje,
-    EXISTS (SELECT 1 FROM sync_runs r WHERE r.bank_item_id = b.id AND r.finished_at IS NULL) AS aberta
+    EXISTS (SELECT 1 FROM sync_runs r WHERE r.bank_item_id = b.id AND r.kind IN ('diaria', 'historico')
+      AND r.started_at >= ?) AS rodou_hoje,
+    EXISTS (SELECT 1 FROM sync_runs r WHERE r.bank_item_id = b.id AND r.finished_at IS NULL) AS aberta,
+    EXISTS (SELECT 1 FROM sync_runs r WHERE r.bank_item_id = b.id AND r.kind = 'historico'
+      AND r.finished_at IS NOT NULL AND r.status IN ('ok', 'repetiu')) AS importado
   FROM bank_items b
   JOIN pluggy_connections c ON c.id = b.connection_id
   WHERE b.disconnected_at IS NULL AND c.client_id_enc IS NOT NULL`;
@@ -29,12 +35,13 @@ export async function scheduleDailySync(env: Env, ctx: ContextoDoAgendamento): P
   const linhas = await db.$client
     .prepare(SQL_AGENDAR)
     .bind(INICIO_DO_DIA_EM_SAO_PAULO(hoje))
-    .all<{ bank_item_id: string; rodou_hoje: number; aberta: number }>();
+    .all<{ bank_item_id: string; rodou_hoje: number; aberta: number; importado: number }>();
 
   let agendados = 0;
   for (const linha of linhas.results ?? []) {
     if (!shouldSchedule(linha.rodou_hoje === 1, linha.aberta === 1)) continue;
-    const runId = await startRun(db, linha.bank_item_id, "diaria", agoraIso);
+    const tipo = linha.importado === 1 ? "diaria" : "historico";
+    const runId = await startRun(db, linha.bank_item_id, tipo, agoraIso);
     if (runId === null) continue;
     await enqueueSlice(env, { runId, seq: 0 });
     agendados += 1;
