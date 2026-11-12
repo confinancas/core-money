@@ -2,6 +2,7 @@
 // POST /api/dev/sync-slice { rows, fase }: cria uma conexão e um banco [TEST] com chaves fictícias e roda as fatias até a
 // fase pedida (inicio, faturas, transacoes ou fim), contra o Meu Pluggy falso em memória. Nenhuma rede.
 import { Hono } from "hono";
+import { despachar } from "../cron/despachante";
 import type { AppEnv, Env } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
@@ -84,6 +85,12 @@ export function devRoutes(resolveSession: SessionResolver, opcoes: OpcoesDasRota
       seq += 1;
     }
     return c.json({ runId, bankItemId: itemId, fase, passos: passos.map((passo) => passo.tipo) }, 200);
+  });
+
+  // Roda o despachante do cron agora, com o db medido (TASK-0205, CPU da sincronização agendada). Mesmo guarda DEV_ROUTES.
+  rotas.post("/cron", async (c) => {
+    await despachar(c.env, new Date(), c.var.db);
+    return c.json({ ok: true }, 200);
   });
 
   return rotas;

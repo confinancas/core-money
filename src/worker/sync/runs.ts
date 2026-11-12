@@ -18,6 +18,8 @@ export type LinhaDaExecucao = {
   household_id: string;
   consent_expires_at: string | null;
   institution_name: string;
+  last_sync_at: string | null;
+  started_at: string;
 };
 
 // Abre a execução de um banco. Devolve o id, ou null se o banco já tem uma execução aberta. O INSERT é condicionado
@@ -46,7 +48,7 @@ export async function lerExecucao(db: Db, runId: string): Promise<LinhaDaExecuca
     .prepare(
       `SELECT r.id, r.kind, r.finished_at, r.cursor_json, r.slices_total, r.slices_done, r.retried,
          r.new_transactions, r.bank_item_id, b.connection_id, c.household_id, b.consent_expires_at,
-         b.institution_name
+         b.institution_name, b.last_sync_at, r.started_at
        FROM sync_runs r
        JOIN bank_items b ON b.id = r.bank_item_id
        JOIN pluggy_connections c ON c.id = b.connection_id
@@ -104,6 +106,8 @@ export type FimDaExecucao = {
   statusDoBanco: "instavel" | "acao_necessaria" | null;
   // Só a conclusão ok ou repetiu grava a última sincronização.
   atualizaUltimaSincronizacao: boolean;
+  // Sincronização diária ou manual que terminou bem, sem o item OUTDATED: o banco instável volta a ativo (TASK-0205, N6).
+  voltaAtivo?: boolean;
 };
 
 // Encerra a execução (uma vez só) e atualiza o banco, no mesmo lote.
@@ -123,6 +127,15 @@ export function finishRunStmts(db: Db, fim: FimDaExecucao): D1PreparedStatement[
       db.$client
         .prepare("UPDATE bank_items SET status = ? WHERE id = ?")
         .bind(fim.statusDoBanco, fim.bankItemId),
+    );
+  }
+  if (fim.voltaAtivo) {
+    comandos.push(
+      db.$client
+        .prepare(
+          "UPDATE bank_items SET status = 'ativo' WHERE id = ? AND status IN ('instavel', 'acao_necessaria')",
+        )
+        .bind(fim.bankItemId),
     );
   }
   if (fim.atualizaUltimaSincronizacao) {

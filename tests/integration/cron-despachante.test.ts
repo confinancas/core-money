@@ -22,11 +22,12 @@ const tarefa = (nome: string, pesada: boolean, falha = false, chamadas: string[]
   executar: async () => {
     chamadas.push(nome);
     if (falha) throw new Error("falha de teste");
+    return false;
   },
 });
 
 describe("despachante: uma tarefa pesada por execução", () => {
-  it("roda as leves antes da pesada e para na pesada (K8)", async () => {
+  it("roda todas as leves antes da pesada, e a pesada que trabalha encerra a rodada (K8)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const chamadas: string[] = [];
     await despachar(ambiente, new Date(AGORA), undefined, [
@@ -34,7 +35,7 @@ describe("despachante: uma tarefa pesada por execução", () => {
       tarefa("pesada", true, false, chamadas),
       tarefa("leve-2", false, false, chamadas),
     ]);
-    expect(chamadas).toEqual(["leve-1", "pesada"]);
+    expect(chamadas).toEqual(["leve-1", "leve-2", "pesada"]);
   });
 
   it("a pesada que falha ainda conta como a da execução: a seguinte não roda, e nada é lançado", async () => {
@@ -46,7 +47,7 @@ describe("despachante: uma tarefa pesada por execução", () => {
         tarefa("leve", false, false, chamadas),
       ]),
     ).resolves.toBeUndefined();
-    expect(chamadas).toEqual(["pesada-que-falha"]);
+    expect(chamadas).toEqual(["leve", "pesada-que-falha"]);
     expect(erro.mock.calls.map((c) => String(c[0])).join("\n")).toContain("cron pesada-que-falha: falhou");
   });
 
@@ -56,6 +57,7 @@ describe("despachante: uma tarefa pesada por execução", () => {
       "retomar-importacoes",
       "atribuir-ciclos",
       "cotacao-dolar",
+      "agendar-sincronizacao",
       "categorizacao",
     ]);
     expect(TAREFAS_DO_CRON.filter((t) => t.pesada).map((t) => t.nome)).toEqual(["categorizacao"]);

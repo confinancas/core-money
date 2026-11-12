@@ -1,55 +1,67 @@
 import { describe, expect, it, vi } from "vitest";
-import { despachar, TAREFAS_DO_CRON, type TarefaDoCron } from "../../../src/worker/cron/despachante";
+import {
+  despachar,
+  PASSO_DO_CRON_MS,
+  TAREFAS_DO_CRON,
+  type TarefaDoCron,
+} from "../../../src/worker/cron/despachante";
 import type { Db } from "../../../src/worker/db/client";
 import type { Env } from "../../../src/worker/env";
 
-// Despachante do cron (TASK-0204, fundido com a TASK-0303): tarefas fictícias, sem D1 nem rede. O db é um marcador: o
-// despachante só o repassa às tarefas, e o teste confere que a mesma instância chega a todas.
+// Despachante do cron (TASK-0204, TASK-0303 e TASK-0205, N10): tarefas fictícias, sem D1 nem rede. As leves rodam sempre;
+// das pesadas, uma por execução, e a pesada sem trabalho cede a vez. O giro das pesadas começa num ponto que muda a cada
+// execução do cron (um passo de cinco minutos).
 const AMBIENTE = {} as Env;
-const AGORA = new Date("2026-11-10T12:00:00.000Z");
 const DB_MEDIDO = { marcador: "db-medido" } as unknown as Db;
+// Instantes de cinco em cinco minutos: o ponto de partida do giro alterna entre execuções seguidas.
+const TICK_0 = new Date(PASSO_DO_CRON_MS * 1000);
+const TICK_1 = new Date(PASSO_DO_CRON_MS * 1001);
+const TICK_2 = new Date(PASSO_DO_CRON_MS * 1002);
 
-const tarefa = (nome: string, pesada: boolean, chamadas: string[]): TarefaDoCron => ({
+const tarefa = (nome: string, pesada: boolean, chamadas: string[], trabalha = true): TarefaDoCron => ({
   nome,
   pesada,
   async executar() {
     chamadas.push(nome);
-    return true;
+    return trabalha;
   },
 });
 
-describe("despachar", () => {
-  it("uma pesada por execução: a primeira pesada encerra a rodada; as leves antes dela rodam", async () => {
+describe("despachar: leves e pesadas", () => {
+  it("as leves rodam sempre; das pesadas, só uma roda por execução", async () => {
     const chamadas: string[] = [];
-    await despachar(AMBIENTE, AGORA, DB_MEDIDO, [
+    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
       tarefa("leve-a", false, chamadas),
       tarefa("pesada-1", true, chamadas),
       tarefa("pesada-2", true, chamadas),
+      tarefa("leve-b", false, chamadas),
     ]);
-    expect(chamadas).toEqual(["leve-a", "pesada-1"]);
+    expect(chamadas.filter((nome) => nome.startsWith("leve")).sort()).toEqual(["leve-a", "leve-b"]);
+    expect(chamadas.filter((nome) => nome.startsWith("pesada"))).toHaveLength(1);
   });
 
-  it("a pesada que não trabalha também encerra a rodada: a seguinte pesada não roda", async () => {
+  it("uma falha de leve não para as outras tarefas", async () => {
+    const erro = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const chamadas: string[] = [];
-    await despachar(AMBIENTE, AGORA, DB_MEDIDO, [
+    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
       {
-        nome: "pesada-1",
-        pesada: true,
+        nome: "quebra",
+        pesada: false,
         async executar() {
-          chamadas.push("pesada-1");
-          return false;
+          throw new TypeError("[TEST] segredo no erro");
         },
       },
-      tarefa("pesada-2", true, chamadas),
+      tarefa("segue", false, chamadas),
     ]);
-    expect(chamadas).toEqual(["pesada-1"]);
+    expect(chamadas).toEqual(["segue"]);
+    erro.mockRestore();
   });
 
   it("a pesada que falha encerra as pesadas (a CPU dela já foi gasta), e nada é lançado", async () => {
     const erro = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const chamadas: string[] = [];
     await expect(
-      despachar(AMBIENTE, AGORA, DB_MEDIDO, [
+      despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
         {
           nome: "pesada-quebra",
           pesada: true,
@@ -66,26 +78,9 @@ describe("despachar", () => {
     erro.mockRestore();
   });
 
-  it("uma falha de leve não para as outras tarefas", async () => {
-    const erro = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const chamadas: string[] = [];
-    await despachar(AMBIENTE, AGORA, DB_MEDIDO, [
-      {
-        nome: "quebra",
-        pesada: false,
-        async executar() {
-          throw new TypeError("[TEST] segredo no erro");
-        },
-      },
-      tarefa("segue", false, chamadas),
-    ]);
-    expect(chamadas).toEqual(["segue"]);
-    erro.mockRestore();
-  });
-
   it("cada tarefa recebe o db medido que o despachante recebeu", async () => {
     const recebidos: unknown[] = [];
-    await despachar(AMBIENTE, AGORA, DB_MEDIDO, [
+    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
       {
         nome: "confere",
         pesada: false,
@@ -98,11 +93,59 @@ describe("despachar", () => {
     expect(recebidos).toEqual([DB_MEDIDO]);
   });
 
-  it("ordem combinada: retomada da importação, atribuição de ciclos e cotação do dólar são leves e vêm antes da categorização, a única pesada", () => {
+  it("pesada sem trabalho cede a vez: a seguinte com trabalho roda (N10)", async () => {
+    const chamadas: string[] = [];
+    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
+      tarefa("pesada-sem-trabalho", true, chamadas, false),
+      tarefa("pesada-com-trabalho", true, chamadas, true),
+    ]);
+    expect(chamadas).toEqual(["pesada-sem-trabalho", "pesada-com-trabalho"]);
+  });
+
+  it("duas pesadas com trabalho se revezam: cada execução do cron põe uma delas em vez, e nenhuma fica sem rodar", async () => {
+    const primeira: string[] = [];
+    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
+      tarefa("pesada-1", true, primeira),
+      tarefa("pesada-2", true, primeira),
+    ]);
+    const segunda: string[] = [];
+    await despachar(AMBIENTE, TICK_1, DB_MEDIDO, [
+      tarefa("pesada-1", true, segunda),
+      tarefa("pesada-2", true, segunda),
+    ]);
+    expect(primeira).toHaveLength(1);
+    expect(segunda).toHaveLength(1);
+    expect(segunda[0]).not.toBe(primeira[0]);
+    const terceira: string[] = [];
+    await despachar(AMBIENTE, TICK_2, DB_MEDIDO, [
+      tarefa("pesada-1", true, terceira),
+      tarefa("pesada-2", true, terceira),
+    ]);
+    expect(terceira[0]).toBe(primeira[0]);
+  });
+
+  it("duas pesadas com trabalho e uma sem: a sem trabalho cede, e as duas com trabalho se revezam sem ninguém parado", async () => {
+    const execucoes: string[][] = [];
+    for (const tick of [TICK_0, TICK_1]) {
+      const chamadas: string[] = [];
+      await despachar(AMBIENTE, tick, DB_MEDIDO, [
+        tarefa("sem-trabalho", true, chamadas, false),
+        tarefa("com-trabalho-a", true, chamadas, true),
+        tarefa("com-trabalho-b", true, chamadas, true),
+      ]);
+      execucoes.push(chamadas);
+    }
+    const rodadas = execucoes.map((chamadas) => chamadas.at(-1));
+    expect(rodadas).not.toContain("sem-trabalho");
+    expect(new Set(rodadas)).toEqual(new Set(["com-trabalho-a", "com-trabalho-b"]));
+  });
+
+  it("ordem combinada: retomada, atribuição de ciclos, cotação do dólar e agendamento são leves; a categorização é a pesada", () => {
     expect(TAREFAS_DO_CRON.map((t) => [t.nome, t.pesada])).toEqual([
       ["retomar-importacoes", false],
       ["atribuir-ciclos", false],
       ["cotacao-dolar", false],
+      ["agendar-sincronizacao", false],
       ["categorizacao", true],
     ]);
   });
