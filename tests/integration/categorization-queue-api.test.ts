@@ -3,17 +3,21 @@ import type { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { establishmentKey } from "../../src/shared/establishment-key";
 import { createApp } from "../../src/worker/app";
-import type { Meter } from "../../src/worker/db/metered-d1";
+import { processNewTransactions } from "../../src/worker/categorization/pipeline";
+import { createDb } from "../../src/worker/db/client";
+import { type Meter, newMeter } from "../../src/worker/db/metered-d1";
 import type { AppEnv } from "../../src/worker/env";
 import { aquecerOPortao, semearPronto } from "./helpers/app";
 import {
   AGORA,
   categoriaDoLar,
+  contar,
   criarLar,
   criarOutroLar,
   criarRegra,
   inserirTransacao,
   type Lar,
+  lerTransacao,
 } from "./helpers/regras";
 
 // Fila Para categorizar (TASK-0304): contagens, aceite, aprendizado, desfazer e os cenários de concorrência e de
@@ -519,3 +523,242 @@ describe("POST /api/categorization/undo", () => {
     expect(r.corpo.skipped).toEqual([doOutro]);
   });
 });
+
+// Rodada 1 (A11): lacunas herdadas, N2, cenários que faltavam e a próxima importada.
+const AGORA_DATA = new Date(AGORA);
+const importarComRegras = async (lar: Lar, id: string) =>
+  processNewTransactions(createDb(env.DB, newMeter()), lar.householdId, [id], AGORA_DATA.toISOString());
+const membroDoLar = async (lar: Lar): Promise<string> => {
+  const membro = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO members (id, household_id, name, role, created_at) VALUES (?, ?, '[TEST] Pessoa C', 'conjuge', ?)",
+  )
+    .bind(membro, lar.householdId, AGORA)
+    .run();
+  return membro;
+};
+
+describe("rodada 1: lacunas e cenários que faltavam", () => {
+  it("lacunas da TASK-0302: outro lar, removida e movimento fora do escopo não mudam", async () => {
+    const lar = await criarLar();
+    const outroLar = await criarOutroLar();
+    const confirmada = await pendente(lar, "[TEST] ASAAS12MAT", { aiCategoryId: SERVICOS(lar) });
+    const igualDoOutro = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO transactions (id, household_id, external_id, bank_item_id, card_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, last_seen_at) VALUES (?, ?, ?, ?, ?, 'compra', '2026-11-09T12:00:00.000Z', '2026-11-09', -1000, '[TEST] ASAAS12MAT', ?, ?)",
+    )
+      .bind(
+        igualDoOutro,
+        outroLar.householdId,
+        "outro-" + igualDoOutro,
+        lar.bankItemId,
+        lar.cardId,
+        CHAVE_ASAAS,
+        AGORA,
+      )
+      .run();
+    const igualRemovida = await pendente(lar, "[TEST] ASAAS12MAT");
+    await env.DB.prepare("UPDATE transactions SET removed_at = ? WHERE id = ?")
+      .bind(AGORA, igualRemovida)
+      .run();
+    const igualDeOutroMovimento = await pendente(lar, "[TEST] ASAAS12MAT", { movement: "pagamento_fatura" });
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", {
+      transactionIds: [confirmada],
+    });
+    expect(r.status).toBe(200);
+    expect((await lerTransacao(igualDoOutro)).category_id).toBeNull();
+    expect((await lerTransacao(igualRemovida)).category_id).toBeNull();
+    expect((await lerTransacao(igualDeOutroMovimento)).category_id).toBeNull();
+  });
+
+  it("N2: linha que virou pagamento de fatura ou transferência sai da fila e não conta", async () => {
+    const lar = await criarLar();
+    for (const movimento of ["pagamento_fatura", "transferencia_interna"]) {
+      const id = await pendente(lar, `[TEST] N2 ${movimento}`, { aiCategoryId: SERVICOS(lar) });
+      await env.DB.prepare("UPDATE transactions SET movement = ? WHERE id = ?").bind(movimento, id).run();
+    }
+    const r = await chamar(appDoLar(lar), "GET", "/api/categorization/queue");
+    expect(r.corpo.counts).toEqual({ todos: 0, pix: 0, cartao: 0, entradas: 0 });
+    expect(itensDaFila(r.corpo)).toEqual([]);
+  });
+
+  it("cenário 8: sugestão de categoria arquivada vira linha sem sugestão, e o aceite a devolve em skipped", async () => {
+    const lar = await criarLar();
+    const id = await pendente(lar, "[TEST] ARQUIVADA", { aiCategoryId: SERVICOS(lar) });
+    await env.DB.prepare("UPDATE categories SET archived_at = ? WHERE id = ?")
+      .bind(AGORA, SERVICOS(lar))
+      .run();
+    const app = appDoLar(lar);
+    const r = await chamar(app, "GET", "/api/categorization/queue");
+    expect((r.corpo.suggested as Record<string, number>).todos).toBe(0);
+    const linha = itensDaFila(r.corpo)[0] as { suggestion: unknown };
+    expect(linha.suggestion).toBeNull();
+    const aceite = await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [id] });
+    expect(aceite.corpo.skipped).toEqual([id]);
+  });
+
+  it("cenário 9 (segunda metade): o desfazer de A numa linha que B trocou depois volta em skipped", async () => {
+    const lar = await criarLar();
+    const membroB = await membroDoLar(lar);
+    const id = await pendente(lar, "[TEST] DOIS AO MESMO TEMPO", { aiCategoryId: SERVICOS(lar) });
+    const appA = appDoLar(lar);
+    const appB = appDoLar({ ...lar, memberId: membroB });
+    expect((await chamar(appB, "POST", "/api/categorization/accept", { transactionIds: [id] })).status).toBe(
+      200,
+    );
+    const desfeitoPorA = await chamar(appA, "POST", "/api/categorization/undo", {
+      items: [{ transactionId: id, categoryId: SERVICOS(lar) }],
+    });
+    expect(desfeitoPorA.corpo.skipped).toEqual([id]);
+    expect((await lerTransacao(id)).categorized_by).toBe(membroB);
+  });
+
+  it("cenário 14 com sugestão: os ids de outro lar voltam em skipped e não aparecem na lista", async () => {
+    const lar = await criarLar();
+    const outro = await criarOutroLar();
+    const id = await pendente(lar, "[TEST] OUTRO LAR", { aiCategoryId: SERVICOS(lar) });
+    const appOutro = appDoLar(outro);
+    const r = await chamar(appOutro, "POST", "/api/categorization/accept", { transactionIds: [id] });
+    expect(r.corpo.skipped).toEqual([id]);
+    expect(itensDaFila((await chamar(appOutro, "GET", "/api/categorization/queue")).corpo)).toEqual([]);
+    expect((await lerTransacao(id)).category_id).toBeNull();
+  });
+
+  it("cenário 10: categorizada depois de a página carregar, a próxima página não a traz", async () => {
+    const lar = await criarLar();
+    const id = await pendente(lar, "[TEST] MEIO DO CAMINHO", { aiCategoryId: SERVICOS(lar) });
+    await env.DB.prepare(
+      "UPDATE transactions SET category_id = ?, categorized_at = ?, categorized_by = 'regra' WHERE id = ?",
+    )
+      .bind(LAZER(lar), AGORA, id)
+      .run();
+    const r = await chamar(appDoLar(lar), "GET", "/api/categorization/queue");
+    expect(itensDaFila(r.corpo).map((l) => l.transactionId)).not.toContain(id);
+  });
+
+  it("cenário 18: Pix confirmado vira regra de destinatário, e a próxima importada do mesmo nome entra sozinha", async () => {
+    const lar = await criarLar();
+    const primeira = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -15000,
+      descricao: "[TEST] PIX JOAO",
+      localDate: "2026-11-09",
+      contraparte: "[TEST] JOAO P SILVA",
+      doc: "***.123.456-**",
+      aiCategoryId: SERVICOS(lar),
+    });
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", {
+      transactionIds: [primeira],
+    });
+    const ruleId = (r.corpo.accepted as { ruleId: string | null }[])[0]?.ruleId;
+    expect(ruleId).toBeTruthy();
+    expect(
+      await contar("SELECT COUNT(*) AS total FROM rules WHERE id = ? AND scope = 'destinatario'", ruleId),
+    ).toBe(1);
+    const proxima = await inserirTransacao(lar, {
+      movement: "pix_enviado",
+      amountCents: -8000,
+      descricao: "[TEST] PIX JOAO 2",
+      localDate: "2026-11-10",
+      contraparte: "[TEST] JOAO P SILVA",
+      doc: "***.123.456-**",
+    });
+    await importarComRegras(lar, proxima);
+    const linha = await lerTransacao(proxima);
+    expect(linha.category_id).toBe(SERVICOS(lar));
+    expect(linha.categorized_by).toBe("regra");
+  });
+
+  it("cenário 15 e 20: a confirmação de ASAAS12MAT ensina a próxima importada; desfazer devolve a fila", async () => {
+    const lar = await criarLar();
+    const primeira = await pendente(lar, "[TEST] ASAAS12MAT", { aiCategoryId: LAZER(lar) });
+    const app = appDoLar(lar);
+    const aceite = await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [primeira] });
+    const categoria = (aceite.corpo.accepted as { categoryId: string }[])[0]?.categoryId ?? "";
+    const proxima = await pendente(lar, "[TEST] ASAAS12MAT", { localDate: "2026-11-10" });
+    await importarComRegras(lar, proxima);
+    expect((await lerTransacao(proxima)).categorized_by).toBe("regra");
+    expect((await lerTransacao(proxima)).category_id).toBe(LAZER(lar));
+    await chamar(app, "POST", "/api/categorization/undo", {
+      items: [{ transactionId: primeira, categoryId: categoria }],
+    });
+    const terceira = await pendente(lar, "[TEST] ASAAS12MAT", { localDate: "2026-11-11" });
+    await importarComRegras(lar, terceira);
+    expect((await lerTransacao(terceira)).categorized_by).toBeNull();
+  });
+
+  it("cenário 19: cinco sugestões de três estabelecimentos viram três regras; a chave repetida leva a categoria mais recente", async () => {
+    const lar = await criarLar();
+    const ids = [
+      await pendente(lar, "[TEST] LOJA A", { aiCategoryId: LAZER(lar), localDate: "2026-11-01" }),
+      await pendente(lar, "[TEST] LOJA A", { aiCategoryId: SERVICOS(lar), localDate: "2026-11-09" }),
+      await pendente(lar, "[TEST] LOJA B", { aiCategoryId: LAZER(lar) }),
+      await pendente(lar, "[TEST] LOJA C", { aiCategoryId: SERVICOS(lar) }),
+      await pendente(lar, "[TEST] LOJA C 2", { aiCategoryId: LAZER(lar) }),
+    ];
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: ids });
+    expect(r.status).toBe(200);
+    expect(r.corpo.accepted).toHaveLength(5);
+    expect(
+      await contar(
+        "SELECT COUNT(*) AS total FROM rules WHERE household_id = ? AND created_from = 'confirmacao'",
+        lar.householdId,
+      ),
+    ).toBe(4);
+    const deA = await env.DB.prepare(
+      "SELECT set_category_id AS categoria FROM rules WHERE household_id = ? AND match_value = ? AND scope = 'estabelecimento' AND disabled_at IS NULL",
+    )
+      .bind(lar.householdId, establishmentKey("[TEST] LOJA A") ?? "")
+      .first<{ categoria: string }>();
+    expect(deA?.categoria).toBe(SERVICOS(lar));
+  });
+
+  it("cenário 24: a regra só de nome ganha a categoria; a próxima importada entra com o nome", async () => {
+    const lar = await criarLar();
+    await criarRegra(lar, {
+      scope: "estabelecimento",
+      matchValue: establishmentKey("[TEST] NOME SO") ?? "",
+      setCustomName: "[TEST] Nome só",
+    });
+    const id = await pendente(lar, "[TEST] NOME SO", { aiCategoryId: LAZER(lar) });
+    await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: [id] });
+    const proxima = await pendente(lar, "[TEST] NOME SO", { localDate: "2026-11-10" });
+    await importarComRegras(lar, proxima);
+    const linha = await lerTransacao(proxima);
+    expect(linha.category_id).toBe(LAZER(lar));
+    expect(linha.custom_name).toBe("[TEST] Nome só");
+  });
+
+  it("cenário 21: Pix recebido do histórico fica fora da fila e não conta", async () => {
+    const lar = await criarLar();
+    const id = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 5000,
+      descricao: "[TEST] PIX RECEBIDO HISTORICO",
+      localDate: "2026-09-01",
+    });
+    await env.DB.prepare("UPDATE transactions SET is_backfill = 1 WHERE id = ?").bind(id).run();
+    const r = await chamar(appDoLar(lar), "GET", "/api/categorization/queue");
+    expect(r.corpo.counts).toEqual({ todos: 0, pix: 0, cartao: 0, entradas: 0 });
+  });
+
+  it("cenário 25 (sem renda excluída): a sugestão de entrada de renda desaparecida vira Sem sugestão", async () => {
+    const lar = await criarLar();
+    const id = await inserirTransacao(lar, {
+      movement: "pix_recebido",
+      amountCents: 150000,
+      descricao: "[TEST] PIX SALARIO",
+      localDate: "2026-11-09",
+    });
+    await env.DB.prepare(
+      "UPDATE transactions SET ai_income_kind = 'parte_salario', ai_confidence = 'media', ai_fixed_income_id = 'renda-inexistente' WHERE id = ?",
+    )
+      .bind(id)
+      .run();
+    const r = await chamar(appDoLar(lar), "GET", "/api/categorization/queue");
+    const linha = itensDaFila(r.corpo)[0] as { suggestion: unknown };
+    expect(linha.suggestion).toBeNull();
+    expect((r.corpo.suggested as Record<string, number>).entradas).toBe(0);
+  });
+});
+
