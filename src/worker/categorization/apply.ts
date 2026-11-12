@@ -1,3 +1,4 @@
+import { NEEDS_CATEGORY_SQL } from "../../shared/categorization";
 import {
   COUNTERPARTY_KEY_SQL,
   ESTABLISHMENT_KEY_SQL,
@@ -366,7 +367,8 @@ export function acceptSuggestionStmt(
     .prepare(
       `UPDATE transactions AS t SET ${sets.join(", ")}
         WHERE t.id = ? AND t.household_id = ? AND t.category_id IS NULL AND t.ai_category_id IS NOT NULL
-        AND t.removed_at IS NULL
+        AND t.removed_at IS NULL AND t.hidden = 0 AND t.is_backfill = 0 AND t.categorized_at IS NULL
+        AND ${NEEDS_CATEGORY_SQL}
         AND EXISTS (SELECT 1 FROM categories AS c WHERE c.id = t.ai_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL)
         RETURNING id, category_id`,
     )

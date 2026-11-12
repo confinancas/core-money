@@ -762,3 +762,21 @@ describe("rodada 1: lacunas e cenários que faltavam", () => {
   });
 });
 
+
+describe("rodada 1: o aceite só grava em linha pendente (nota da Fable)", () => {
+  it("oculta, do histórico e que virou pagamento de fatura voltam em skipped, sem categoria nem regra", async () => {
+    const lar = await criarLar();
+    const oculta = await pendente(lar, "[TEST] ACEITE OCULTA", { aiCategoryId: SERVICOS(lar) });
+    await env.DB.prepare("UPDATE transactions SET hidden = 1 WHERE id = ?").bind(oculta).run();
+    const historico = await pendente(lar, "[TEST] ACEITE HISTORICO", { aiCategoryId: SERVICOS(lar) });
+    await env.DB.prepare("UPDATE transactions SET is_backfill = 1 WHERE id = ?").bind(historico).run();
+    const fatura = await pendente(lar, "[TEST] ACEITE FATURA", { aiCategoryId: SERVICOS(lar) });
+    await env.DB.prepare("UPDATE transactions SET movement = 'pagamento_fatura' WHERE id = ?").bind(fatura).run();
+    const ids = [oculta, historico, fatura];
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: ids });
+    expect(r.corpo.accepted).toEqual([]);
+    expect(r.corpo.skipped).toEqual(ids);
+    for (const id of ids) expect((await lerTransacao(id)).category_id).toBeNull();
+    expect(await contar("SELECT COUNT(*) AS total FROM rules WHERE household_id = ?", lar.householdId)).toBe(0);
+  });
+});
