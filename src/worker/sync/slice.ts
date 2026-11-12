@@ -27,7 +27,6 @@ import { PluggyError } from "../pluggy/errors";
 import type { PluggyAccount, PluggyItem } from "../pluggy/types";
 import { applySpendTypesOnImport } from "../spend-types/derive";
 import { causaDoErro } from "../usage/d1-limit-errors";
-import { afterRun } from "./after-run";
 import { atingiuOTeto, escritasDeHoje } from "./orcamento";
 import {
   DIAS_DA_CONCILIACAO,
@@ -425,8 +424,10 @@ async function faseConciliar(db: Db, run: LinhaDaExecucao, cursor: SyncCursor, d
 }
 
 // Ponto único depois da execução (TASK-0205): o afterRun roda antes de fechar, e um erro dele não impede o fechamento.
+// Carregado sob demanda, como a gravação (o espião dos testes pega a chamada; ver o CLAUDE.md, vi.mock).
 async function aposAExecucao(db: Db, run: LinhaDaExecucao, nowIso: string): Promise<void> {
   try {
+    const { afterRun } = await import("./after-run");
     await afterRun(db, {
       householdId: run.household_id,
       bankItemId: run.bank_item_id,

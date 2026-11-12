@@ -6,7 +6,10 @@ import { urlDe } from "./importacao-helpers";
 
 export type TransacaoDeTeste = { id: string; conta: string; data: string; valor: number };
 
-export function pluggyFalsoComTransacoes(porConta: (conta: string) => TransacaoDeTeste[]): typeof fetch {
+export function pluggyFalsoComTransacoes(
+  porConta: (conta: string) => TransacaoDeTeste[],
+  operacao = "CARTAO",
+): typeof fetch {
   const base = pluggyFalsoEmMemoria(0);
   return async (entrada: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = urlDe(entrada);
@@ -24,7 +27,7 @@ export function pluggyFalsoComTransacoes(porConta: (conta: string) => TransacaoD
         amount: tx.valor,
         type: tx.valor < 0 ? "DEBIT" : "CREDIT",
         category: "Groceries",
-        operationType: "CARTAO",
+        operationType: operacao,
         paymentData: null,
         creditCardMetadata: null,
         status: "POSTED",

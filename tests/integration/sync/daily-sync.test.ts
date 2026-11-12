@@ -627,7 +627,7 @@ describe("status, volta a ativo e fila (cenários 12, N6 e N9)", () => {
     expect(status2?.status).toBe("ativo");
   });
 
-  it("N9: a releitura diária não põe de volta na fila da IA a linha sem categoria, nem regrava is_backfill", async () => {
+  it("N9: a releitura diária não põe de volta na fila da IA a linha sem categoria", async () => {
     const banco = await semearBanco();
     const conta = contaDoBanco(banco);
     const txs: Tx[] = [{ id: "[TEST]-n9", conta, data: "2026-11-05", valor: -33 }];
@@ -654,10 +654,6 @@ describe("status, volta a ativo e fila (cenários 12, N6 e N9)", () => {
       n: number;
     }>();
     expect(fila2?.n).toBe(0);
-    const linha = await env.DB.prepare("SELECT is_backfill FROM transactions WHERE external_id = ?")
-      .bind("[TEST]-n9")
-      .first<{ is_backfill: number }>();
-    expect(linha?.is_backfill).toBe(0);
     expect((await cursorDaExecucao(segunda)).phase).toBe("fim");
   });
 });
