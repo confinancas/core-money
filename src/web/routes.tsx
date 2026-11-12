@@ -25,6 +25,7 @@ import { Regras } from "./screens/configuracoes/regras/Regras";
 import { TiposGasto } from "./screens/configuracoes/TiposGasto";
 import { Login } from "./screens/Login";
 import { NotificacoesPage } from "./screens/notificacoes/NotificacoesPage";
+import { ParaCategorizar } from "./screens/para-categorizar/ParaCategorizar";
 import { Recuperar } from "./screens/Recuperar";
 import { RendaFixa } from "./screens/renda/RendaFixa";
 import { RequireSession } from "./session/RequireSession";
@@ -75,7 +76,7 @@ export const ROTAS: RotaDaTabela[] = [
     frame: "detail",
     tab: "inicio",
     title: "Para categorizar",
-    element: provisoria,
+    element: <ParaCategorizar />,
   },
   { path: "/pix/:transactionId", frame: "detail", tab: "inicio", title: "Pix enviado", element: provisoria },
 

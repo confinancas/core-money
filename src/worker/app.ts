@@ -5,6 +5,7 @@ import { isPublicRoute } from "./auth/public-routes";
 import { requireSession, sessaoDoCookie } from "./auth/sessions";
 import { verificadorReal, type WebAuthnLoginVerifier, type WebAuthnVerifier } from "./auth/webauthn";
 import { categoriesRoutes } from "./categories/routes";
+import { categorizacaoRoutes } from "./categorization/routes";
 import { statusRoutes } from "./categorization/status-routes";
 import { createDb } from "./db/client";
 import { type Meter, newMeter } from "./db/metered-d1";
@@ -129,6 +130,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/ai-rules-document", aiRulesDocumentRoutes(resolverDaSessao, options.agora));
   app.route("/categorization", statusRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
+  app.route("/categorization", categorizacaoRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesDetalheRoutes(resolverDaSessao));
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
