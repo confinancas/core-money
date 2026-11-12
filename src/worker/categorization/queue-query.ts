@@ -30,7 +30,7 @@ export const TEM_SUGESTAO_SQL = `(CASE WHEN ${TIPO_DA_LINHA_SQL} = 'entrada'
     ELSE (c.id IS NOT NULL) END)`;
 
 // Junções da fila. Categoria arquivada e renda excluída não contam como sugestão (LEFT JOIN com archived_at nulo).
-const FROM_DA_FILA = `FROM transactions AS t
+const FROM_DA_FILA = `FROM transactions AS t INDEXED BY transactions_household_categorized_idx
   LEFT JOIN categories AS c ON c.id = t.ai_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL
   LEFT JOIN fixed_incomes AS r ON r.id = t.ai_fixed_income_id AND r.household_id = t.household_id AND r.archived_at IS NULL
   LEFT JOIN bank_items AS b ON b.id = t.bank_item_id`;

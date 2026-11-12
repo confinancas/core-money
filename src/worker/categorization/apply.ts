@@ -428,6 +428,23 @@ const CATEGORIA_DA_REGRA_DA_LINHA = `(SELECT r.set_category_id FROM rules AS r W
 const ID_DA_REGRA_DA_LINHA = `(SELECT r.id FROM rules AS r WHERE r.household_id = t.household_id
     AND r.disabled_at IS NULL AND r.scope = ${ESCOPO_DA_LINHA} AND r.match_value = ${CHAVE_DA_LINHA})`;
 
+// Candidatas dos iguais: o estabelecimento lê o índice de (household_id, establishment_key); o destinatário (Pix e TED)
+// não tem índice, então só varre o lar quando há regra de destinatário no lote (o EXISTS é uncorrelated).
+const CANDIDATAS_DOS_IGUAIS = `SELECT x.id FROM transactions AS x INDEXED BY transactions_household_establishment_idx
+    WHERE x.household_id = ? AND x.establishment_key IN (SELECT chave FROM chaves WHERE escopo = 'estabelecimento')
+    UNION ALL
+    SELECT x.id FROM (SELECT 1 AS ok WHERE EXISTS (SELECT 1 FROM chaves WHERE escopo = 'destinatario')) AS gate
+      CROSS JOIN transactions AS x ON x.household_id = ? AND x.movement IN ('pix_enviado', 'ted_enviada')`;
+
+// Candidatas da volta: as chaves das regras de estabelecimento do alvo (índice) e, se houver regra de destinatário, as
+// transferências do lar.
+const CANDIDATAS_DA_VOLTA = `SELECT x.id FROM transactions AS x INDEXED BY transactions_household_establishment_idx
+    WHERE x.household_id = ? AND x.establishment_key IN (SELECT r.match_value FROM rules AS r
+      WHERE r.id IN (SELECT rule_id FROM regras_do_alvo) AND r.household_id = ? AND r.scope = 'estabelecimento')
+    UNION ALL
+    SELECT x.id FROM (SELECT 1 AS ok WHERE EXISTS (SELECT 1 FROM rules AS r WHERE r.id IN (SELECT rule_id FROM regras_do_alvo) AND r.scope = 'destinatario')) AS gate
+      CROSS JOIN transactions AS x ON x.household_id = ? AND x.movement IN ('pix_enviado', 'ted_enviada')`;
+
 // Aprender com a confirmação, no mesmo lote do aceite, depois das instruções de aceitar:
 // (1) a regra ativa da chave sem categoria válida (só de nome, ou com categoria arquivada) recebe a categoria da
 //     transação mais recente da chave; (2) uma regra por chave nova ("confirmacao", criada por esta pessoa), sem
@@ -483,13 +500,14 @@ export function learnFromConfirmationStmts(
         UPDATE transactions AS t SET category_id = ${CATEGORIA_DA_REGRA_DA_LINHA},
           categorized_at = ?, categorized_by = 'regra', rule_id = ${ID_DA_REGRA_DA_LINHA},
           ${setDoTipoDaCategoria(CATEGORIA_DA_REGRA_DA_LINHA, "t", false).join(", ")}
-        WHERE t.household_id = ? AND t.removed_at IS NULL AND t.movement IN ${MOVIMENTOS_COM_REGRA}
+        WHERE t.id IN (${CANDIDATAS_DOS_IGUAIS}) AND t.removed_at IS NULL
+          AND t.movement IN ${MOVIMENTOS_COM_REGRA}
           AND (t.category_id IS NULL OR t.categorized_by = 'ia')
           AND (${ESCOPO_DA_LINHA}, ${CHAVE_DA_LINHA}) IN (SELECT escopo, chave FROM chaves)
           AND ${CATEGORIA_DA_REGRA_DA_LINHA} IS NOT NULL
         RETURNING id, category_id, rule_id, is_backfill`,
       )
-      .bind(json, householdId, memberId, now, now, householdId),
+      .bind(json, householdId, memberId, now, now, householdId, householdId),
   );
   return { comandos, indiceDosVinculos, indiceDosIguais };
 }
@@ -529,11 +547,11 @@ export function undoLearnedRuleStmts(
     .prepare(
       `${cteRegras}
       UPDATE transactions AS t SET ${SET_DA_VOLTA}
-      WHERE t.household_id = ? AND t.categorized_by = 'regra' AND t.rule_id IN (
+      WHERE t.id IN (${CANDIDATAS_DA_VOLTA}) AND t.categorized_by = 'regra' AND t.rule_id IN (
         SELECT r.id FROM rules AS r WHERE r.id IN (SELECT rule_id FROM regras_do_alvo) AND r.household_id = ?
           AND r.created_from = 'confirmacao' AND r.created_by = ?)
       RETURNING id, category_id`,
     )
-    .bind(json, householdId, memberId, householdId, householdId, memberId);
+    .bind(json, householdId, memberId, householdId, householdId, householdId, householdId, memberId);
   return { comandos: [desativa, volta], indiceDasVoltas: 1 };
 }
