@@ -286,7 +286,7 @@ export function ParaCategorizar() {
           {dados === null && !falhou && <SkeletonCard />}
 
           {dados !== null && (
-            <Card className="px-4 py-1.5" aria-label="Lista">
+            <Card className="px-4 py-1.5" aria-label="Lista" data-testid="lista">
               {linhas.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-7 text-center">
                   <span className="grid size-[52px] place-items-center rounded-full bg-primary-soft text-primary">

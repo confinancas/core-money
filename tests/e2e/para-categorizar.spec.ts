@@ -158,25 +158,62 @@ test("cenário 2: mostra a fila, o progresso e aceita em massa", async ({ page }
   await expect(page.getByText("2 de 2 categorizados")).toBeVisible();
   await expect(page.getByText("tudo certo")).toBeVisible();
 
+  const larguraDaJanela = page.viewportSize()?.width ?? 0;
   const semRolagemHorizontal = await page.evaluate(
-    () => document.documentElement.scrollWidth <= window.innerWidth,
+    (larg) => document.documentElement.scrollWidth <= larg,
+    larguraDaJanela,
   );
   expect(semRolagemHorizontal).toBe(true);
+  // Rodada 1: nenhum valor com "R$" na tela (o componente de valor usa só o número).
+  expect(await page.locator("body").innerText()).not.toContain("R$");
 });
 
-test("layout: colunas e sobreposição nas três larguras", async ({ page }) => {
+test("layout: sem rolagem horizontal, ✓ dentro da tela, uma coluna até o tablet", async ({ page }) => {
   await abre(page);
-  const filtros = await page.getByTestId("filtros").boundingBox();
+  const larguraDaJanela = page.viewportSize()?.width ?? 0;
+  const semRolagem = await page.evaluate(
+    (larg) => document.documentElement.scrollWidth <= larg,
+    larguraDaJanela,
+  );
+  expect(semRolagem).toBe(true);
+  const confirmar = page.getByRole("button", { name: /^Confirmar/ }).first();
+  const caixaDoCheck = await confirmar.boundingBox();
+  expect(caixaDoCheck).toBeTruthy();
+  expect(caixaDoCheck!.x).toBeGreaterThanOrEqual(0);
+  expect(caixaDoCheck!.x + caixaDoCheck!.width).toBeLessThanOrEqual(larguraDaJanela);
+  const filtros = await page.getByRole("radiogroup", { name: "Filtrar" }).boundingBox();
   const lista = await page.getByTestId("lista").boundingBox();
   expect(filtros && lista).toBeTruthy();
-  const largura = page.viewportSize()?.width ?? 0;
-  if (largura >= 768) {
-    // Tablet e desktop: filtros à esquerda, lista à direita, sem sobrepor.
+  if (larguraDaJanela >= 1200) {
+    // Desktop: filtros à esquerda, lista à direita.
     expect(filtros!.x + filtros!.width).toBeLessThanOrEqual(lista!.x + 1);
   } else {
-    // Celular: uma coluna, filtros acima da lista.
+    // Celular e tablet: uma coluna, filtros acima da lista.
     expect(filtros!.y + filtros!.height).toBeLessThanOrEqual(lista!.y + 1);
   }
+});
+
+test("títulos longos: o ✓ continua dentro da tela", async ({ page }) => {
+  semeiaFila([
+    {
+      id: "e2e-pc-longo",
+      nome: "[TEST] Pix para NOME DE PESSOA MUITO COMPRIDO QUE NAO CABE NA LINHA DO CELULAR",
+      chave: "TEST E2E longo",
+      valor: -15000,
+    },
+  ]);
+  await abre(page);
+  const larguraDaJanela = page.viewportSize()?.width ?? 0;
+  const semRolagem = await page.evaluate(
+    (larg) => document.documentElement.scrollWidth <= larg,
+    larguraDaJanela,
+  );
+  expect(semRolagem).toBe(true);
+  const caixa = await page
+    .getByRole("button", { name: /^Confirmar/ })
+    .first()
+    .boundingBox();
+  expect(caixa && caixa.x + caixa.width <= larguraDaJanela).toBe(true);
 });
 
 test("cenário 3: o ✓ confirma só a linha; a outra continua na fila", async ({ page }) => {
@@ -191,7 +228,9 @@ test("cenário 4: desfazer devolve a linha à fila e desconta o progresso", asyn
   await abre(page);
   await page.getByRole("button", { name: "Aceitar", exact: true }).click();
   await expect(page.getByText("2 de 2 categorizados")).toBeVisible();
-  await page.getByRole("button", { name: "Desfazer", exact: true }).click();
+  // Cada confirmação tem o seu Desfazer (uma linha por item): desfaz as duas.
+  await page.getByRole("button", { name: "Desfazer", exact: true }).first().click();
+  await page.getByRole("button", { name: "Desfazer", exact: true }).first().click();
   await expect(page.getByText("0 de 2 categorizados")).toBeVisible();
   await expect(page.getByText("[TEST] Pix E2E um")).toBeVisible();
 });
@@ -209,13 +248,13 @@ test("cenário 5: no filtro Cartão, Aceitar confirma só as compras", async ({ 
     },
   ]);
   await abre(page);
-  await page.getByRole("button", { name: /^Cartão/ }).click();
+  await page.getByRole("radio", { name: /^Cartão/ }).click();
   await expect(page.getByText("[TEST] Compra E2E")).toBeVisible();
   await page.getByRole("button", { name: "Aceitar", exact: true }).click();
   await expect(page.getByText("1 de 3 categorizados")).toBeVisible();
-  await page.getByRole("button", { name: /^Todos/ }).click();
+  await page.getByRole("radio", { name: /^Todos/ }).click();
   await expect(page.getByText("[TEST] Pix E2E um")).toBeVisible();
-  await expect(page.getByText("[TEST] Compra E2E")).toHaveCount(0);
+  await expect(page.getByTestId("lista").getByText("[TEST] Compra E2E")).toHaveCount(0);
 });
 
 test("cenário 6: linha sem sugestão mostra o aviso, sem ✓, e leva ao detalhe", async ({ page }) => {
