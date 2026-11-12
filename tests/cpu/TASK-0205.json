@@ -1,0 +1,33 @@
+{
+  "task": "TASK-0205",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES ('cpu-0205-primeiro-acesso', NULL, 'primeiro_acesso', 'cpu-0205-codigo-ja-usado', '2026-11-10T00:00:00.000Z', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO pluggy_connections (id, household_id, label, cpf_masked, client_id_enc, iv, client_secret_enc, client_secret_iv, created_at) VALUES ('cpu-conexao-1', 'cpu-lar', '[TEST] Conexão CPU 0205', NULL, 'cpu-cifra-fictícia', 'cpu-iv-1', 'cpu-cifra-2', 'cpu-iv-2', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO bank_items (id, connection_id, institution_name, institution_color, consent_expires_at, last_sync_at, status, disconnected_at, created_at) VALUES ('cpu-banco-1', 'cpu-conexao-1', '[TEST] Banco CPU', NULL, NULL, '2026-11-09T03:00:00.000Z', 'instavel', NULL, '2026-11-01T00:00:00.000Z')",
+    "INSERT INTO sync_runs (id, bank_item_id, kind, started_at, finished_at, status, error_code, cursor_json, heartbeat_at) VALUES ('cpu-run-falha', 'cpu-banco-1', 'diaria', '2026-11-10T00:00:00.000Z', '2026-11-10T00:01:00.000Z', 'instavel', 'banco_instavel', '{\"seq\":0,\"phase\":\"inicio\"}', NULL)"
+  ],
+  "requests": [
+    {
+      "name": "POST /api/dev/cron (despachante com o agendamento e a categorização; sem fila de verdade)",
+      "method": "POST",
+      "path": "/api/dev/cron",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "GET /api/sync/status (dois bancos e a última atualização do lar)",
+      "method": "GET",
+      "path": "/api/sync/status",
+      "headers": { "cookie": "{sessao}" }
+    },
+    {
+      "name": "POST /api/bank-items/cpu-banco-1/sync (Baixar agora depois de falha que repete)",
+      "method": "POST",
+      "path": "/api/bank-items/cpu-banco-1/sync",
+      "headers": { "cookie": "{sessao}" }
+    }
+  ]
+}

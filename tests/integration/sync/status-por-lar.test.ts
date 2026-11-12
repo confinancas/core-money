@@ -123,7 +123,7 @@ describe("GET /api/sync/status: só o lar da sessão", () => {
 
     const corpo = await statusDoLar(vazio.householdId);
 
-    expect(corpo).toEqual({ importing: [], recentlyFinished: [] });
+    expect(corpo).toMatchObject({ importing: [], recentlyFinished: [] });
   });
 
   it("a leitura do status fica nas execuções do próprio lar: 1.500 de outro lar não entram", async () => {

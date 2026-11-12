@@ -27,9 +27,11 @@ import { PluggyError } from "../pluggy/errors";
 import type { PluggyAccount, PluggyItem } from "../pluggy/types";
 import { applySpendTypesOnImport } from "../spend-types/derive";
 import { causaDoErro } from "../usage/d1-limit-errors";
+import { afterRun } from "./after-run";
 import { atingiuOTeto, escritasDeHoje } from "./orcamento";
 import {
   DIAS_DA_CONCILIACAO,
+  dailyWindows,
   futureWindow,
   historyWindows,
   JANELAS_DE_CONCILIACAO,
@@ -49,6 +51,7 @@ import {
   marcarRepeticaoStmt,
   saveCursorStmt,
 } from "./runs";
+import { marcarSumicos } from "./vanished";
 
 // Gravação do banco carregada na hora de usar, e não na carga do módulo: o `main` do Worker chega aos testes antes dos
 // mocks do afterIngest, e o repositório não pode ficar preso à versão real do módulo por essa ordem.
@@ -156,7 +159,10 @@ async function completarTipos(
   await applySpendTypesOnImport(db, householdId, lista);
 }
 
-type Dependencias = { fetch?: typeof fetch; agora: Date; nowIso: string; seq: number };
+type Dependencias = { fetch?: typeof fetch; agora: Date; nowIso: string; seq: number; tentativa: number };
+
+// O que cada fase devolve: o cursor novo, o total de fatias e as feitas até aqui.
+type ResultadoDaFase = { proximo: SyncCursor; total: number; feitas: number };
 
 // Fase inicio: item, contas e investimentos; grava contas, cartões e a aberta; monta o cursor com as janelas.
 async function faseInicio(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncCursor, dep: Dependencias) {
@@ -196,15 +202,24 @@ async function faseInicio(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncCu
     (linha): linha is NonNullable<typeof linha> => linha !== null,
   );
 
+  // Sincronização (diaria e manual): só a janela recente, a partir da última leitura com sucesso (TASK-0205). Importação:
+  // o histórico de 12 meses (TASK-0204).
+  const diaria = run.kind !== "historico";
+  const ultimaSincronizacao = run.last_sync_at !== null ? todayInSaoPaulo(new Date(run.last_sync_at)) : null;
   const contasDoCursor: SyncAccount[] = contas.map((conta): SyncAccount => {
-    if (conta.type === "BANK") return { id: conta.id, kind: "BANK", windows: historyWindows(hoje, MESES) };
+    if (conta.type === "BANK") {
+      const janelas = diaria ? dailyWindows("BANK", ultimaSincronizacao, hoje) : historyWindows(hoje, MESES);
+      return { id: conta.id, kind: "BANK", windows: janelas };
+    }
     const aberta = openBillFromCard(conta);
     const vencimento = conta.creditData?.balanceDueDate;
     const gapDays = aberta && vencimento ? diasEntre(aberta.closes_on, vencimento.slice(0, 10)) : 7;
     return {
       id: conta.id,
       kind: "CREDIT",
-      windows: [...historyWindows(hoje, MESES), futureWindow(hoje)],
+      windows: diaria
+        ? dailyWindows("CREDIT", ultimaSincronizacao, hoje)
+        : [...historyWindows(hoje, MESES), futureWindow(hoje)],
       gapDays,
       aberta: aberta ? { ...aberta, status: "aberta", paid_on: null } : null,
     };
@@ -234,6 +249,8 @@ async function faseInicio(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncCu
     w: 0,
     pageCursor: null,
     offset: 0,
+    lidas: 0,
+    instavelNoPluggy,
   };
   return { proximo, total: totalDeFatias(cartoes.length, janelas), feitas: 1 };
 }
@@ -279,15 +296,26 @@ async function faseFaturas(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncC
   return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
 }
 
-// Fase transacoes: um trecho de até 200 linhas por fatia. Fim de janela conta como fatia feita.
+// Fase transacoes: um trecho de até 200 linhas por fatia. Fim de janela conta como fatia feita. Na sincronização (diaria e
+// manual), fim de janela também confere o que sumiu do banco (TASK-0205); e o fim das janelas vai para fim, sem conciliar
+// os 12 meses (quem concilia a janela de hoje é o afterRun).
 async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncCursor, dep: Dependencias) {
   const contas = cursor.accounts;
   const conta = contas[cursor.a];
   const janela = conta?.windows[cursor.w];
+  const fimDasTransacoes = (proximo: SyncCursor, total: number, feitas: number): ResultadoDaFase => {
+    if (run.kind === "historico") {
+      proximo.phase = "conciliar";
+      proximo.w = 0;
+      return { proximo, total: total + JANELAS_DE_CONCILIACAO, feitas };
+    }
+    proximo.phase = "fim";
+    return { proximo, total, feitas };
+  };
   if (!conta || !janela) {
-    // Sem conta nem janela: não há transações; a conciliação entra no total e começa na janela 0.
-    const proximo: SyncCursor = { ...cursor, seq: dep.seq + 1, phase: "conciliar", w: 0 };
-    return { proximo, total: run.slices_total + JANELAS_DE_CONCILIACAO, feitas: run.slices_done };
+    // Sem conta nem janela: não há transações; na importação, a conciliação entra no total e começa na janela 0.
+    const proximo: SyncCursor = { ...cursor, seq: dep.seq + 1 };
+    return fimDasTransacoes(proximo, run.slices_total, run.slices_done);
   }
 
   const client = await clientForConnection(
@@ -320,12 +348,19 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
     rows: trecho.map((transacao) => mapTransaction(transacao, contaDaTransacao)),
     now: dep.nowIso,
   });
-  if (updatedIds.length > 0) await completarTipos(db, run.household_id, updatedIds, dep.nowIso);
+  // Só a repetição de uma fatia completa o que a tentativa anterior deixou pela metade. Numa leitura normal, a linha
+  // que já existia não volta à fila da IA nem tem o is_backfill regravado (TASK-0205, N9).
+  if (updatedIds.length > 0 && dep.tentativa > 1) {
+    await completarTipos(db, run.household_id, updatedIds, dep.nowIso);
+  }
 
+  // Leituras da janela: só a primeira página de cada leitura conta (a fatia que relê a mesma página não soma de novo).
+  const lidasAgora = cursor.lidas + (cursor.offset === 0 ? pagina.results.length : 0);
   const proximo: SyncCursor = {
     ...cursor,
     seq: dep.seq + 1,
     inserted: cursor.inserted + insertedIds.length,
+    lidas: lidasAgora,
   };
   if (pagina.results.length > cursor.offset + LINHAS_POR_FATIA) {
     // Sobrou linha na página: a mesma página é relida na próxima fatia, a partir do offset.
@@ -337,7 +372,21 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
     proximo.offset = 0;
     return { proximo, total: run.slices_total, feitas: run.slices_done };
   }
-  // Fim da janela: a próxima janela da conta, ou a próxima conta.
+  // Fim da janela: na sincronização, o que não voltou sai dos cálculos (guardas em vanished.ts). Depois, a próxima janela
+  // da conta, ou a próxima conta.
+  if (run.kind !== "historico") {
+    const escopo =
+      conta.kind === "BANK"
+        ? { coluna: "account_id" as const, valor: conta.id }
+        : { coluna: "card_id" as const, valor: conta.id };
+    const sumicos = await marcarSumicos(
+      db,
+      { escopo, from: janela.from, to: janela.to, inicioDaExecucao: run.started_at, now: dep.nowIso },
+      lidasAgora,
+    );
+    proximo.conferir = cursor.conferir || sumicos.conferir;
+  }
+  proximo.lidas = 0;
   proximo.pageCursor = null;
   proximo.offset = 0;
   if (cursor.w + 1 < conta.windows.length) {
@@ -347,9 +396,8 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
   proximo.a = cursor.a + 1;
   proximo.w = 0;
   if (proximo.a < contas.length) return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
-  // Fim das transações: a conciliação entra no total (uma fatia por janela) e começa na janela 0.
-  proximo.phase = "conciliar";
-  return { proximo, total: run.slices_total + JANELAS_DE_CONCILIACAO, feitas: run.slices_done + 1 };
+  // Fim das transações.
+  return fimDasTransacoes(proximo, run.slices_total, run.slices_done + 1);
 }
 
 // Fase conciliar: uma janela de 15 dias por fatia, da de hoje (w = 0) para a mais antiga (w = 24). Cada janela
@@ -374,22 +422,45 @@ async function faseConciliar(db: Db, run: LinhaDaExecucao, cursor: SyncCursor, d
   return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
 }
 
-// Fase fim: a execução encerra como ok ou repetiu. A conciliação da janela de hoje já foi feita pela fase conciliar.
-async function faseFim(db: Db, run: LinhaDaExecucao, nowIso: string): Promise<ResultadoDaFatia> {
+// Ponto único depois da execução (TASK-0205): o afterRun roda antes de fechar, e um erro dele não impede o fechamento.
+async function aposAExecucao(db: Db, run: LinhaDaExecucao, nowIso: string): Promise<void> {
+  try {
+    await afterRun(db, {
+      householdId: run.household_id,
+      bankItemId: run.bank_item_id,
+      runId: run.id,
+      now: nowIso,
+      kind: run.kind,
+    });
+  } catch (erro) {
+    console.error(`sync após a execução: ${erro instanceof Error ? erro.name : "erro"}`);
+  }
+}
+
+// Fase fim: a execução encerra como ok ou repetiu. A conciliação da janela de hoje já foi feita (afterRun, ou as fatias
+// de conciliar na importação). Na sincronização diária ou manual, um banco instável sem o item OUTDATED volta a ativo.
+async function faseFim(
+  db: Db,
+  run: LinhaDaExecucao,
+  cursor: SyncCursor,
+  nowIso: string,
+): Promise<ResultadoDaFatia> {
   const status = run.retried === 1 ? "repetiu" : "ok";
+  await aposAExecucao(db, run, nowIso);
   await db.$client.batch(
     finishRunStmts(db, {
       runId: run.id,
       bankItemId: run.bank_item_id,
       status,
-      errorCode: null,
+      errorCode: cursor.conferir ? "conferir_sumidas" : null,
       newTransactions: run.new_transactions,
       now: nowIso,
       statusDoBanco: null,
       atualizaUltimaSincronizacao: true,
+      voltaAtivo: run.kind !== "historico" && !cursor.instavelNoPluggy,
     }),
   );
-  return { tipo: "encerrou", status, codigo: null };
+  return { tipo: "encerrou", status, codigo: cursor.conferir ? "conferir_sumidas" : null };
 }
 
 // Encerra a execução com erro ou instável, sem repetir.
@@ -401,6 +472,7 @@ async function encerrar(
   statusDoBanco: "acao_necessaria" | "instavel" | null,
   nowIso: string,
 ): Promise<ResultadoDaFatia> {
+  await aposAExecucao(db, run, nowIso);
   await db.$client.batch(
     finishRunStmts(db, {
       runId: run.id,
@@ -486,7 +558,7 @@ export async function runSyncSlice(
   const agora = new Date(now);
   const nowIso = agora.toISOString();
   try {
-    if (cursor.phase === "fim") return await faseFim(db, run, nowIso);
+    if (cursor.phase === "fim") return await faseFim(db, run, cursor, nowIso);
     // Teto diário de escritas (TASK-0204, R2): nas fases que trazem dados do banco, ao chegar a 60% do limite do dia, a
     // execução pausa até a virada e o cursor não anda; a mensagem é confirmada e o cron reenfileira esta fatia depois
     // do heartbeat. A conciliação só reclassifica 15 dias de linhas e fica no colchão dos 40%: não lê o contador.
@@ -497,7 +569,13 @@ export async function runSyncSlice(
       return { tipo: "pulou" };
     }
 
-    const dep: Dependencias = { fetch: deps.fetch, agora, nowIso, seq: entrada.seq };
+    const dep: Dependencias = {
+      fetch: deps.fetch,
+      agora,
+      nowIso,
+      seq: entrada.seq,
+      tentativa: entrada.tentativa,
+    };
     const resultado =
       cursor.phase === "inicio"
         ? await faseInicio(db, env, run, cursor, dep)

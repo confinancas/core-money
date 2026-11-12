@@ -32,7 +32,7 @@ import { planoPagoRoutes, usageRoutes } from "./routes/usage";
 import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
 import { regrasAutomaticasRoutes, tiposDeGastoRoutes } from "./spend-types/routes";
-import { syncRoutes } from "./sync/routes";
+import { bankItemsSyncRoutes, syncRoutes } from "./sync/routes";
 import { isD1DailyLimitError } from "./usage/d1-limit-errors";
 
 export type AppOptions = {
@@ -136,6 +136,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
     pluggyConnectionsRoutes(resolverDaSessao, { agora: options.agora, fetch: options.pluggyFetch }),
   );
   app.route("/sync", syncRoutes(resolverDaSessao, options.agora));
+  app.route("/bank-items", bankItemsSyncRoutes(resolverDaSessao, options.agora));
   app.route("/dev", devRoutes(resolverDaSessao, { fetch: options.pluggyFetch }));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));

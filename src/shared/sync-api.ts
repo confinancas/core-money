@@ -21,7 +21,20 @@ export type ImportacaoTerminada = {
   finishedAt: string;
 };
 
+// Sincronização (TASK-0205): o último sucesso dos bancos e a situação de cada um, para Configurações e "Baixar agora".
+export type BancoDaSincronizacao = {
+  bankItemId: string;
+  institutionName: string;
+  lastSyncAt: string | null;
+  status: "ativo" | "instavel" | "acao_necessaria";
+  running: boolean;
+  failed: boolean;
+  canRetry: boolean;
+};
+
 export type SyncStatusResponse = {
   importing: ImportacaoEmAndamento[];
   recentlyFinished: ImportacaoTerminada[];
+  lastSync: { at: string; banks: string[] } | null;
+  banks: BancoDaSincronizacao[];
 };
