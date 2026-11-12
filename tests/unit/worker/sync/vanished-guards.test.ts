@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { decidirSumicos } from "../../../../src/worker/sync/regras";
 import { situacaoDoBanco } from "../../../../src/worker/sync/situacao";
-import { decidirSumicos } from "../../../../src/worker/sync/vanished";
 
 // Guardas do que sumiu (TASK-0205): janela com zero linhas não marca; sumiço acima de 30% e pelo menos 5 não marca e pede
 // conferência. Função pura. E a situação do banco para "Baixar agora": falhou e pode repetir.

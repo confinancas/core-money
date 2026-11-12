@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { textoDaUltimaAtualizacao } from "../../../../src/shared/sync-text";
-import { shouldSchedule } from "../../../../src/worker/sync/daily";
 import { dailyWindows } from "../../../../src/worker/sync/plan";
+import { shouldSchedule } from "../../../../src/worker/sync/regras";
 
 // Sincronização diária (TASK-0205): janelas, regra de agendamento e o texto "Última: …". Funções puras, sem D1.
 

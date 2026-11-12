@@ -4,9 +4,7 @@
 // nada. Duas guardas: janela que voltou com zero linhas não marca; sumiço grande (mais de 30% e pelo menos 5) não marca e
 // pede conferência.
 import type { Db } from "../db/client";
-
-export const LIMITE_DO_SUMICO_EM_PERCENTUAL = 30;
-export const MINIMO_DE_SUMICOS_PARA_CONFERIR = 5;
+import { decidirSumicos } from "./regras";
 
 export type EscopoDaJanela = { coluna: "account_id" | "card_id"; valor: string };
 export type EntradaDaMarcacao = {
@@ -38,21 +36,6 @@ export function markVanishedStmts(
     )
     .bind(entrada.now, valor, entrada.from, entrada.to, entrada.inicioDaExecucao);
   return { contagem, marcacao };
-}
-
-export type DecisaoDeSumico = { marcar: boolean; conferir: boolean };
-
-// Função pura das guardas. lidas: linhas que a leitura da janela devolveu (todas as páginas).
-export function decidirSumicos(entrada: {
-  lidas: number;
-  locais: number;
-  candidatas: number;
-}): DecisaoDeSumico {
-  if (entrada.lidas === 0 || entrada.candidatas === 0) return { marcar: false, conferir: false };
-  const grande =
-    entrada.candidatas >= MINIMO_DE_SUMICOS_PARA_CONFERIR &&
-    entrada.candidatas * 100 > entrada.locais * LIMITE_DO_SUMICO_EM_PERCENTUAL;
-  return grande ? { marcar: false, conferir: true } : { marcar: true, conferir: false };
 }
 
 // Roda a contagem e, se a decisão mandar, a atualização. Devolve quantas linhas saíram e se a execução pede conferência.

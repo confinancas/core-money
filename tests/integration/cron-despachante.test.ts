@@ -22,6 +22,7 @@ const tarefa = (nome: string, pesada: boolean, falha = false, chamadas: string[]
   executar: async () => {
     chamadas.push(nome);
     if (falha) throw new Error("falha de teste");
+    return false;
   },
 });
 

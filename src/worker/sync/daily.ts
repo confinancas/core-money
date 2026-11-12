@@ -7,15 +7,8 @@ import { createDb } from "../db/client";
 import { newMeter } from "../db/metered-d1";
 import type { Env } from "../env";
 import { enqueueSlice } from "./enqueue";
+import { INICIO_DO_DIA_EM_SAO_PAULO, shouldSchedule } from "./regras";
 import { startRun } from "./runs";
-
-// São Paulo não tem horário de verão desde 2019: a meia-noite local é 03:00 UTC.
-export const INICIO_DO_DIA_EM_SAO_PAULO = (hoje: string): string => `${hoje}T03:00:00.000Z`;
-
-// Regra pura: agenda quando não rodou hoje e não há execução aberta. Quatro combinações, uma resposta.
-export function shouldSchedule(ranToday: boolean, open: boolean): boolean {
-  return !ranToday && !open;
-}
 
 // Um banco por linha. Desconectado não entra; sem chaves (client_id_enc nulo) não entra. Quem rodou hoje ou tem execução
 // aberta vem marcado. Os dois subconjuntos usam os índices sync_runs_bank_item_started_idx e sync_runs_open_idx.
