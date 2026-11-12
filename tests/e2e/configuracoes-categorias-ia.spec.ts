@@ -185,6 +185,7 @@ test("cenário 11: sem regras que casem, a lista mostra o texto de vazio", async
   await page.goto("/configuracoes/regras");
   await page.getByRole("searchbox").fill("NAO EXISTE 0305");
   await expect(
-    page.getByText("Nenhuma regra ainda. Elas aparecem quando vocês confirmam uma categoria."),
+    // N5 (TASK-0305, rodada 1): a busca sem resultado tem o texto próprio, e não o do lar sem regras.
+    page.getByText("Nenhuma regra com esse nome."),
   ).toBeVisible();
 });
