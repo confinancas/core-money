@@ -11,7 +11,6 @@ import { AMBIENTE, semearBanco, urlDe } from "./importacao-helpers";
 // inteira. Um banco com 100 movimentos (50 na conta, 50 no cartão), relido com o mesmo Pluggy no dia seguinte: a conta de
 // escritas da releitura cabe em uma escrita por transação (o last_seen_at) mais o que a execução grava por si.
 
-const DIA_1 = "2026-11-10T12:00:00.000Z";
 const DIA_2 = "2026-11-10T13:00:00.000Z";
 const MEIA_NOITE_SP_DIA_1 = "2026-11-10T03:00:00.000Z";
 

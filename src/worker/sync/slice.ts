@@ -560,6 +560,22 @@ export async function runSyncSlice(
 
   const agora = new Date(now);
   const nowIso = agora.toISOString();
+  // Banco desconectado (TASK-0206): a execução para aqui, sem trabalho e sem mexer no banco. O histórico fica.
+  if (lida.disconnected_at !== null) {
+    await db.$client.batch(
+      finishRunStmts(db, {
+        runId: run.id,
+        bankItemId: run.bank_item_id,
+        status: "erro",
+        errorCode: "desconectado",
+        newTransactions: run.new_transactions,
+        now: nowIso,
+        statusDoBanco: null,
+        atualizaUltimaSincronizacao: false,
+      }),
+    );
+    return { tipo: "encerrou", status: "erro", codigo: "desconectado" };
+  }
   try {
     if (cursor.phase === "fim") return await faseFim(db, run, cursor, nowIso);
     // Teto diário de escritas (TASK-0204, R2): nas fases que trazem dados do banco, ao chegar a 60% do limite do dia, a

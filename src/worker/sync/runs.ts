@@ -20,6 +20,8 @@ export type LinhaDaExecucao = {
   institution_name: string;
   last_sync_at: string | null;
   started_at: string;
+  // Desconectado (TASK-0206): a fatia encerra a execução antes de qualquer trabalho.
+  disconnected_at: string | null;
 };
 
 // Abre a execução de um banco. Devolve o id, ou null se o banco já tem uma execução aberta. O INSERT é condicionado
@@ -48,7 +50,7 @@ export async function lerExecucao(db: Db, runId: string): Promise<LinhaDaExecuca
     .prepare(
       `SELECT r.id, r.kind, r.finished_at, r.cursor_json, r.slices_total, r.slices_done, r.retried,
          r.new_transactions, r.bank_item_id, b.connection_id, c.household_id, b.consent_expires_at,
-         b.institution_name, b.last_sync_at, r.started_at
+         b.institution_name, b.last_sync_at, r.started_at, b.disconnected_at
        FROM sync_runs r
        JOIN bank_items b ON b.id = r.bank_item_id
        JOIN pluggy_connections c ON c.id = b.connection_id
