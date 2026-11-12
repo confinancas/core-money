@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
-import { type AiConfidence, suggestionText } from "../../../shared/categorization";
+import { Link } from "react-router";
 import {
   cartaoDaIA,
   FILTROS_DA_FILA,
   type FiltroDaFila,
-  textoDaSugestaoDeEntrada,
+  paraAceitar,
+  quantosConfirmados,
 } from "../../../shared/para-categorizar";
+import { todayInSaoPaulo } from "../../../shared/sao-paulo-date";
 import {
   acceptSuggestions,
   fetchQueue,
@@ -15,10 +16,16 @@ import {
   undoCategorization,
 } from "../../api/categorization";
 import { useFeatures } from "../../app/features";
+import { IconeCheck } from "../../components/icons";
+import { Card } from "../../components/ui/card";
 import { ErrorState } from "../../components/ui/error-state";
+import { GreenTop } from "../../components/ui/green-top";
+import { Segmented } from "../../components/ui/segmented";
+import { SkeletonCard } from "../../components/ui/skeleton";
+import { categoriaDaSugestao, QueueRow } from "./QueueRow";
 
-// Tela Para categorizar (TASK-0304). Celular: uma coluna. Tablet e desktop: a mesma lista, com o cartão da IA e os
-// filtros acima. Alvos de toque de 44 px. Os textos seguem o protótipo ParaCategorizar.dc.html.
+// Tela Para categorizar (TASK-0304). Celular e tablet: uma coluna, como o protótipo. Desktop: cartão da IA e filtros à
+// esquerda, lista à direita. Cada confirmação fica em "Categorizados agora" com o seu Desfazer, na visita.
 
 const ROTULO_DO_FILTRO: Record<FiltroDaFila, string> = {
   todos: "Todos",
@@ -27,47 +34,18 @@ const ROTULO_DO_FILTRO: Record<FiltroDaFila, string> = {
   entradas: "Entradas",
 };
 
-const COR_DO_TIPO: Record<LinhaDaFila["kind"], { fundo: string; texto: string }> = {
-  pix: { fundo: "#FFF5E4", texto: "#C27400" },
-  cartao: { fundo: "#F1E9FD", texto: "#7C4DFF" },
-  entrada: { fundo: "#E6F6EE", texto: "#0A7D50" },
-  outro: { fundo: "#EEF1F4", texto: "#3D4943" },
-};
-
-const reais = (centavos: number): string => {
-  const valor = Math.abs(centavos) / 100;
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-type Desfazer = {
-  items: { transactionId: string; categoryId: string }[];
+// Uma confirmação da visita: a linha aceita, com as iguais que ela resolveu junto (mesma regra). Desfazer manda os
+// itens das duas.
+type Confirmada = {
+  chave: string;
+  nome: string;
   categoria: string;
   cor: string;
-  extras: number;
+  itens: { transactionId: string; categoryId: string }[];
+  iguais: number;
 };
 
-// Texto da sugestão da linha: categoria (saída) ou renda (entrada). Null quando não há sugestão.
-function textoDaSugestao(linha: LinhaDaFila): { texto: string; cor: string | null } | null {
-  const s = linha.suggestion;
-  if (!s) return null;
-  if ("categoryName" in s) {
-    return {
-      texto: `${s.categoryName ?? ""} · ${suggestionText(s.confidence as AiConfidence | null, s.reason) ?? ""}`,
-      cor: s.categoryColor,
-    };
-  }
-  const texto = textoDaSugestaoDeEntrada({
-    option: s.option,
-    fixedIncomeName: s.fixedIncomeName,
-    incomeSubtype: s.incomeSubtype,
-    confidence: s.confidence,
-    reason: s.reason,
-  });
-  return texto === null ? null : { texto, cor: null };
-}
-
 export function ParaCategorizar() {
-  const navigate = useNavigate();
   const features = useFeatures();
   const [filtro, setFiltro] = useState<FiltroDaFila>("todos");
   const [dados, setDados] = useState<RespostaDaFila | null>(null);
@@ -76,9 +54,11 @@ export function ParaCategorizar() {
   const [falhou, setFalhou] = useState(false);
   const [falhouAcao, setFalhouAcao] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [total, setTotal] = useState<number | null>(null);
-  const [desfazer, setDesfazer] = useState<Desfazer | null>(null);
+  const [confirmadas, setConfirmadas] = useState<Confirmada[]>([]);
   const emCurso = useRef(false);
+  const maisEmCurso = useRef(false);
 
   const carregar = useCallback(async (f: FiltroDaFila, c?: string) => {
     setFalhou(false);
@@ -98,30 +78,47 @@ export function ParaCategorizar() {
     void carregar(filtro);
   }, [filtro, carregar]);
 
-  // Confirma as linhas dadas (uma ou várias). Sai da lista o que foi aceito e o que a confirmação resolveu junto.
-  const confirmar = async (
-    transactionIds: string[],
-    rotulo: { categoria: string; cor: string },
-    mapa: Map<string, string>,
-  ) => {
-    if (emCurso.current || transactionIds.length === 0) return;
+  // Aceita as linhas dadas e guarda cada uma como confirmação da visita. As iguais (alsoResolved) entram na confirmação
+  // da regra que as resolveu. O que o servidor devolveu em skipped sai da lista sem entrar em "Categorizados agora".
+  const confirmar = async (escolhidas: LinhaDaFila[]) => {
+    if (emCurso.current || escolhidas.length === 0) return;
     emCurso.current = true;
     setOcupado(true);
     setFalhouAcao(false);
     try {
-      const r = await acceptSuggestions(transactionIds);
-      const aceitas = r.accepted.map((a) => a.transactionId);
-      const iguais = r.alsoResolved.map((a) => a.transactionId);
-      const saidas = new Set([...aceitas, ...iguais, ...r.skipped]);
+      const r = await acceptSuggestions(escolhidas.map((l) => l.transactionId));
+      const saidas = new Set([
+        ...r.accepted.map((a) => a.transactionId),
+        ...r.alsoResolved.map((a) => a.transactionId),
+        ...r.skipped,
+      ]);
       setLinhas((atuais) => atuais.filter((linha) => !saidas.has(linha.transactionId)));
-      const itens = [
-        ...r.accepted.map((a) => ({
-          transactionId: a.transactionId,
-          categoryId: a.categoryId ?? mapa.get(a.transactionId) ?? "",
-        })),
-        ...r.alsoResolved.map((a) => ({ transactionId: a.transactionId, categoryId: a.categoryId })),
-      ].filter((item) => item.categoryId !== "");
-      setDesfazer({ items: itens, categoria: rotulo.categoria, cor: rotulo.cor, extras: iguais.length });
+      const novas: (Confirmada & { regra: string | null })[] = [];
+      for (const aceita of r.accepted) {
+        if (!aceita.categoryId) continue;
+        const linha = escolhidas.find((l) => l.transactionId === aceita.transactionId);
+        if (!linha) continue;
+        novas.push({
+          chave: aceita.transactionId,
+          nome: linha.title,
+          categoria: categoriaDaSugestao(linha),
+          cor:
+            (linha.suggestion && "categoryColor" in linha.suggestion && linha.suggestion.categoryColor) ||
+            "#0E9A63",
+          itens: [{ transactionId: aceita.transactionId, categoryId: aceita.categoryId }],
+          iguais: 0,
+          regra: aceita.ruleId,
+        });
+      }
+      for (const igual of r.alsoResolved) {
+        const dona = novas.find((n) => n.regra !== null && n.regra === igual.ruleId) ?? novas[0];
+        if (!dona) continue;
+        dona.itens.push({ transactionId: igual.transactionId, categoryId: igual.categoryId });
+        dona.iguais += 1;
+      }
+      if (novas.length > 0) {
+        setConfirmadas((antes) => [...antes, ...novas]);
+      }
       await carregar(filtro);
     } catch {
       setFalhouAcao(true);
@@ -131,14 +128,14 @@ export function ParaCategorizar() {
     }
   };
 
-  const desfazerAgora = async () => {
-    if (!desfazer || emCurso.current) return;
+  const desfazerAgora = async (confirmacao: Confirmada) => {
+    if (emCurso.current) return;
     emCurso.current = true;
     setOcupado(true);
     setFalhouAcao(false);
     try {
-      await undoCategorization(desfazer.items);
-      setDesfazer(null);
+      await undoCategorization(confirmacao.itens);
+      setConfirmadas((antes) => antes.filter((c) => c.chave !== confirmacao.chave));
       await carregar(filtro);
     } catch {
       setFalhouAcao(true);
@@ -148,254 +145,229 @@ export function ParaCategorizar() {
     }
   };
 
-  // "Aceitar": só as linhas carregadas no filtro atual com sugestão de categoria (saídas).
-  const aceitarTodas = () => {
-    const comCategoria = linhas.filter(
-      (l) => l.kind !== "entrada" && l.suggestion && "categoryId" in l.suggestion && l.suggestion.categoryId,
-    );
-    const mapa = new Map(
-      comCategoria.map((l) => [l.transactionId, (l.suggestion as { categoryId: string }).categoryId]),
-    );
-    void confirmar(
-      comCategoria.map((l) => l.transactionId),
-      { categoria: "Sugestões", cor: "#0E9A63" },
-      mapa,
-    );
-  };
+  // "Aceitar": só as linhas carregadas no filtro atual com sugestão de categoria (no máximo 100 por chamada).
+  const candidatas = paraAceitar(linhas);
+  const aceitarTodas = () => void confirmar(candidatas);
 
-  const confirmarUma = (linha: LinhaDaFila) => {
-    if (!linha.suggestion || !("categoryId" in linha.suggestion) || !linha.suggestion.categoryId) return;
-    const categoriaId = linha.suggestion.categoryId;
-    void confirmar(
-      [linha.transactionId],
-      { categoria: linha.suggestion.categoryName ?? "", cor: linha.suggestion.categoryColor ?? "#0E9A63" },
-      new Map([[linha.transactionId, categoriaId]]),
-    );
+  const verMais = async () => {
+    if (!cursor || maisEmCurso.current) return;
+    maisEmCurso.current = true;
+    setCarregandoMais(true);
+    try {
+      await carregar(filtro, cursor);
+    } finally {
+      maisEmCurso.current = false;
+      setCarregandoMais(false);
+    }
   };
 
   const contagens = dados?.counts;
   const sugeridas = dados?.suggested;
+  const iaAtiva = features.ia;
   const cartao = cartaoDaIA({
-    iaAtiva: features.ia,
+    iaAtiva,
     sugeridas: sugeridas?.[filtro] ?? 0,
     total: contagens?.[filtro] ?? 0,
   });
   const faltam = contagens?.todos ?? 0;
-  const feitas = Math.max(0, (total ?? 0) - faltam);
+  const feitas = quantosConfirmados(confirmadas);
   const percentual = total ? Math.min(100, Math.round((feitas / total) * 100)) : 0;
+  const hoje = dados?.hoje ?? todayInSaoPaulo(new Date());
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-24 md:px-6">
-      <header className="pt-4">
-        <button
-          type="button"
-          onClick={() => navigate("/inicio")}
-          className="min-h-11 min-w-11 text-sm font-semibold text-[#0A7D50] underline"
-        >
-          ← Voltar ao início
-        </button>
-        <h1 className="mt-2 text-2xl font-extrabold text-[#3D4943]">Para categorizar</h1>
-        <p className="text-sm text-[#5B6B63]">O banco não diz o que foi. Só vocês sabem.</p>
-        <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm" data-testid="progresso">
-          <div className="flex justify-between text-sm font-semibold text-[#3D4943]">
-            <span>
-              {feitas} de {total ?? 0} categorizados
-            </span>
-            <span>{faltam === 0 ? "tudo certo" : `faltam ${faltam}`}</span>
-          </div>
+    <section className="flex min-h-dvh flex-col bg-bg pb-24">
+      <GreenTop
+        variant="detail"
+        title="Para categorizar"
+        subtitle="O banco não diz o que foi. Só vocês sabem."
+        back={{ to: "/inicio", label: "Voltar ao início" }}
+        overlap
+      >
+        {dados !== null && (
           <div
-            className="mt-2 h-2 rounded-full bg-[#E5EDE9]"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={total ?? 0}
-            aria-valuenow={feitas}
+            className="rounded-[22px] border border-white/22 bg-white/14 px-4 py-3.5"
+            data-testid="progresso"
           >
-            <div className="h-2 rounded-full bg-[#0E9A63]" style={{ width: `${percentual}%` }} />
+            <div className="flex items-baseline justify-between gap-2.5">
+              <span className="text-[14px] font-extrabold">
+                {feitas} de {total ?? 0} categorizados
+              </span>
+              <span className="text-[12px] font-bold text-white/82">
+                {faltam === 0 ? "tudo certo" : `faltam ${faltam}`}
+              </span>
+            </div>
+            <div
+              role="progressbar"
+              aria-label="Progresso"
+              aria-valuemin={0}
+              aria-valuemax={total ?? 0}
+              aria-valuenow={feitas}
+              className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/25"
+            >
+              <div className="h-full rounded-full bg-white" style={{ width: `${percentual}%` }} />
+            </div>
           </div>
-        </div>
-      </header>
+        )}
+      </GreenTop>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-[280px_1fr] lg:grid-cols-[320px_1fr]">
-        <aside className="flex flex-col gap-4" data-testid="filtros">
+      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-4 px-4 tablet:px-6 desktop:grid desktop:grid-cols-[320px_minmax(0,1fr)] desktop:items-start desktop:gap-6">
+        <aside className="flex min-w-0 flex-col gap-4">
           {contagens && sugeridas && cartao.modo === "sem_ia" && (
-            <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="Sugestões da IA">
-              <p className="text-sm font-semibold text-[#3D4943]">Sem IA: vocês escolhem cada um.</p>
-              <p className="mt-1 text-xs text-[#5B6B63]">Com a chave do Claude, o app sugere sozinho.</p>
-              <Link
-                to="/configuracoes/claude"
-                className="mt-3 inline-flex min-h-11 items-center font-bold text-[#0A7D50] underline"
-              >
-                Colar a chave
-              </Link>
-            </section>
+            <Card overlap className="flex items-start gap-3 p-4">
+              <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-primary-soft text-primary-ink">
+                <IconeSparkle />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-[14px] font-extrabold text-ink">Sem IA: vocês escolhem cada um.</span>
+                <span className="text-[12px] leading-snug text-ink-2">
+                  Com a chave do Claude, o app sugere sozinho.
+                </span>
+                <Link
+                  to="/configuracoes/claude"
+                  className="mt-1 inline-flex min-h-11 items-center font-extrabold text-primary-ink underline"
+                >
+                  Colar a chave
+                </Link>
+              </span>
+            </Card>
           )}
           {contagens && sugeridas && cartao.modo === "com_ia" && (
-            <section className="rounded-2xl bg-white p-4 shadow-sm" aria-label="Sugestões da IA">
-              <p className="text-sm font-semibold text-[#3D4943]">{cartao.titulo}</p>
-              <p className="mt-1 text-xs text-[#5B6B63]">
-                Confira as sugestões abaixo antes de aceitar. O que vocês confirmarem entra sozinho nas
-                próximas vezes.
-              </p>
+            <Card overlap className="flex items-center gap-3 p-4">
+              <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-primary-soft text-primary-ink">
+                <IconeSparkle />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-[14px] font-extrabold text-ink">{cartao.titulo}</span>
+                <span className="text-[12px] leading-snug text-ink-2">
+                  Confira as sugestões abaixo antes de aceitar. O que vocês confirmarem entra sozinho nas
+                  próximas vezes.
+                </span>
+              </span>
               {cartao.podeAceitar && (
                 <button
                   type="button"
                   onClick={aceitarTodas}
-                  disabled={ocupado || linhas.every((l) => l.kind === "entrada" || !l.suggestion)}
-                  className="mt-3 min-h-11 w-full rounded-xl bg-[#0A7D50] px-4 font-bold text-white disabled:opacity-50"
+                  disabled={ocupado || candidatas.length === 0}
+                  className="min-h-11 shrink-0 rounded-full bg-primary-ink px-4 text-[12px] font-extrabold tracking-[1px] text-white uppercase disabled:opacity-50"
                 >
                   Aceitar
                 </button>
               )}
-            </section>
+            </Card>
           )}
-          <nav className="flex gap-2 overflow-x-auto" aria-label="Filtros">
-            {FILTROS_DA_FILA.map((f) => (
-              <button
-                key={f}
-                type="button"
-                aria-pressed={filtro === f}
-                onClick={() => setFiltro(f)}
-                className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold ${filtro === f ? "bg-[#0A7D50] text-white" : "bg-white text-[#3D4943]"}`}
-              >
-                {ROTULO_DO_FILTRO[f]} {contagens ? contagens[f] : ""}
-              </button>
-            ))}
-          </nav>
+          <Segmented
+            label="Filtrar"
+            value={filtro}
+            onChange={(valor) => setFiltro(valor as FiltroDaFila)}
+            options={FILTROS_DA_FILA.map((f) => ({
+              value: f,
+              label: `${ROTULO_DO_FILTRO[f]} ${contagens ? contagens[f] : ""}`.trim(),
+            }))}
+          />
         </aside>
 
-        <section aria-label="Lista" data-testid="lista">
-          {falhou && (
-            <ErrorState
-              title="Não deu para carregar a fila."
-              description="Tente de novo em instantes."
-              onRetry={() => void carregar(filtro)}
-            />
-          )}
+        <div className="flex min-w-0 flex-col gap-4">
           {falhouAcao && (
-            <p role="alert" className="mb-2 rounded-xl bg-[#FDECEC] p-3 text-sm text-[#9B1C1C]">
+            <p role="alert" className="rounded-2xl bg-danger-bg p-3 text-[13px] font-semibold text-danger">
               Não deu para confirmar agora. Tente de novo.
             </p>
           )}
 
-          {desfazer && (
-            <div className="mb-3 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
-              <div>
-                <p className="text-sm font-semibold text-[#3D4943]">
-                  Categorizados agora · {desfazer.items.length}
-                </p>
-                <p className="text-xs text-[#5B6B63]">
-                  <span
-                    className="mr-1 inline-block h-2 w-2 rounded-full"
-                    style={{ background: desfazer.cor }}
-                  />
-                  {desfazer.categoria}
-                  {desfazer.extras > 0 ? ` · + ${desfazer.extras} iguais` : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void desfazerAgora()}
-                disabled={ocupado}
-                className="min-h-11 rounded-xl px-4 font-bold text-[#0A7D50] disabled:opacity-50"
-              >
-                Desfazer
-              </button>
-            </div>
+          {falhou && (
+            <Card>
+              <ErrorState
+                title="Não deu para carregar a fila."
+                description="Tente de novo em instantes."
+                onRetry={() => void carregar(filtro)}
+              />
+            </Card>
           )}
 
-          {dados && linhas.length === 0 && !falhou && (
-            <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-              {faltam === 0 ? (
-                <p className="font-bold text-[#3D4943]">Tudo categorizado!</p>
+          {dados === null && !falhou && <SkeletonCard />}
+
+          {dados !== null && (
+            <Card className="px-4 py-1.5" aria-label="Lista">
+              {linhas.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-7 text-center">
+                  <span className="grid size-[52px] place-items-center rounded-full bg-primary-soft text-primary">
+                    <IconeCheck size={26} />
+                  </span>
+                  <p className="text-[16px] font-extrabold text-ink">
+                    {faltam === 0 ? "Tudo categorizado!" : "Nada pendente aqui"}
+                  </p>
+                </div>
               ) : (
-                <p className="font-bold text-[#3D4943]">Nada pendente aqui</p>
+                <ul>
+                  {linhas.map((linha) => (
+                    <QueueRow
+                      key={linha.transactionId}
+                      linha={linha}
+                      hoje={hoje}
+                      iaAtiva={iaAtiva}
+                      ocupado={ocupado}
+                      aoConfirmar={(l) => void confirmar([l])}
+                    />
+                  ))}
+                </ul>
               )}
-            </div>
+              {cursor && (
+                <button
+                  type="button"
+                  onClick={() => void verMais()}
+                  disabled={carregandoMais || ocupado}
+                  className="my-2 min-h-11 w-full rounded-full font-extrabold text-primary-ink disabled:opacity-50"
+                >
+                  Ver mais
+                </button>
+              )}
+            </Card>
           )}
 
-          <ul className="flex flex-col gap-2">
-            {linhas.map((linha) => {
-              const cor = COR_DO_TIPO[linha.kind];
-              const sugestao = textoDaSugestao(linha);
-              const podeConfirmar = linha.kind !== "entrada" && sugestao !== null;
-              return (
-                <li
-                  key={linha.transactionId}
-                  className="flex items-center gap-2 rounded-2xl bg-white p-3 shadow-sm"
-                >
-                  <button
-                    type="button"
-                    onClick={() => navigate(linha.detailPath)}
-                    className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left"
+          {confirmadas.length > 0 && (
+            <Card className="px-4 py-3">
+              <p className="pb-1 text-[11px] font-extrabold tracking-[1.1px] text-ink-2 uppercase">
+                Categorizados agora · {feitas}
+              </p>
+              <ul>
+                {confirmadas.map((c) => (
+                  <li
+                    key={c.chave}
+                    className="flex items-center justify-between gap-2.5 border-t border-divider py-2.5"
                   >
-                    <span
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold"
-                      style={{ background: cor.fundo, color: cor.texto }}
-                    >
-                      {linha.kind === "cartao"
-                        ? "Cart"
-                        : linha.kind === "entrada"
-                          ? "+"
-                          : linha.kind === "pix"
-                            ? "Pix"
-                            : "Out"}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold text-[#3D4943]">{linha.title}</span>
-                      <span className="block truncate text-xs text-[#5B6B63]">
-                        {linha.localDate.slice(8, 10)}/{linha.localDate.slice(5, 7)}
-                        {linha.institutionName ? ` · ${linha.institutionName}` : ""}
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate text-[14px] font-bold">
+                        {c.nome}
+                        {c.iguais > 0 && <span className="text-ink-2"> · + {c.iguais} iguais</span>}
                       </span>
-                      {sugestao ? (
-                        <span className="block truncate text-xs text-[#3D4943]">
-                          {sugestao.cor && (
-                            <span
-                              className="mr-1 inline-block h-2 w-2 rounded-full"
-                              style={{ background: sugestao.cor }}
-                            />
-                          )}
-                          {sugestao.texto}
-                        </span>
-                      ) : (
-                        <span className="block text-xs font-semibold text-[#8A5A00]">
-                          Sem sugestão · toque para escolher
-                        </span>
-                      )}
+                      <span className="flex items-center gap-1.5 text-[12px] font-bold text-primary-ink">
+                        <span className="size-[7px] rounded-full" style={{ background: c.cor }} />
+                        {c.categoria}
+                      </span>
                     </span>
-                    <span
-                      className={`shrink-0 text-sm font-bold ${linha.amountCents > 0 ? "text-[#0E9A63]" : "text-[#3D4943]"}`}
-                    >
-                      {linha.amountCents > 0 ? "+" : ""}
-                      {reais(linha.amountCents)}
-                    </span>
-                  </button>
-                  {podeConfirmar && (
                     <button
                       type="button"
-                      onClick={() => confirmarUma(linha)}
+                      onClick={() => void desfazerAgora(c)}
                       disabled={ocupado}
-                      aria-label={`Confirmar ${linha.suggestion && "categoryName" in linha.suggestion ? linha.suggestion.categoryName : ""} para ${linha.title}`}
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#E6F6EE] font-bold text-[#0A7D50] disabled:opacity-50"
+                      className="min-h-11 shrink-0 rounded-full px-3 text-[12px] font-extrabold text-primary-ink disabled:opacity-50"
                     >
-                      ✓
+                      Desfazer
                     </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-
-          {cursor && (
-            <button
-              type="button"
-              onClick={() => void carregar(filtro, cursor)}
-              className="mt-3 min-h-11 w-full rounded-xl bg-white font-semibold text-[#0A7D50]"
-            >
-              Ver mais
-            </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
           )}
-        </section>
+        </div>
       </div>
-    </div>
+    </section>
+  );
+}
+
+function IconeSparkle() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" opacity="0.7" />
+    </svg>
   );
 }

@@ -135,3 +135,23 @@ export function cartaoDaIA(entrada: {
   }
   return { modo: "com_ia", titulo: "Sem sugestões pendentes", podeAceitar: false };
 }
+
+// "Aceitar" (TASK-0304, A6): as linhas carregadas no filtro atual que têm sugestão de categoria (saídas), no máximo
+// 100 por chamada. As que o filtro esconde e as de páginas não carregadas ficam de fora.
+export const LIMITE_DO_ACEITE = 100;
+export function paraAceitar<
+  L extends { kind: string; suggestion: { categoryId?: string | null } | { option?: unknown } | null },
+>(linhas: readonly L[], limite = LIMITE_DO_ACEITE): L[] {
+  return linhas
+    .filter((l) => {
+      if (l.kind === "entrada" || l.suggestion === null) return false;
+      return "categoryId" in l.suggestion && Boolean(l.suggestion.categoryId);
+    })
+    .slice(0, limite);
+}
+
+// Confirmações da visita (TASK-0304, A4): cada uma conta ela mesma e as iguais que resolveu. Desfazer tira a
+// confirmação da lista, e o progresso desconta sozinho.
+export function quantosConfirmados(confirmacoes: readonly { iguais: number }[]): number {
+  return confirmacoes.reduce((soma, c) => soma + 1 + c.iguais, 0);
+}
