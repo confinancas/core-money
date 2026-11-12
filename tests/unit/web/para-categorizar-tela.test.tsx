@@ -136,3 +136,13 @@ describe("tela Para categorizar (rodada 1)", () => {
     expect(acoes.fetchQueue).toHaveBeenLastCalledWith("todos", "cursor-1");
   });
 });
+
+describe("erro ao carregar (rodada 1)", () => {
+  it("sem a fila carregada não mostra progresso nem 'tudo certo'", async () => {
+    acoes.fetchQueue.mockRejectedValue(new Error("rede"));
+    const { container } = montar();
+    await screen.findByText("Não deu para carregar a fila.");
+    expect(container.textContent).not.toContain("tudo certo");
+    expect(container.textContent).not.toContain("0 de 0");
+  });
+});
