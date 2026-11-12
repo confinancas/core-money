@@ -181,6 +181,15 @@ test("layout: sem rolagem horizontal, ✓ dentro da tela, uma coluna até o tabl
   expect(caixaDoCheck).toBeTruthy();
   expect(caixaDoCheck!.x).toBeGreaterThanOrEqual(0);
   expect(caixaDoCheck!.x + caixaDoCheck!.width).toBeLessThanOrEqual(larguraDaJanela);
+  // Rótulos dos filtros numa linha só (Todos 2, Entradas 0), em todas as larguras.
+  const linhasDoRotulo = await page.getByRole("radio").evaluateAll((botoes) =>
+    botoes.map((b) => {
+      const r = document.createRange();
+      r.selectNodeContents(b);
+      return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+    }),
+  );
+  expect(linhasDoRotulo.every((n) => n === 1)).toBe(true);
   const filtros = await page.getByRole("radiogroup", { name: "Filtrar" }).boundingBox();
   const lista = await page.getByTestId("lista").boundingBox();
   expect(filtros && lista).toBeTruthy();

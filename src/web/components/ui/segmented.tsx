@@ -50,7 +50,7 @@ export function Segmented({ options, value, onChange, label, className }: Props)
             tabIndex={ativo ? 0 : -1}
             onClick={() => onChange(opcao.value)}
             className={cn(
-              "h-11 flex-1 rounded-full px-3 text-[14px] font-extrabold transition-colors",
+              "h-11 flex-1 whitespace-nowrap rounded-full px-3 text-[14px] font-extrabold transition-colors",
               ativo ? "bg-card text-primary shadow-segment" : "text-ink-2",
             )}
           >
