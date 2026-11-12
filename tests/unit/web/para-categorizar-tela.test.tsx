@@ -108,4 +108,19 @@ describe("tela Para categorizar (rodada 1)", () => {
     expect(within(lista).getByText("Pix para JOAO P SILVA")).toBeTruthy();
     expect(within(lista).getByText("Pix para MARIANA S")).toBeTruthy();
   });
+
+  it("sem a chave do Claude, linha com sugestão gravada mostra Sem sugestão e nenhum ✓", async () => {
+    acoes.fetchQueue.mockResolvedValue(resposta([LINHA_PIX]));
+    render(
+      <FeaturesProvider valores={{ ia: false, assistente: false, voz: false }}>
+        <MemoryRouter>
+          <ParaCategorizar />
+        </MemoryRouter>
+      </FeaturesProvider>,
+    );
+    await screen.findByText("Pix para JOAO P SILVA");
+    expect(screen.getByText("Sem sugestão · toque para escolher")).toBeTruthy();
+    expect(screen.queryByText("Serviços · pouca certeza")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
+  });
 });
