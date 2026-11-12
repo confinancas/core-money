@@ -15,7 +15,8 @@ const AMBIENTE = {} as Env;
 const DB_MEDIDO = { marcador: "db-medido" } as unknown as Db;
 // Instantes de cinco em cinco minutos: o ponto de partida do giro alterna entre execuções seguidas.
 const TICK_0 = new Date(PASSO_DO_CRON_MS * 1000);
-const _TICK_1 = new Date(PASSO_DO_CRON_MS * 1001);
+const TICK_1 = new Date(PASSO_DO_CRON_MS * 1001);
+const TICK_2 = new Date(PASSO_DO_CRON_MS * 1002);
 
 const tarefa = (nome: string, pesada: boolean, chamadas: string[], trabalha = true): TarefaDoCron => ({
   nome,
@@ -90,6 +91,53 @@ describe("despachar: leves e pesadas", () => {
       },
     ]);
     expect(recebidos).toEqual([DB_MEDIDO]);
+  });
+
+  it("pesada sem trabalho cede a vez: a seguinte com trabalho roda (N10)", async () => {
+    const chamadas: string[] = [];
+    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
+      tarefa("pesada-sem-trabalho", true, chamadas, false),
+      tarefa("pesada-com-trabalho", true, chamadas, true),
+    ]);
+    expect(chamadas).toEqual(["pesada-sem-trabalho", "pesada-com-trabalho"]);
+  });
+
+  it("duas pesadas com trabalho se revezam: cada execução do cron põe uma delas em vez, e nenhuma fica sem rodar", async () => {
+    const primeira: string[] = [];
+    await despachar(AMBIENTE, TICK_0, DB_MEDIDO, [
+      tarefa("pesada-1", true, primeira),
+      tarefa("pesada-2", true, primeira),
+    ]);
+    const segunda: string[] = [];
+    await despachar(AMBIENTE, TICK_1, DB_MEDIDO, [
+      tarefa("pesada-1", true, segunda),
+      tarefa("pesada-2", true, segunda),
+    ]);
+    expect(primeira).toHaveLength(1);
+    expect(segunda).toHaveLength(1);
+    expect(segunda[0]).not.toBe(primeira[0]);
+    const terceira: string[] = [];
+    await despachar(AMBIENTE, TICK_2, DB_MEDIDO, [
+      tarefa("pesada-1", true, terceira),
+      tarefa("pesada-2", true, terceira),
+    ]);
+    expect(terceira[0]).toBe(primeira[0]);
+  });
+
+  it("duas pesadas com trabalho e uma sem: a sem trabalho cede, e as duas com trabalho se revezam sem ninguém parado", async () => {
+    const execucoes: string[][] = [];
+    for (const tick of [TICK_0, TICK_1]) {
+      const chamadas: string[] = [];
+      await despachar(AMBIENTE, tick, DB_MEDIDO, [
+        tarefa("sem-trabalho", true, chamadas, false),
+        tarefa("com-trabalho-a", true, chamadas, true),
+        tarefa("com-trabalho-b", true, chamadas, true),
+      ]);
+      execucoes.push(chamadas);
+    }
+    const rodadas = execucoes.map((chamadas) => chamadas.at(-1));
+    expect(rodadas).not.toContain("sem-trabalho");
+    expect(new Set(rodadas)).toEqual(new Set(["com-trabalho-a", "com-trabalho-b"]));
   });
 
   it("ordem combinada: retomada, atribuição de ciclos, cotação do dólar e agendamento são leves; a categorização é a pesada", () => {
