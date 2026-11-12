@@ -384,12 +384,12 @@ const SET_DA_VOLTA = [
   `categorized_by = CASE WHEN ${VOLTA_PARA_IA} THEN 'ia' ELSE NULL END`,
   `categorized_at = CASE WHEN ${VOLTA_PARA_IA} THEN t.categorized_at ELSE NULL END`,
   "rule_id = NULL",
-  `spend_type = CASE WHEN t.spend_type_source = 'escolhido' THEN t.spend_type
+  `spend_type = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type
     WHEN ${VOLTA_PARA_IA} THEN ${TIPO_DA_VOLTA.tipo}
-    WHEN t.spend_type_source IN ('regra', 'categoria') THEN 'prazeres' ELSE t.spend_type END`,
-  `spend_type_source = CASE WHEN t.spend_type_source = 'escolhido' THEN t.spend_type_source
+    WHEN t.spend_type_source = 'categoria' THEN 'prazeres' ELSE t.spend_type END`,
+  `spend_type_source = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type_source
     WHEN ${VOLTA_PARA_IA} THEN ${TIPO_DA_VOLTA.origem}
-    WHEN t.spend_type_source IN ('regra', 'categoria') THEN 'padrao' ELSE t.spend_type_source END`,
+    WHEN t.spend_type_source = 'categoria' THEN 'padrao' ELSE t.spend_type_source END`,
 ].join(", ");
 
 // Desfazer uma linha: zera a categoria só se ninguém mexeu depois (a categoria ainda é a mesma e quem gravou foi esta
