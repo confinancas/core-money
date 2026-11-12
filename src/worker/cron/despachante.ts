@@ -1,10 +1,12 @@
-// Despachante do cron (TASK-0303, com as tarefas da importação da TASK-0204). Um Cron Trigger só, a cada 5 minutos (plano
-// gratuito). Cada execução roda as tarefas na ordem de prioridade e para na primeira tarefa pesada: a CPU não se mede
-// dentro do Worker, então uma pesada por vez. As leves vêm antes da pesada na lista; a importação vem antes da categorização.
+// Despachante do cron (TASK-0303, com as tarefas da importação da TASK-0204 e a cotação da TASK-0902). Um Cron Trigger
+// só, a cada 5 minutos (plano gratuito). Cada execução roda as tarefas na ordem de prioridade e para na primeira tarefa
+// pesada: a CPU não se mede dentro do Worker, então uma pesada por vez. As leves vêm antes da pesada na lista e rodam em
+// toda execução; a importação vem antes da categorização.
 
 import { runCategorizationSlice } from "../categorization/cron";
 import type { Db } from "../db/client";
 import type { Env } from "../env";
+import { fillPendingFxRates } from "../income/fx";
 import { atribuirCiclos, retomarImportacoes } from "./tarefas";
 
 export type TarefaDoCron = {
@@ -14,10 +16,17 @@ export type TarefaDoCron = {
 };
 
 // Ordem de prioridade: retomada da importação (leve), atribuição de ciclos (leve, lê zero linhas sem trabalho e no máximo
-// 200 com trabalho), e a categorização (a única pesada).
+// 200 com trabalho), a cotação do dólar (leve) e a categorização (a única pesada).
 export const TAREFAS_DO_CRON: readonly TarefaDoCron[] = [
   retomarImportacoes,
   atribuirCiclos,
+  {
+    // Leve (TASK-0902): busca a cotação do dólar pendente, no máximo 2 chamadas ao Banco Central por execução.
+    nome: "cotacao-dolar",
+    pesada: false,
+    executar: (env, agora, db) =>
+      fillPendingFxRates(env, { now: agora, fetch: (...args) => globalThis.fetch(...args), db }),
+  },
   {
     nome: "categorizacao",
     pesada: true,

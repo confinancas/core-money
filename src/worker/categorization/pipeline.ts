@@ -1,7 +1,9 @@
-import { needsCategory, needsIncome } from "../../shared/categorization";
+import { INCOME_CANDIDATE_MOVEMENTS, needsCategory, needsIncome } from "../../shared/categorization";
 import { COUNTERPARTY_KEY_SQL, chaveVazia, type RuleScope } from "../../shared/rule-match";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { Db } from "../db/client";
+import { type CandidataDeEntrada, casamentosDoExtrato, type RendaDoExtrato } from "../income/casamento-puro";
+import { escritasDosCasamentos, SQL_RENDAS_DO_EXTRATO } from "../income/statement-match";
 import { applyRuleToTransactionStmt, type RegraParaAplicar } from "./apply";
 import { enqueuePendingStmt, markBackfillStmt } from "./queue";
 
@@ -11,6 +13,8 @@ import { enqueuePendingStmt, markBackfillStmt } from "./queue";
 // A decisão de fila e de histórico sai das linhas já lidas, com os predicados de src/shared/categorization.ts: a escrita
 // só recebe os ids decididos (json_each), e não relê a tabela. Assim o custo não cresce com o lar nem com a regra.
 // Escopo remetente fica de fora nesta task (a TASK-0903 o acrescenta). As TASK-0902 e 0903 acrescentam passos aqui.
+// O casamento pelo extrato das entradas (TASK-0902) vem antes das regras: a entrada casada não entra em pendentes nem na
+// fila, e a leitura das rendas com texto de extrato é uma consulta a mais, sem laço sobre o lote.
 
 export type ResultadoDoPipeline = {
   // Ids que a regra categorizou nesta chamada.
@@ -28,6 +32,9 @@ type LinhaDaImportacao = {
   income_kind: string | null;
   cycle_key: string | null;
   removed_at: string | null;
+  description: string;
+  received_on: string;
+  hidden: number;
 };
 
 type CasamentoDeRegra = {
@@ -72,8 +79,18 @@ const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.i
 // As linhas dos ids recebidos: a chave primária, uma vez. Traz o que a fila e o histórico decidem (movimento, valor,
 // tipo de entrada, ciclo e remoção).
 const SQL_LINHAS = `SELECT t.id, t.movement, t.amount_cents, t.card_id, t.category_id, t.income_kind, t.cycle_key,
-    t.removed_at FROM json_each(?) AS j
+    t.removed_at, t.original_description AS description, t.local_date AS received_on, t.hidden AS hidden
+  FROM json_each(?) AS j
   CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ?`;
+
+// Entrada que pode casar com uma renda pelo extrato: sem renda, visível, não removida e de entrada (TASK-0902). Lê as
+// colunas da própria leitura de linhas, sem outra consulta ao lote.
+const ehCandidataDeEntrada = (linha: LinhaDaImportacao): boolean =>
+  linha.amount_cents > 0 &&
+  linha.hidden === 0 &&
+  linha.removed_at === null &&
+  linha.income_kind === null &&
+  INCOME_CANDIDATE_MOVEMENTS.includes(linha.movement as (typeof INCOME_CANDIDATE_MOVEMENTS)[number]);
 
 // O ciclo anterior ao de hoje (em São Paulo): o último com ends_on antes de hoje. Uma linha, pela chave do lar.
 const SQL_CICLO_ANTERIOR = `SELECT c.key AS key FROM cycles AS c WHERE c.household_id = ? AND c.ends_on < ?
@@ -91,16 +108,35 @@ export async function processNewTransactions(
   if (ids.length === 0) return { categorizedByRule: [], pending: [] };
   const json = JSON.stringify(ids);
 
-  const [linhasLidas, casamentosLidos, cicloLido] = await db.$client.batch([
+  const [linhasLidas, casamentosLidos, cicloLido, rendasLidas] = await db.$client.batch([
     db.$client.prepare(SQL_LINHAS).bind(json, householdId),
     db.$client.prepare(SQL_CASAMENTOS).bind(json, householdId, json, householdId),
     db.$client.prepare(SQL_CICLO_ANTERIOR).bind(householdId, todayInSaoPaulo(now)),
+    db.$client.prepare(SQL_RENDAS_DO_EXTRATO).bind(householdId),
   ]);
   const linhas = (linhasLidas?.results ?? []) as LinhaDaImportacao[];
   const casamentos = (casamentosLidos?.results ?? []) as CasamentoDeRegra[];
   const anterior = (cicloLido?.results?.[0] as { key: string } | undefined)?.key ?? null;
+  const rendas = ((rendasLidas?.results ?? []) as { id: string; statement_text: string }[]).map(
+    (renda): RendaDoExtrato => ({ id: renda.id, statementText: renda.statement_text }),
+  );
 
-  const escritas: D1PreparedStatement[] = [];
+  // Entradas casadas com uma renda pelo texto do extrato (TASK-0902): recebimento e marca, na escrita deste lote.
+  const casadas = casamentosDoExtrato(
+    linhas.filter(ehCandidataDeEntrada).map(
+      (linha): CandidataDeEntrada => ({
+        id: linha.id,
+        description: linha.description,
+        receivedOn: linha.received_on,
+        cycleKey: linha.cycle_key,
+        amountCents: linha.amount_cents,
+      }),
+    ),
+    rendas,
+  );
+  const idsCasados = new Set(casadas.map((casamento) => casamento.transactionId));
+
+  const escritas: D1PreparedStatement[] = escritasDosCasamentos(db, householdId, casadas, now);
   const categorizadas = new Set<string>();
   const viraramPagamento = new Set<string>();
   for (const casamento of casamentos) {
@@ -134,6 +170,7 @@ export async function processNewTransactions(
     const linha = porId.get(id);
     if (!linha || linha.category_id !== null) continue;
     if (linha.movement === PAGAMENTO_DE_FATURA || viraramPagamento.has(id) || categorizadas.has(id)) continue;
+    if (idsCasados.has(id)) continue;
     pending.push(id);
     // Fila da categorização (TASK-0303): saída que pede categoria, ou entrada candidata sem tipo. Removida não entra.
     const pedeSugestao =

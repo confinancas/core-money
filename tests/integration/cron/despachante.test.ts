@@ -98,10 +98,11 @@ describe("despachar", () => {
     expect(recebidos).toEqual([DB_MEDIDO]);
   });
 
-  it("ordem combinada: retomada da importação e atribuição de ciclos são leves e vêm antes da categorização, a única pesada", () => {
+  it("ordem combinada: retomada da importação, atribuição de ciclos e cotação do dólar são leves e vêm antes da categorização, a única pesada", () => {
     expect(TAREFAS_DO_CRON.map((t) => [t.nome, t.pesada])).toEqual([
       ["retomar-importacoes", false],
       ["atribuir-ciclos", false],
+      ["cotacao-dolar", false],
       ["categorizacao", true],
     ]);
   });
