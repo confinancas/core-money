@@ -57,3 +57,16 @@ export function suggestionText(confidence: AiConfidence | null, reason: string |
   const rotulo = ROTULO_DA_CERTEZA[confidence];
   return reason === null || reason === "" ? rotulo : `${reason} · ${rotulo}`;
 }
+
+// Estado da chave da IA na tela de Configurações (TASK-0305): ok, a chave recusada (problema_chave), o Claude fora do
+// ar (indisponivel) ou sem chave (sem_chave).
+export type KeyState = "ok" | "problema_chave" | "indisponivel" | "sem_chave";
+
+export type CategorizationStatus = {
+  categoriesCount: number;
+  activeRulesCount: number;
+  keyMasked: string | null;
+  keyState: KeyState;
+  chaveNovaRecente: boolean;
+  model: string | null;
+};

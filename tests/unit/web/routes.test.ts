@@ -27,6 +27,7 @@ const CONVENCAO: [string, Frame, Aba | undefined, string][] = [
   ["/pix-do-mes/:cycleKey?", "detail", "relatorio", "Pix do mês"],
   ["/configuracoes/bancos/:bankItemId", "detail", "configuracoes", "Banco conectado"],
   ["/configuracoes/categorias", "detail", "configuracoes", "Categorias"],
+  ["/configuracoes/categorias/:categoryId", "detail", "configuracoes", "Editar categoria"],
   ["/configuracoes/regras", "detail", "configuracoes", "Regras"],
   ["/configuracoes/documento-ia", "detail", "configuracoes", "Documento de regras da IA"],
   ["/configuracoes/dados", "detail", "configuracoes", "Dados"],

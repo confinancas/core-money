@@ -22,6 +22,7 @@
 import type { FC } from "react";
 import type { Largura } from "../../app/useBreakpoint";
 import { SectionCasal } from "./SectionCasal";
+import { SectionCategoriasEIA } from "./SectionCategoriasEIA";
 import { SectionCiclo } from "./SectionCiclo";
 import { SectionContasMeuPluggy } from "./SectionContasMeuPluggy";
 import { SectionDados } from "./SectionDados";
@@ -73,6 +74,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     tabletColumn: 2,
     desktopColumn: 2,
     Component: SectionRendaFixa,
+  },
+  {
+    id: "categorias-e-ia",
+    title: "Categorias e IA",
+    order: 60,
+    tabletColumn: 2,
+    desktopColumn: 2,
+    Component: SectionCategoriasEIA,
   },
   {
     id: "notificacoes",
