@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeaturesProvider } from "../../../src/web/app/features";
 import { ParaCategorizar } from "../../../src/web/screens/para-categorizar/ParaCategorizar";
-import { instalarMatchMedia, desinstalarMatchMedia } from "./helpers/larguras";
+import { desinstalarMatchMedia, instalarMatchMedia } from "./helpers/larguras";
 
 // Tela Para categorizar (TASK-0304, rodada 1): valores sem "R$", detalhe com "Hoje", e as confirmações da visita
 // acumuladas, cada uma com o seu Desfazer. A API é falsa: nenhum teste fala com o servidor.

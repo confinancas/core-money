@@ -63,7 +63,9 @@ describe("leituras da fila com um lar grande (A8)", () => {
     const medidos: Meter[] = [];
     const app = appDoLar(lar, medidos);
     expect(await chamar(app, "GET", "/api/categorization/queue")).toBe(200);
-    expect(await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [pendenteId] })).toBe(200);
+    expect(await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [pendenteId] })).toBe(
+      200,
+    );
     expect(
       await chamar(app, "POST", "/api/categorization/undo", {
         items: [{ transactionId: pendenteId, categoryId: categoriaDoLar(lar, "servicos") }],

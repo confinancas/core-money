@@ -5,7 +5,15 @@ import { establishmentKey } from "../../src/shared/establishment-key";
 import { createApp } from "../../src/worker/app";
 import type { AppEnv } from "../../src/worker/env";
 import { aquecerOPortao, semearPronto } from "./helpers/app";
-import { AGORA, categoriaDoLar, criarLar, criarRegra, inserirTransacao, type Lar, lerTransacao } from "./helpers/regras";
+import {
+  AGORA,
+  categoriaDoLar,
+  criarLar,
+  criarRegra,
+  inserirTransacao,
+  type Lar,
+  lerTransacao,
+} from "./helpers/regras";
 
 // Tipo de gasto e nome na fila (TASK-0304, rodada 1): desfazer não apaga o tipo que veio de uma regra (A9), e os iguais
 // que esperavam recebem o nome e o tipo da regra da chave (A10).
@@ -54,14 +62,22 @@ describe("tipo de gasto e nome na fila", () => {
       localDate: "2026-11-09",
       aiCategoryId: categoriaDoLar(lar, "servicos"),
     });
-    await env.DB.prepare("UPDATE transactions SET spend_type = 'fixos', spend_type_source = 'regra' WHERE id = ?")
+    await env.DB.prepare(
+      "UPDATE transactions SET spend_type = 'fixos', spend_type_source = 'regra' WHERE id = ?",
+    )
       .bind(id)
       .run();
     const app = appDoLar(lar);
     const aceite = await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [id] });
     const categoria = (aceite.corpo.accepted as { categoryId: string }[])[0]?.categoryId ?? "";
     expect(categoria).not.toBe("");
-    expect((await chamar(app, "POST", "/api/categorization/undo", { items: [{ transactionId: id, categoryId: categoria }] })).status).toBe(200);
+    expect(
+      (
+        await chamar(app, "POST", "/api/categorization/undo", {
+          items: [{ transactionId: id, categoryId: categoria }],
+        })
+      ).status,
+    ).toBe(200);
     const linha = await lerTransacao(id);
     expect(linha.spend_type).toBe("fixos");
     expect(linha.spend_type_source).toBe("regra");
@@ -90,7 +106,9 @@ describe("tipo de gasto e nome na fila", () => {
       aiCategoryId: categoriaDoLar(lar, "servicos"),
     });
     const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: [nova] });
-    expect((r.corpo.alsoResolved as { transactionId: string }[]).map((x) => x.transactionId)).toEqual([antiga]);
+    expect((r.corpo.alsoResolved as { transactionId: string }[]).map((x) => x.transactionId)).toEqual([
+      antiga,
+    ]);
     const linha = await lerTransacao(antiga);
     expect(linha.category_id).toBe(categoriaDoLar(lar, "servicos"));
     expect(linha.custom_name).toBe("[TEST] Academia");
