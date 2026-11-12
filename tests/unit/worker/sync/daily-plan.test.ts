@@ -25,11 +25,25 @@ describe("dailyWindows: conta BANK", () => {
     ]);
   });
 
-  it("limite de 60 dias: uma última sincronização muito antiga não puxa mais que 60 dias", () => {
-    // Hoje menos 60 dias é 11/09/2026.
+  it("a janela começa na última sincronização (menos a margem), mesmo que ela seja de mais de 60 dias atrás", () => {
+    // 01/08/2026 menos 10 dias é 22/07/2026.
     expect(dailyWindows("BANK", "2026-08-01", "2026-11-10")).toEqual([
-      { from: "2026-09-11", to: "2026-11-10" },
+      { from: "2026-07-22", to: "2026-11-10" },
     ]);
+  });
+
+  it("no máximo 12 meses atrás, mesmo que a última sincronização seja mais antiga", () => {
+    // Hoje menos 12 meses é 10/11/2025.
+    expect(dailyWindows("BANK", "2025-10-01", "2026-11-10")).toEqual([
+      { from: "2025-11-10", to: "2026-11-10" },
+    ]);
+  });
+
+  it("cartão: a última sincronização antiga alarga a janela de 45 dias", () => {
+    expect(dailyWindows("CREDIT", "2026-08-01", "2026-11-10")[0]).toEqual({
+      from: "2026-07-22",
+      to: "2026-11-10",
+    });
   });
 
   it("virada de ano: a conta atravessa 31/12 sem pular o ano", () => {

@@ -132,7 +132,9 @@ export function finishRunStmts(db: Db, fim: FimDaExecucao): D1PreparedStatement[
   if (fim.voltaAtivo) {
     comandos.push(
       db.$client
-        .prepare("UPDATE bank_items SET status = 'ativo' WHERE id = ? AND status IN ('instavel', 'acao_necessaria')")
+        .prepare(
+          "UPDATE bank_items SET status = 'ativo' WHERE id = ? AND status IN ('instavel', 'acao_necessaria')",
+        )
         .bind(fim.bankItemId),
     );
   }
