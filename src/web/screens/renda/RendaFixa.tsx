@@ -14,12 +14,19 @@ import {
   type FixedIncomeDto,
   type FixedIncomesResponse,
 } from "../../../shared/fixed-incomes";
+import { usdToBrlCents } from "../../../shared/income";
 import { fetchFixedIncomes } from "../../api/fixed-incomes";
 import { FixedIncomeEditor } from "./FixedIncomeEditor";
 
 // Renda fixa (TASK-0901): o previsto por ciclo, a lista e o editor. ?id=<id> abre essa renda; ?nova=1 abre o editor
-// vazio; sem parâmetro, a primeira da lista. Em real, o previsto soma as rendas em real; o dólar aparece sem conversão
-// até a TASK-0902 trazer a cotação.
+// vazio; sem parâmetro, a primeira da lista. Em real, o valor é o próprio. Em dólar, o valor em real é o dólar pela
+// cotação do último recebimento da renda (TASK-0902); sem cotação, aparece em dólar, sem conversão.
+
+// O valor da renda em real: o dólar convertido pela última cotação dela. Nulo sem cotação (só em dólar).
+function emReais(renda: FixedIncomeDto): number | null {
+  if (renda.currency === "BRL") return renda.amountCents;
+  return renda.lastFx ? usdToBrlCents(renda.amountCents, renda.lastFx.rateE4) : null;
+}
 
 const MENSAGEM_DE_EXCLUIDA = "Esta renda fixa foi excluída por outra pessoa.";
 // Cores dos trechos da barra do previsto, na ordem das rendas (tokens do design system).
@@ -73,8 +80,13 @@ export function RendaFixa() {
 
   const previsto = dados?.expectedPerCycle;
   const total = previsto ? previsto.brlCents + (previsto.usdInBrlCents ?? 0) : 0;
-  // Só as rendas em real entram na barra por enquanto: o dólar convertido é a TASK-0902.
-  const trechos = rendas.filter((renda) => renda.currency === "BRL" && renda.amountCents > 0);
+  // A barra tem um trecho por renda com valor em real: a renda em dólar entra só quando já está convertida.
+  const trechos = rendas
+    .map((renda) => ({ renda, reais: emReais(renda) }))
+    .filter(
+      (trecho): trecho is { renda: FixedIncomeDto; reais: number } =>
+        trecho.reais !== null && trecho.reais > 0,
+    );
 
   return (
     <section className="flex min-h-dvh flex-col bg-bg">
@@ -93,22 +105,35 @@ export function RendaFixa() {
                 aria-hidden="true"
                 className="flex h-2.5 w-full gap-px overflow-hidden rounded-full bg-white/22"
               >
-                {trechos.map((renda, indice) => (
+                {trechos.map(({ renda, reais }, indice) => (
                   <span
                     key={renda.id}
                     className={cn("h-full", CORES_DA_BARRA[indice % CORES_DA_BARRA.length])}
-                    style={{ width: `${(renda.amountCents / total) * 100}%` }}
+                    style={{ width: `${(reais / total) * 100}%` }}
                   />
                 ))}
               </div>
             )}
             <ul className="flex flex-col gap-1 text-[13px]">
-              {rendas.map((renda) => (
-                <li key={renda.id}>
-                  {renda.name} {renda.currency === "USD" && "US$ "}
-                  <Money cents={renda.amountCents} />
-                </li>
-              ))}
+              {rendas.map((renda) => {
+                const reais = emReais(renda);
+                return (
+                  <li key={renda.id}>
+                    {renda.name}{" "}
+                    {renda.currency === "USD" && reais === null ? (
+                      <>
+                        US$ <Money cents={renda.amountCents} />
+                      </>
+                    ) : renda.currency === "USD" && reais !== null ? (
+                      <>
+                        ≈ <Money cents={reais} />
+                      </>
+                    ) : (
+                      <Money cents={renda.amountCents} />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </GlassBubble>
         )}
@@ -141,6 +166,7 @@ export function RendaFixa() {
                   {rendas.map((renda) => {
                     const ativa = alvo?.id === renda.id && !modoNovo;
                     const dolar = renda.currency === "USD";
+                    const reais = emReais(renda);
                     return (
                       <button
                         key={renda.id}
@@ -171,9 +197,15 @@ export function RendaFixa() {
                         </span>
                         <span className="shrink-0 text-[14px] font-bold text-ink">
                           {dolar ? (
-                            <>
-                              US$ <Money cents={renda.amountCents} />
-                            </>
+                            reais !== null ? (
+                              <>
+                                ≈ <Money cents={reais} />
+                              </>
+                            ) : (
+                              <>
+                                US$ <Money cents={renda.amountCents} />
+                              </>
+                            )
                           ) : (
                             <Money cents={renda.amountCents} />
                           )}

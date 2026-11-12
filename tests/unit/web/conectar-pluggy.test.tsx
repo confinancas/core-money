@@ -1,9 +1,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../../src/web/lib/api";
 import { StepChaves } from "../../../src/web/screens/bancos/conectar/StepChaves";
 import {
+  aoEditarChave,
   autorizacaoDoBanco,
   cpfParaTela,
+  destinoDoErroDeConexao,
   erroDoRotulo,
   estadoDaConexao,
   legendaDoPasso,
@@ -13,6 +16,7 @@ import {
   siglaDoBanco,
   subtituloDoBanco,
   textoDoBotaoDeBancos,
+  textoDoErroDeConexao,
   textoDoPassoPronto,
 } from "../../../src/web/screens/bancos/conectar/view-model";
 
@@ -201,5 +205,134 @@ describe("Conectar Meu Pluggy: bancos, CPF e selo da conexão", () => {
       ),
     ).toEqual({ texto: "Precisa de atenção", tom: "aviso" });
     expect(estadoDaConexao(conexao({ hasKeys: false }))).toEqual({ texto: "Sem chaves", tom: "aviso" });
+  });
+
+  it("'Sem chaves' vale sobre 'Precisa de atenção' quando a conexão não tem chaves e um banco pede atenção", () => {
+    const pedindoAtencao = {
+      id: "b",
+      institutionName: "X",
+      institutionColor: null,
+      consentExpiresAt: null,
+      status: "acao_necessaria" as const,
+      disconnectedAt: null,
+      lastSyncAt: null,
+    };
+    const conexaoComBanco = (hasKeys: boolean) => ({
+      id: "c",
+      label: "Conta Angela",
+      cpfMasked: null,
+      hasKeys,
+      bankItems: [pedindoAtencao],
+    });
+    expect(estadoDaConexao(conexaoComBanco(false))).toEqual({ texto: "Sem chaves", tom: "aviso" });
+    expect(estadoDaConexao(conexaoComBanco(true))).toEqual({ texto: "Precisa de atenção", tom: "aviso" });
+  });
+});
+
+describe("Conectar Meu Pluggy: consentimento perto do fim", () => {
+  const bancoComConsentimento = (consentExpiresAt: string) => ({
+    id: "b",
+    institutionName: "Itaú",
+    institutionColor: null,
+    consentExpiresAt,
+    status: "ativo" as const,
+    disconnectedAt: null,
+    lastSyncAt: null,
+  });
+
+  it("exatos 30 dias mostram 'renovar' (regra '30 ou menos'); 31 dias mostram a data de validade", () => {
+    expect(subtituloDoBanco(bancoComConsentimento("2026-12-10T12:00:00.000Z"), AGORA)).toBe(
+      "Consentimento expira em 10/12 · renovar",
+    );
+    expect(subtituloDoBanco(bancoComConsentimento("2026-12-11T12:00:00.000Z"), AGORA)).toBe(
+      "Ativo · expira em 12/2026",
+    );
+  });
+});
+
+describe("Conectar Meu Pluggy: erros da API na tela (TASK-0203, achados 2 e 3)", () => {
+  it("um 400 com campos mostra a primeira frase deles, e não a mensagem genérica", () => {
+    const falha = new ApiError(400, "validacao", "Algo deu errado. Tente de novo.", {
+      clientId: "Confira o Client ID: ele tem o formato de um código com letras, números e traços.",
+      clientSecret: "O Client Secret tem de 8 a 200 caracteres, sem espaços.",
+    });
+    expect(textoDoErroDeConexao(falha)).toBe(
+      "Confira o Client ID: ele tem o formato de um código com letras, números e traços.",
+    );
+  });
+
+  it("sem campos, a mensagem da convenção; fora da API, a mensagem padrão", () => {
+    const recusada = new ApiError(
+      422,
+      "chaves_invalidas",
+      "O Meu Pluggy recusou estas chaves. Confira o Client ID e o Client Secret.",
+    );
+    expect(textoDoErroDeConexao(recusada)).toBe(
+      "O Meu Pluggy recusou estas chaves. Confira o Client ID e o Client Secret.",
+    );
+    expect(textoDoErroDeConexao(new TypeError("falha de rede"))).toBe("Algo deu errado. Tente de novo.");
+  });
+
+  it("502 com conexão existente fica no passo 3 com o aviso, e não vai para a troca de chaves", () => {
+    expect(destinoDoErroDeConexao({ codigo: "pluggy_indisponivel", temConexao: true })).toEqual({
+      passo: 3,
+      trocar: false,
+      onde: "bancos",
+    });
+  });
+
+  it("502 numa conexão nova volta ao passo 2, sem modo troca; as chaves continuam nos campos", () => {
+    expect(destinoDoErroDeConexao({ codigo: "pluggy_indisponivel", temConexao: false })).toEqual({
+      passo: 2,
+      trocar: false,
+      onde: "chaves",
+    });
+  });
+
+  it("chave recusada numa conexão existente vai para a troca de chaves; numa conexão nova, para o passo 2", () => {
+    expect(destinoDoErroDeConexao({ codigo: "chaves_invalidas", temConexao: true })).toEqual({
+      passo: 2,
+      trocar: true,
+      onde: "chaves",
+    });
+    expect(destinoDoErroDeConexao({ codigo: "chaves_invalidas", temConexao: false })).toEqual({
+      passo: 2,
+      trocar: false,
+      onde: "chaves",
+    });
+  });
+
+  it("rótulo em uso volta ao passo 1; banco já conectado fica nos bancos", () => {
+    expect(destinoDoErroDeConexao({ codigo: "rotulo_em_uso", temConexao: false })).toEqual({
+      passo: 1,
+      trocar: false,
+      onde: "nome",
+    });
+    expect(destinoDoErroDeConexao({ codigo: "banco_ja_conectado", temConexao: true })).toEqual({
+      passo: 3,
+      trocar: false,
+      onde: "bancos",
+    });
+  });
+});
+
+describe("Conectar Meu Pluggy: editar as chaves desfaz o teste", () => {
+  const atuais = { clientId: "11111111-1111-4111-8111-111111111111", clientSecret: "segredo-de-teste-123" };
+
+  it("editar o Client ID ou o Client Secret guarda o valor novo e zera o teste", () => {
+    expect(aoEditarChave(atuais, "clientId", "x")).toEqual({
+      chaves: { clientId: "x", clientSecret: "segredo-de-teste-123" },
+      testado: false,
+    });
+    expect(aoEditarChave(atuais, "clientSecret", "y")).toEqual({
+      chaves: { clientId: atuais.clientId, clientSecret: "y" },
+      testado: false,
+    });
+    expect(atuais.clientId).toBe("11111111-1111-4111-8111-111111111111");
+  });
+
+  it("depois de editar, o 'Continuar' fica desabilitado até testar de novo", () => {
+    const depoisDeEditar = aoEditarChave(atuais, "clientSecret", "outro-segredo-456");
+    expect(podeContinuarDasChaves(depoisDeEditar.testado, false)).toBe(false);
   });
 });

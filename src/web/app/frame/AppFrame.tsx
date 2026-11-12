@@ -1,6 +1,7 @@
 import { type ReactNode, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { NewDeviceNotice } from "../../components/NewDeviceNotice";
+import { ImportBanner } from "../../components/sync/ImportBanner";
 import { LimitReached } from "../../usage/LimitReached";
 import { lerLimiteAtingido, ouvirLimiteAtingido } from "../../usage/limite-store";
 import { UsageBanner } from "../../usage/UsageBanner";
@@ -27,12 +28,20 @@ export function AppFrame({ frame, aba, children }: { frame: Frame; aba: Aba | nu
 
   const conteudo = limite ? <LimitReached motivo={limite} /> : children;
 
-  // Os avisos (TASK-0106 e TASK-0109) ficam no topo do conteúdo, nas três molduras com conteúdo do app.
+  // Os avisos (TASK-0106 e TASK-0109) ficam no topo do conteúdo, nas três molduras com conteúdo do app. A faixa da
+  // importação (TASK-0204) vem depois deles, ainda dentro do conteúdo: não empurra o trilho nem o menu. Só a moldura
+  // com sessão a monta; as telas de acesso (bare) saem antes, sem consultar a API.
+  const avisos = (
+    <>
+      <NewDeviceNotice />
+      <UsageBanner />
+      <ImportBanner />
+    </>
+  );
   const moldura =
     largura === "celular" ? (
       <CelularComMenu comMenu={frame !== "full"} aba={aba} assistente={assistente}>
-        <NewDeviceNotice />
-        <UsageBanner />
+        {avisos}
         {conteudo}
       </CelularComMenu>
     ) : (
@@ -43,8 +52,7 @@ export function AppFrame({ frame, aba, children }: { frame: Frame; aba: Aba | nu
           <Sidebar aba={aba} assistente={assistente} membros={membros} />
         )}
         <main className="min-w-0 flex-1">
-          <NewDeviceNotice />
-          <UsageBanner />
+          {avisos}
           {conteudo}
         </main>
       </div>

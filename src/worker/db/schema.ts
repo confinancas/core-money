@@ -97,10 +97,14 @@ export const bankItems = sqliteTable(
     disconnectedAt: text("disconnected_at"),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [check("bank_items_status_ck", sql`${t.status} IN ('ativo', 'instavel', 'acao_necessaria')`)],
+  (t) => [
+    check("bank_items_status_ck", sql`${t.status} IN ('ativo', 'instavel', 'acao_necessaria')`),
+    // Bancos de uma conexão: o limite de bancos e o status por lar (TASK-0204, R5).
+    index("bank_items_connection_idx").on(t.connectionId),
+  ],
 );
 
-// Histórico de atualizações. As colunas da fila (slices, cursor, heartbeat) são da TASK-0204.
+// Histórico de atualizações. As colunas da fila (fatias, cursor, heartbeat, código do erro) são da TASK-0204.
 export const syncRuns = sqliteTable(
   "sync_runs",
   {
@@ -114,6 +118,12 @@ export const syncRuns = sqliteTable(
     status: text("status"),
     newTransactions: integer("new_transactions").notNull().default(0),
     progressPct: integer("progress_pct").notNull().default(0),
+    slicesTotal: integer("slices_total").notNull().default(0),
+    slicesDone: integer("slices_done").notNull().default(0),
+    retried: integer("retried").notNull().default(0),
+    errorCode: text("error_code"),
+    cursorJson: text("cursor_json"),
+    heartbeatAt: text("heartbeat_at"),
   },
   (t) => [
     check("sync_runs_kind_ck", sql`${t.kind} IN ('historico', 'diaria', 'manual')`),
@@ -121,7 +131,11 @@ export const syncRuns = sqliteTable(
       "sync_runs_status_ck",
       sql`${t.status} IS NULL OR ${t.status} IN ('ok', 'instavel', 'repetiu', 'erro')`,
     ),
+    check("sync_runs_retried_ck", sql`${t.retried} IN (0, 1)`),
     index("sync_runs_bank_item_started_idx").on(t.bankItemId, t.startedAt),
+    index("sync_runs_open_idx").on(t.bankItemId, t.finishedAt),
+    // Execuções abertas por heartbeat: o cron (retomar-importacoes) lê só estas (TASK-0204, R5).
+    index("sync_runs_open_heartbeat_idx").on(t.heartbeatAt).where(sql`${t.finishedAt} IS NULL`),
   ],
 );
 
@@ -253,6 +267,11 @@ export const transactions = sqliteTable(
     index("transactions_bill_idx").on(t.billId),
     index("transactions_household_establishment_idx").on(t.householdId, t.establishmentKey),
     index("transactions_household_fixed_bill_cycle_idx").on(t.householdId, t.fixedBillId, t.cycleKey),
+    // Lançamentos sem ciclo, por data: o cron de atribuir-ciclos lê só estes (TASK-0204, R1). Quando todos têm ciclo, o
+    // índice fica vazio e a consulta não lê a tabela.
+    index("transactions_no_cycle_local_date_idx")
+      .on(t.localDate)
+      .where(sql`${t.cycleKey} IS NULL AND ${t.removedAt} IS NULL`),
   ],
 );
 
@@ -567,6 +586,47 @@ export const notificationPrefs = sqliteTable(
     primaryKey({ columns: [t.householdId, t.kind] }),
     check("notification_prefs_enabled_ck", sql`${t.enabled} IN (0, 1)`),
   ],
+);
+
+// Recebimentos de uma renda fixa (TASK-0902): cada parte que chega é uma linha. transaction_id nulo é o recebimento
+// lançado à mão; com transação, é o que o extrato (ou a classificação do Pix recebido) casou. Uma transação é parte
+// de no máximo uma renda (índice único parcial). amount_cents está sempre em reais: é o que entrou na conta. A
+// cotação (fx_rate, × 10.000) e o dia dela (fx_date) são os do dia de referência da renda no ciclo.
+export const fixedIncomeReceipts = sqliteTable(
+  "fixed_income_receipts",
+  {
+    id: text("id").primaryKey(),
+    fixedIncomeId: text("fixed_income_id")
+      .notNull()
+      .references(() => fixedIncomes.id),
+    cycleKey: text("cycle_key").notNull(),
+    transactionId: text("transaction_id").references(() => transactions.id),
+    amountCents: integer("amount_cents").notNull(),
+    receivedOn: text("received_on").notNull(),
+    fxRate: integer("fx_rate"),
+    fxDate: text("fx_date"),
+    confirmedBy: text("confirmed_by").notNull(),
+  },
+  (t) => [
+    check("fixed_income_receipts_amount_ck", sql`${t.amountCents} >= 0`),
+    uniqueIndex("fixed_income_receipts_transaction_uq")
+      .on(t.transactionId)
+      .where(sql`${t.transactionId} IS NOT NULL`),
+    index("fixed_income_receipts_income_cycle_idx").on(t.fixedIncomeId, t.cycleKey),
+  ],
+);
+
+// Cotação de referência (TASK-0902): global, a cotação é pública e não é dado do lar. rate é × 10.000 (5,4212 vira
+// 54212). A fonte é o Banco Central (PTAX de venda).
+export const fxRates = sqliteTable(
+  "fx_rates",
+  {
+    currency: text("currency").notNull(),
+    date: text("date").notNull(),
+    rate: integer("rate").notNull(),
+    source: text("source").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.currency, t.date] }), check("fx_rates_rate_ck", sql`${t.rate} > 0`)],
 );
 
 // Fila da categorização pela IA (TASK-0303). Sem FK: o cron tira da fila o que sumiu, foi removido ou já foi resolvido.

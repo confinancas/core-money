@@ -18,6 +18,8 @@ import type { Db } from "../db/client";
 import { bankItems, pluggyConnections } from "../db/schema";
 import type { Env } from "../env";
 import { decryptSecret, encryptSecret } from "../security/crypto";
+import { enqueueSlice } from "../sync/enqueue";
+import { startRun } from "../sync/runs";
 import { apagarApiKey } from "./api-key-cache";
 import { createPluggyClient, type PluggyClient } from "./client";
 import { PluggyError } from "./errors";
@@ -170,7 +172,13 @@ async function lerItem(
     const accounts = await client.listAccounts(itemId);
     return { item, accounts };
   } catch (erro) {
-    if (erro instanceof PluggyError && erro.kind === "not_found") return null;
+    // Id cortado ou de outra conta: o Pluggy responde 400 ou 403 em vez de 404 (TASK-0203, achado 4). Vira "não achamos".
+    if (
+      erro instanceof PluggyError &&
+      (erro.kind === "not_found" || erro.kind === "bad_request" || erro.kind === "forbidden")
+    ) {
+      return null;
+    }
     throw erro;
   }
 }
@@ -333,6 +341,10 @@ export async function createConnection(
       throw traduzirErroDeUnicidade(erro);
     }
 
+    await iniciarHistorico(
+      ctx,
+      resolvidos.map((item) => item.itemId),
+    );
     return {
       connection: { id: connectionId, label: entrada.label, cpfMasked },
       bankItems: resolvidos.map((item) => ({ id: item.itemId, institutionName: item.institutionName })),
@@ -371,9 +383,26 @@ export async function addBankItems(
   } catch (erro) {
     throw traduzirErroDeUnicidade(erro);
   }
+  await iniciarHistorico(
+    ctx,
+    resolvidos.map((item) => item.itemId),
+  );
   return {
     bankItems: resolvidos.map((item) => ({ id: item.itemId, institutionName: item.institutionName })),
   };
+}
+
+// Começa a importação do histórico de cada banco novo (TASK-0204). Uma falha aqui não desfaz a conexão: a execução fica
+// aberta e o cron a retoma (retomar-importacoes).
+async function iniciarHistorico(ctx: ContextoDeConexao, bancos: string[]): Promise<void> {
+  for (const bankItemId of bancos) {
+    try {
+      const runId = await startRun(ctx.db, bankItemId, "historico", ctx.agora().toISOString());
+      if (runId !== null) await enqueueSlice(ctx.env, { runId, seq: 0 });
+    } catch (erro) {
+      console.error(`importação não começou: ${erro instanceof Error ? erro.name : "erro"}`);
+    }
+  }
 }
 
 // Troca das chaves: testadas antes de gravar. Depois, os bancos com ação necessária voltam a ativo (o histórico fica).

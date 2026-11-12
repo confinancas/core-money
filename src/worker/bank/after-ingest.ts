@@ -1,5 +1,5 @@
 import { processNewTransactions } from "../categorization/pipeline";
-import { assignCycleKeys } from "../cycle/calendar";
+import { assignCycleKeys, assignCycleKeysDoEscopo } from "../cycle/calendar";
 import type { Db } from "../db/client";
 import { applySpendTypesOnImport } from "../spend-types/derive";
 import { classifyMovements } from "./classify";
@@ -35,4 +35,11 @@ export async function afterIngest(db: Db, ctx: AfterIngestContext): Promise<void
     const lote = ctx.insertedIds.slice(inicio, inicio + LOTE_DO_PIPELINE);
     await applySpendTypesOnImport(db, ctx.householdId, lote);
   }
+}
+
+// Reavaliação do ciclo de todos os lançamentos e faturas de um cartão (TASK-0204, B1-2). A gravação só reavalia os
+// ids que grava; quando uma fatura muda de data ou herda lançamentos (upsertBillsStmts, na fase de faturas), o ciclo
+// dos lançamentos do cartão muda, e isso se refaz aqui. Chamar uma vez por execução, depois de upsertBillsStmts.
+export async function reavaliarCartaoInteiro(db: Db, householdId: string, cardId: string): Promise<void> {
+  await assignCycleKeysDoEscopo(db, householdId, { cardIds: [cardId] });
 }

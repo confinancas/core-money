@@ -161,6 +161,14 @@ const servidor = createServer((req, res) => {
     if (req.method === "GET" && caminho === "/identity") {
       return enviar(res, 200, { ...IDENTIDADE, itemId: url.searchParams.get("itemId") });
     }
+    // Importação do histórico (TASK-0204): sem movimentos nem faturas; cada janela demora um pouco, para a barra aparecer.
+    if (req.method === "GET" && (caminho === "/investments" || caminho === "/bills")) {
+      return enviar(res, 200, { page: 1, total: 0, totalPages: 1, results: [] });
+    }
+    if (req.method === "GET" && caminho === "/v2/transactions") {
+      setTimeout(() => enviar(res, 200, { results: [], next: null }), 250);
+      return;
+    }
     return enviar(res, 404, { code: 404, codeDescription: "ROUTE_NOT_FOUND" });
   });
 });

@@ -139,6 +139,9 @@ async function executaInstalacao(opcoes: OpcoesInstalar): Promise<number> {
   terminal.escreve("✔ Build pronto.");
   await wrangler.aplicaMigracoes(bancoNome, CONFIG_DA_INSTALACAO);
   terminal.escreve("✔ Migrações aplicadas.");
+  // A fila da importação (TASK-0204): o Worker a declara como produtor e consumidor, então ela existe antes do deploy.
+  await wrangler.criaFilaSeNaoExiste("matrimoney-sync");
+  terminal.escreve("✔ Fila de sincronização pronta.");
   let url: string;
   try {
     url = await wrangler.deploy(CONFIG_DA_INSTALACAO, nome);

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { portasDoE2E } from "../../../scripts/dev/e2e-portas.mjs";
@@ -20,8 +20,22 @@ const ESTADO = {
 
 export type Instancia = keyof typeof ESTADO;
 
-export function executaSql(instancia: Instancia, sql: string): void {
-  const resultado = spawnSync(
+// O D1 local é um arquivo SQLite. Uma importação em segundo plano de outra spec pode estar escrevendo nele quando o
+// comando chega: o SQLite responde "database is locked" (SQLITE_BUSY). Esse erro repete o comando, com pausa crescente
+// e poucas tentativas (TASK-0204, R12). Qualquer outro erro sai na hora.
+const PAUSAS_DO_BUSY_MS = [250, 500, 1000, 2000, 4000];
+
+function ehBusy(saida: string): boolean {
+  return /database is locked|SQLITE_BUSY/i.test(saida);
+}
+
+// Pausa síncrona (o helper é síncrono, como o spawnSync que ele chama).
+function pausa(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function rodaWrangler(instancia: Instancia, argumentos: string[]): SpawnSyncReturns<string> {
+  return spawnSync(
     process.execPath,
     [
       wranglerJs,
@@ -31,38 +45,32 @@ export function executaSql(instancia: Instancia, sql: string): void {
       "--local",
       "--persist-to",
       ESTADO[instancia],
-      "--command",
-      sql,
+      ...argumentos,
     ],
     { cwd: raiz, encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } },
   );
-  if (resultado.status !== 0) {
-    throw new Error(`wrangler d1 execute falhou (${instancia}): ${resultado.stderr || resultado.stdout}`);
+}
+
+// Roda o comando e devolve a saída. Repete só quando o banco está travado, até o fim das pausas.
+function executaComRepeticao(instancia: Instancia, argumentos: string[]): string {
+  for (let tentativa = 0; ; tentativa += 1) {
+    const resultado = rodaWrangler(instancia, argumentos);
+    if (resultado.status === 0) return resultado.stdout;
+    const pausaDeste = PAUSAS_DO_BUSY_MS[tentativa];
+    if (!ehBusy(`${resultado.stderr}\n${resultado.stdout}`) || pausaDeste === undefined) {
+      throw new Error(`wrangler d1 execute falhou (${instancia}): ${resultado.stderr || resultado.stdout}`);
+    }
+    pausa(pausaDeste);
   }
+}
+
+export function executaSql(instancia: Instancia, sql: string): void {
+  executaComRepeticao(instancia, ["--command", sql]);
 }
 
 // Lê linhas de uma instância do E2E (só para conferir o banco de teste nos testes). Saída JSON do wrangler.
 export function consultaSql(instancia: Instancia, sql: string): Record<string, unknown>[] {
-  const resultado = spawnSync(
-    process.execPath,
-    [
-      wranglerJs,
-      "d1",
-      "execute",
-      "matrimoney-db",
-      "--local",
-      "--persist-to",
-      ESTADO[instancia],
-      "--command",
-      sql,
-      "--json",
-    ],
-    { cwd: raiz, encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } },
-  );
-  if (resultado.status !== 0) {
-    throw new Error(`wrangler d1 execute falhou (${instancia}): ${resultado.stderr || resultado.stdout}`);
-  }
-  const texto = resultado.stdout;
+  const texto = executaComRepeticao(instancia, ["--command", sql, "--json"]);
   const blocos = JSON.parse(texto.slice(texto.indexOf("["), texto.lastIndexOf("]") + 1)) as {
     results: Record<string, unknown>[];
   }[];

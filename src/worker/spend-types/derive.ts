@@ -7,6 +7,30 @@ import { movimentosComTipo, tipoDaCategoriaSql } from "./resolve";
 export type { TipoDeRegraAutomatica };
 export { TIPO_DA_REGRA_AUTOMATICA };
 
+// Tipo padrão de uma linha nova (TASK-0204, B1-1): a gravação já grava o que applyDefaultSpendTypeStmt gravaria (categoria
+// nula: o tipo padrão e a origem "padrao") nas linhas que têm tipo. TIPO_PADRAO é o de resolve.ts, e o predicado é o de
+// movimentosComTipo, em TypeScript. Quando a classificação ou uma regra muda o movimento para um sem tipo, o padrão sai.
+export const TIPO_PADRAO = "prazeres";
+export const ORIGEM_PADRAO = "padrao";
+const MOVIMENTOS_DE_SAIDA_COM_TIPO: ReadonlySet<string> = new Set([
+  "compra",
+  "pix_enviado",
+  "ted_enviada",
+  "debito",
+  "boleto",
+  "outro",
+]);
+
+// Saída com tipo (valor negativo e movimento de saída) ou estorno (qualquer valor).
+export const temTipoPadrao = (movimento: string, valorEmCentavos: number): boolean =>
+  (valorEmCentavos < 0 && MOVIMENTOS_DE_SAIDA_COM_TIPO.has(movimento)) || movimento === "estorno";
+
+// Os dois sinais do predicado acima que dependem só do movimento; o valor (amount_cents) fica na consulta.
+export const classeDeTipoPadrao = (movimento: string): { saida: number; estorno: number } => ({
+  saida: MOVIMENTOS_DE_SAIDA_COM_TIPO.has(movimento) ? 1 : 0,
+  estorno: movimento === "estorno" ? 1 : 0,
+});
+
 // Saídas de conta: o único lugar onde uma regra automática casa (nunca cartão).
 const saidaDeConta = (a: string): string =>
   `${a}.account_id IS NOT NULL AND ${a}.amount_cents < 0 AND ${a}.movement IN ('pix_enviado', 'ted_enviada', 'debito', 'boleto', 'outro')`;

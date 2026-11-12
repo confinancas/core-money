@@ -205,9 +205,15 @@ function geraConfigDeDev(env, pedido) {
       database_id: env.MM_DEV_D1_ID,
       migrations_dir: join(raiz, "migrations"),
     })),
-    ...(voltaAoCadastro ? { vars: { ...(base.vars ?? {}), SETUP_SEM_CACHE: "1" } } : {}),
+    // DEV_ROUTES liga as rotas de medição (TASK-0204); a fila e o cron não existem na medição, só o app e as rotas.
+    vars: {
+      ...(base.vars ?? {}),
+      DEV_ROUTES: "1",
+      ...(voltaAoCadastro ? { SETUP_SEM_CACHE: "1" } : {}),
+    },
   };
   delete config.triggers;
+  delete config.queues;
   delete config.$schema;
   const pasta = join(raiz, ".wrangler", "cpu");
   mkdirSync(pasta, { recursive: true });

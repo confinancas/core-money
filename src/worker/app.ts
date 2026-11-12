@@ -8,11 +8,13 @@ import { categoriesRoutes } from "./categories/routes";
 import { categorizacaoRoutes } from "./categorization/routes";
 import { createDb } from "./db/client";
 import { type Meter, newMeter } from "./db/metered-d1";
+import { devRoutes } from "./dev/routes";
 import type { AppEnv } from "./env";
 import type { SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
 import { fixedIncomesRoutes } from "./income/fixed-incomes-routes";
+import { receiptsRoutes } from "./income/receipts-routes";
 import { membersRoutes } from "./members/routes";
 import { notificationPrefsRoutes, notificationsRoutes } from "./notifications/routes";
 import { pluggyConnectionsRoutes } from "./pluggy/routes";
@@ -32,6 +34,7 @@ import { planoPagoRoutes, usageRoutes } from "./routes/usage";
 import { regrasRoutes, transacoesRoutes } from "./rules/routes";
 import { setupGate } from "./setup/state";
 import { regrasAutomaticasRoutes, tiposDeGastoRoutes } from "./spend-types/routes";
+import { syncRoutes } from "./sync/routes";
 import { isD1DailyLimitError } from "./usage/d1-limit-errors";
 
 export type AppOptions = {
@@ -90,6 +93,14 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
     options.onMeter?.(meter, c);
   });
 
+  // Rotas de medição (TASK-0204): só com DEV_ROUTES = "1". Sem a flag, 404 antes de qualquer outra regra.
+  app.use(async (c, next) => {
+    if (c.req.path.startsWith("/api/dev/") && c.env.DEV_ROUTES !== "1") {
+      return apiError(c, 404, "rota_inexistente", "Rota não encontrada.");
+    }
+    return next();
+  });
+
   // Logo depois do medidor: fora do modo pronto, só a configuração inicial responde (TASK-0102).
   app.use(setupGate());
 
@@ -120,6 +131,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/fixed-incomes", fixedIncomesRoutes(resolverDaSessao, options.agora));
+  // Recebimentos e renda do ciclo (TASK-0902): /api/cycle/income e /api/fixed-incomes/:id/receipts.
+  app.route("/", receiptsRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
   app.route("/usage", usageRoutes(resolverDaSessao, options.agora));
   app.route("/settings/paid-plan", planoPagoRoutes(resolverDaSessao));
@@ -127,6 +140,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
     "/pluggy-connections",
     pluggyConnectionsRoutes(resolverDaSessao, { agora: options.agora, fetch: options.pluggyFetch }),
   );
+  app.route("/sync", syncRoutes(resolverDaSessao, options.agora));
+  app.route("/dev", devRoutes(resolverDaSessao, { fetch: options.pluggyFetch }));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/", recoveryRoutes(webauthn, resolverDaSessao, options.agora));

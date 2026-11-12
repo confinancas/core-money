@@ -16,13 +16,15 @@ import {
   trocarChaves,
 } from "../../api/pluggy";
 import { IconeSeta } from "../../components/icons";
-import { ApiError, mensagemDoErro } from "../../lib/api";
+import { ApiError } from "../../lib/api";
 import { useSession } from "../../session/SessionProvider";
 import { type CartaoDeBanco, StepBancos } from "./conectar/StepBancos";
 import { type ChavesDaTela, StepChaves } from "./conectar/StepChaves";
 import { StepNome } from "./conectar/StepNome";
 import { StepPronto } from "./conectar/StepPronto";
 import {
+  aoEditarChave,
+  destinoDoErroDeConexao,
   erroDoRotulo,
   nomeSugerido,
   type Passo,
@@ -30,9 +32,10 @@ import {
   TITULOS_DOS_PASSOS,
   TOTAL_DE_PASSOS,
   textoDoBancoJaConectado,
+  textoDoErroDeConexao,
 } from "./conectar/view-model";
 
-type Resultado = { rotulo: string; quantidade: number };
+type Resultado = { rotulo: string; quantidade: number; bancoIds: string[] };
 
 const CHAVES_VAZIAS: ChavesDaTela = { clientId: "", clientSecret: "" };
 const AVISO_DAS_CHAVES_TROCADAS = "Chaves trocadas.";
@@ -111,8 +114,9 @@ export function ConectarPluggy() {
   }, [carregar]);
 
   function mudarChave(campo: keyof ChavesDaTela, valor: string) {
-    setChaves((atual) => ({ ...atual, [campo]: valor }));
-    setTestado(false);
+    const proximo = aoEditarChave(chaves, campo, valor);
+    setChaves(proximo.chaves);
+    setTestado(proximo.testado);
     setErroChaves(null);
   }
 
@@ -126,7 +130,7 @@ export function ConectarPluggy() {
       setTestado(true);
     } catch (falha) {
       setTestado(false);
-      setErroChaves(mensagemDoErro(falha));
+      setErroChaves(textoDoErroDeConexao(falha));
     } finally {
       travado.current = false;
       setTestando(false);
@@ -142,7 +146,7 @@ export function ConectarPluggy() {
       await trocarChaves(conexao.id, chavesLimpas);
       navegar("/configuracoes", { state: { aviso: AVISO_DAS_CHAVES_TROCADAS } });
     } catch (falha) {
-      setErroChaves(mensagemDoErro(falha));
+      setErroChaves(textoDoErroDeConexao(falha));
     } finally {
       travado.current = false;
       setSalvandoChaves(false);
@@ -187,7 +191,7 @@ export function ConectarPluggy() {
         },
       ]);
     } catch (falha) {
-      setErroDoId(mensagemDoErro(falha));
+      setErroDoId(textoDoErroDeConexao(falha));
       if (falha instanceof ApiError && falha.code === "chaves_invalidas") setTestado(false);
     } finally {
       travado.current = false;
@@ -224,27 +228,30 @@ export function ConectarPluggy() {
     try {
       if (conexao !== null) {
         await adicionarBancos(conexao.id, itens);
-        setResultado({ rotulo: conexao.label, quantidade: itens.length });
+        setResultado({
+          rotulo: conexao.label,
+          quantidade: itens.length,
+          bancoIds: itens.map((i) => i.itemId),
+        });
       } else {
         await criarConexao({ label: nome.trim(), chaves: chavesLimpas, items: itens });
-        setResultado({ rotulo: nome.trim(), quantidade: itens.length });
+        setResultado({ rotulo: nome.trim(), quantidade: itens.length, bancoIds: itens.map((i) => i.itemId) });
       }
       setPasso(4);
     } catch (falha) {
       const codigo = falha instanceof ApiError ? falha.code : "";
-      if (codigo === "rotulo_em_uso") {
-        setErroNome(mensagemDoErro(falha));
-        setPasso(1);
-      } else if (codigo === "chaves_invalidas" || codigo === "pluggy_indisponivel") {
-        setErroChaves(mensagemDoErro(falha));
+      const destino = destinoDoErroDeConexao({ codigo, temConexao: conexao !== null });
+      const texto = codigo === "banco_ja_conectado" ? textoDoBancoJaConectado() : textoDoErroDeConexao(falha);
+      if (destino.onde === "nome") {
+        setErroNome(texto);
+      } else if (destino.onde === "chaves") {
+        setErroChaves(texto);
         setTestado(false);
-        if (conexao !== null) setTrocando(true);
-        setPasso(2);
-      } else if (codigo === "banco_ja_conectado") {
-        setErroGeral(textoDoBancoJaConectado());
+        if (destino.trocar) setTrocando(true);
       } else {
-        setErroGeral(mensagemDoErro(falha));
+        setErroGeral(texto);
       }
+      setPasso(destino.passo);
     } finally {
       travado.current = false;
       setConectando(false);
@@ -364,6 +371,7 @@ export function ConectarPluggy() {
             <StepPronto
               rotulo={resultado.rotulo}
               quantidade={resultado.quantidade}
+              bancoIds={resultado.bancoIds}
               aoIrParaInicio={() => navegar("/inicio")}
               aoVerEmConfiguracoes={() => navegar("/configuracoes")}
             />

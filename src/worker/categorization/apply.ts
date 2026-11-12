@@ -5,6 +5,7 @@ import {
   SCOPE_MOVEMENTS,
 } from "../../shared/rule-match";
 import type { Db } from "../db/client";
+import { classeDeTipoPadrao } from "../spend-types/derive";
 import { movimentosComTipo, setDoTipoDaCategoria, tipoDaCategoriaSql } from "../spend-types/resolve";
 
 // Único arquivo que grava category_id (TASK-0302). Toda escrita de categoria, nome, tipo ou movimento por regra ou
@@ -111,6 +112,16 @@ function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null 
     sets.push("movement = ?");
     params.push(regra.setMovement);
     sets.push("movement_locked = 1");
+    // O tipo padrão que a gravação põe numa saída (TASK-0204, B1-1) sai quando o movimento novo não tem tipo, e
+    // quando a regra não grava tipo nem categoria (com categoria, a herança abaixo já regrava o tipo).
+    if (regra.setSpendType === null && regra.setCategoryId === null) {
+      const classe = classeDeTipoPadrao(regra.setMovement ?? "");
+      const semTipo = "spend_type_source = 'padrao' AND NOT ((amount_cents < 0 AND ?) OR ?)";
+      sets.push(`spend_type = CASE WHEN ${semTipo} THEN NULL ELSE spend_type END`);
+      params.push(classe.saida, classe.estorno);
+      sets.push(`spend_type_source = CASE WHEN ${semTipo} THEN NULL ELSE spend_type_source END`);
+      params.push(classe.saida, classe.estorno);
+    }
   }
   if (regra.setCategoryId !== null) {
     sets.push("category_id = ?");

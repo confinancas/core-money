@@ -79,20 +79,35 @@ async function todosOsAlvosTem44(page: Page): Promise<void> {
 
 // Só as linhas que este arquivo cria: a conexão [TEST] Conta A e os bancos dos ids de teste. As outras specs têm as
 // suas (com transações ligadas aos bancos), e um DELETE geral quebra a chave estrangeira delas.
+// A importação do histórico (TASK-0204) grava contas, cartões, faturas, movimentos e execuções nesses bancos: apagam-se
+// os filhos antes do banco, na ordem da chave estrangeira.
+const BANCOS_DO_PLUGGY = `(SELECT id FROM bank_items WHERE id IN ('${ITEM_ITAU}', '${ITEM_NUBANK}', '00000000-0000-4000-8000-0000000000e5', '00000000-0000-4000-8000-0000000000ff') OR connection_id IN (SELECT id FROM pluggy_connections WHERE label = '${ROTULO}'))`;
 const LIMPEZA_DO_PLUGGY = [
-  `DELETE FROM bank_items WHERE id IN ('${ITEM_ITAU}', '${ITEM_NUBANK}', '00000000-0000-4000-8000-0000000000e5', '00000000-0000-4000-8000-0000000000ff') OR connection_id IN (SELECT id FROM pluggy_connections WHERE label = '${ROTULO}')`,
+  `DELETE FROM transactions WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM bills WHERE card_id IN (SELECT id FROM cards WHERE bank_item_id IN ${BANCOS_DO_PLUGGY})`,
+  `DELETE FROM cards WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM accounts WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM sync_runs WHERE bank_item_id IN ${BANCOS_DO_PLUGGY}`,
+  `DELETE FROM bank_items WHERE id IN ${BANCOS_DO_PLUGGY}`,
   `DELETE FROM pluggy_connections WHERE label = '${ROTULO}'`,
 ].join("; ");
 
+// A importação do histórico (TASK-0204) roda em segundo plano nos bancos deste arquivo e pode escrever no D1 local enquanto a
+// limpeza roda (R12). A limpeza não espera a importação: uma fatia que encontra o D1 travado repete (com espera de 300 s),
+// e a execução fica aberta por mais tempo que o orçamento do teste. O helper do D1 repete o comando em SQLITE_BUSY.
+async function limpaOPluggy(): Promise<void> {
+  executaSql("pronta", LIMPEZA_DO_PLUGGY);
+}
+
 // Cada teste começa com a instalação pronta, a sessão semeada e nenhuma conexão deste arquivo; no fim, a mesma limpeza.
-test.beforeEach(() => {
+test.beforeEach(async () => {
   semearInstalacaoPronta();
   semeiaSessaoDaInstalacaoPronta();
-  executaSql("pronta", LIMPEZA_DO_PLUGGY);
+  await limpaOPluggy();
 });
 
-test.afterAll(() => {
-  executaSql("pronta", LIMPEZA_DO_PLUGGY);
+test.afterAll(async () => {
+  await limpaOPluggy();
 });
 
 // O id da conta [TEST] Conta A no banco de teste. O link de cada cartão da seção leva o id, e as outras contas do
