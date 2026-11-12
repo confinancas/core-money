@@ -104,6 +104,10 @@ function liberaFila(): void {
   );
 }
 
+test.beforeAll(() => {
+  semearInstalacaoPronta();
+});
+
 test.beforeEach(async ({ page }) => {
   semearInstalacaoPronta();
   ligaIADeTeste();

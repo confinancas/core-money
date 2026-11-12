@@ -68,3 +68,23 @@ export function mergeRuleSets(antiga: Partial<RuleSet> | null | undefined, nova:
   }
   return mesclada;
 }
+
+// Uma regra como a lista de Configurações › Regras a mostra (TASK-0305). matchLabel é o estabelecimento, ou a parte do
+// destinatário e do remetente antes do "|" (sem o documento mascarado).
+export type RegraDaLista = {
+  id: string;
+  scope: RuleScope;
+  matchLabel: string;
+  createdFrom: string;
+  createdAt: string;
+  createdByName: string | null;
+  set: {
+    categoryId: string | null;
+    categoryName: string | null;
+    categoryColor: string | null;
+    customName: string | null;
+    spendType: string | null;
+    incomeKind: string | null;
+    incomeSubtype: string | null;
+  };
+};

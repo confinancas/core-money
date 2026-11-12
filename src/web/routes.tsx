@@ -19,6 +19,9 @@ import { NovaCategoria } from "./screens/categorias/NovaCategoria";
 import { CasalEAparelhos } from "./screens/configuracoes/CasalEAparelhos";
 import { ChaveDoClaude } from "./screens/configuracoes/ChaveDoClaude";
 import { Configuracoes } from "./screens/configuracoes/Configuracoes";
+import { GerenciarCategorias } from "./screens/configuracoes/categorias/GerenciarCategorias";
+import { DocumentoIA } from "./screens/configuracoes/documento-ia/DocumentoIA";
+import { Regras } from "./screens/configuracoes/regras/Regras";
 import { TiposGasto } from "./screens/configuracoes/TiposGasto";
 import { Login } from "./screens/Login";
 import { NotificacoesPage } from "./screens/notificacoes/NotificacoesPage";
@@ -123,21 +126,28 @@ export const ROTAS: RotaDaTabela[] = [
     frame: "detail",
     tab: "configuracoes",
     title: "Categorias",
-    element: provisoria,
+    element: <GerenciarCategorias />,
+  },
+  {
+    path: "/configuracoes/categorias/:categoryId",
+    frame: "detail",
+    tab: "configuracoes",
+    title: "Editar categoria",
+    element: <GerenciarCategorias />,
   },
   {
     path: "/configuracoes/regras",
     frame: "detail",
     tab: "configuracoes",
     title: "Regras",
-    element: provisoria,
+    element: <Regras />,
   },
   {
     path: "/configuracoes/documento-ia",
     frame: "detail",
     tab: "configuracoes",
     title: "Documento de regras da IA",
-    element: provisoria,
+    element: <DocumentoIA />,
   },
   {
     path: "/configuracoes/dados",

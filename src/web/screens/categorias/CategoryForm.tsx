@@ -28,6 +28,10 @@ type Props = {
   // Erros que a API devolveu (422), mostrados junto dos campos.
   erroCampos?: CategoryFieldErrors;
   aoEnviar: (entrada: NovaCategoriaEntrada) => void;
+  // Edição (TASK-0305): a categoria que está sendo editada não conta como repetida nem aparece em "Dentro de".
+  idEmEdicao?: string;
+  // Dentro de uma coluna estreita (o editor ao lado da lista, no tablet): prévia e campos ficam em coluna.
+  empilhado?: boolean;
 };
 
 // Formulário de categoria (criar nesta task; a TASK-0305 reaproveita para editar). A validação é a mesma da API.
@@ -39,6 +43,8 @@ export function CategoryForm({
   erroGeral,
   erroCampos,
   aoEnviar,
+  idEmEdicao,
+  empilhado = false,
 }: Props) {
   const idPai = useId();
   const idDica = useId();
@@ -49,7 +55,13 @@ export function CategoryForm({
   const [errosLocais, setErrosLocais] = useState<CategoryFieldErrors>({});
 
   const erros: CategoryFieldErrors = { ...erroCampos, ...errosLocais };
-  const principais = categorias.filter((categoria) => categoria.parentId === null);
+  // Só as principais ativas, e a mãe atual mesmo arquivada (senão o campo perde o valor). A validação usa a lista toda.
+  const principais = categorias.filter(
+    (categoria) =>
+      categoria.parentId === null &&
+      categoria.id !== idEmEdicao &&
+      (!categoria.archived || categoria.id === inicial.parentId),
+  );
   const nomeVisivel = nome.trim() === "" ? "Nova categoria" : nome.trim();
 
   function enviar(evento: FormEvent<HTMLFormElement>) {
@@ -63,7 +75,7 @@ export function CategoryForm({
       defaultSpendType: null,
       archived: false,
     };
-    const validacao = validateCategoryInput(entrada, categorias);
+    const validacao = validateCategoryInput(entrada, categorias, idEmEdicao);
     if (!validacao.ok) {
       setErrosLocais(validacao.fields);
       return;
@@ -80,7 +92,12 @@ export function CategoryForm({
 
   return (
     <form onSubmit={enviar} className="flex flex-1 flex-col">
-      <div className="flex flex-col gap-3.5 px-4 pt-4 pb-6 tablet:flex-row tablet:items-start tablet:gap-[18px] tablet:px-6 tablet:pt-5">
+      <div
+        className={cn(
+          "flex flex-col gap-3.5 px-4 pt-4 pb-6 tablet:items-start tablet:gap-[18px] tablet:px-6 tablet:pt-5",
+          !empilhado && "tablet:flex-row",
+        )}
+      >
         <section className="flex flex-col items-center gap-3 rounded-card bg-card px-[22px] py-[26px] shadow-card tablet:flex-1">
           <span
             aria-hidden="true"
