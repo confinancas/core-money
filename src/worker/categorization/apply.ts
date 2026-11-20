@@ -1,3 +1,4 @@
+import { NEEDS_CATEGORY_SQL } from "../../shared/categorization";
 import {
   COUNTERPARTY_KEY_SQL,
   ESTABLISHMENT_KEY_SQL,
@@ -336,4 +337,240 @@ export function applyAiSuggestionStmt(
         AND EXISTS (SELECT 1 FROM categories AS c WHERE c.id = t.ai_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL)`,
     )
     .bind(entrada.now, entrada.transactionId, entrada.householdId);
+}
+
+// ── Fila Para categorizar (TASK-0304) ─────────────────────────────────────────────────────────────────────────────
+// Aceitar, desfazer e aprender com a confirmação. Tudo grava pelas instruções deste arquivo. A confirmação vira regra
+// de estabelecimento (compra, estorno, débito, boleto) ou de destinatário (Pix e TED enviados), sem movimento e sem
+// nome. Os iguais que esperavam recebem a categoria da regra no mesmo lote.
+
+// Movimentos da fila que têm regra (SCOPE_MOVEMENTS de estabelecimento e destinatário).
+const MOVIMENTOS_COM_REGRA = "('compra', 'estorno', 'debito', 'boleto', 'pix_enviado', 'ted_enviada')";
+const ESCOPO_DA_LINHA =
+  "(CASE WHEN t.movement IN ('pix_enviado', 'ted_enviada') THEN 'destinatario' ELSE 'estabelecimento' END)";
+const CHAVE_DA_LINHA = `(CASE WHEN t.movement IN ('pix_enviado', 'ted_enviada') THEN ${COUNTERPARTY_KEY_SQL} ELSE ${ESTABLISHMENT_KEY_SQL} END)`;
+
+// Aceitar: a sugestão da IA vira a categoria, com o tipo pela categoria (TASK-0802). Só se a linha ainda não tem
+// categoria, a sugestão ainda está ativa e a linha não foi removida. Quem não voltou no RETURNING vai para skipped.
+export function acceptSuggestionStmt(
+  db: Db,
+  entrada: { householdId: string; transactionId: string; memberId: string; now: string },
+): D1PreparedStatement {
+  const sets = [
+    "category_id = t.ai_category_id",
+    ...setDoTipoDaCategoria("t.ai_category_id", "t", true),
+    "categorized_at = ?",
+    "categorized_by = ?",
+    "rule_id = NULL",
+  ];
+  return db.$client
+    .prepare(
+      `UPDATE transactions AS t SET ${sets.join(", ")}
+        WHERE t.id = ? AND t.household_id = ? AND t.category_id IS NULL AND t.ai_category_id IS NOT NULL
+        AND t.removed_at IS NULL AND t.hidden = 0 AND t.is_backfill = 0 AND t.categorized_at IS NULL
+        AND ${NEEDS_CATEGORY_SQL}
+        AND EXISTS (SELECT 1 FROM categories AS c WHERE c.id = t.ai_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL)
+        RETURNING id, category_id`,
+    )
+    .bind(entrada.now, entrada.memberId, entrada.transactionId, entrada.householdId);
+}
+
+// Volta de uma categoria do casal. Histórico com categoria da IA ainda ativa volta à sugestão da IA (categorized_by =
+// 'ia'); o resto volta à fila. O tipo acompanha: o escolhido fica, o do histórico volta ao da categoria da IA, e o que
+// veio da categoria ou da regra volta ao padrão.
+const VOLTA_PARA_IA = `(t.is_backfill = 1 AND EXISTS (SELECT 1 FROM categories AS ca
+    WHERE ca.id = t.ai_category_id AND ca.household_id = t.household_id AND ca.archived_at IS NULL))`;
+const TIPO_DA_VOLTA = tipoDaCategoriaSql("t.ai_category_id", "t");
+const SET_DA_VOLTA = [
+  `category_id = CASE WHEN ${VOLTA_PARA_IA} THEN t.ai_category_id ELSE NULL END`,
+  `categorized_by = CASE WHEN ${VOLTA_PARA_IA} THEN 'ia' ELSE NULL END`,
+  `categorized_at = CASE WHEN ${VOLTA_PARA_IA} THEN t.categorized_at ELSE NULL END`,
+  "rule_id = NULL",
+  `spend_type = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type
+    WHEN ${VOLTA_PARA_IA} THEN ${TIPO_DA_VOLTA.tipo}
+    WHEN t.spend_type_source = 'categoria' THEN 'prazeres' ELSE t.spend_type END`,
+  `spend_type_source = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type_source
+    WHEN ${VOLTA_PARA_IA} THEN ${TIPO_DA_VOLTA.origem}
+    WHEN t.spend_type_source = 'categoria' THEN 'padrao' ELSE t.spend_type_source END`,
+].join(", ");
+
+// Desfazer uma linha: zera a categoria só se ninguém mexeu depois (a categoria ainda é a mesma e quem gravou foi esta
+// pessoa). A sugestão (ai_*) fica. Tem que rodar depois de undoLearnedRuleStmts, que lê o rule_id da linha.
+export function clearTransactionCategoryStmt(
+  db: Db,
+  entrada: { householdId: string; transactionId: string; categoryId: string; memberId: string },
+): D1PreparedStatement {
+  return db.$client
+    .prepare(
+      `UPDATE transactions AS t SET ${SET_DA_VOLTA}
+        WHERE t.id = ? AND t.household_id = ? AND t.category_id = ? AND t.categorized_by = ?
+        RETURNING id`,
+    )
+    .bind(entrada.transactionId, entrada.householdId, entrada.categoryId, entrada.memberId);
+}
+
+// CTE das linhas aceitas neste lote: as que a pessoa confirmou agora (categorized_by e categorized_at iguais aos do
+// aceite). Escopo e chave saem do movimento, no servidor. Os ids vêm num único parâmetro (json_each), como na fila.
+const cteAceitas = (): string => `aceitas AS (
+    SELECT t.id AS id, t.local_date AS local_date, t.category_id AS categoria, ${ESCOPO_DA_LINHA} AS escopo, ${CHAVE_DA_LINHA} AS chave
+    FROM json_each(?) AS j CROSS JOIN transactions AS t ON t.id = j.value
+    WHERE t.household_id = ? AND t.categorized_by = ? AND t.categorized_at = ? AND t.category_id IS NOT NULL
+      AND t.movement IN ${MOVIMENTOS_COM_REGRA} AND ${CHAVE_DA_LINHA} IS NOT NULL AND ${CHAVE_DA_LINHA} NOT IN ('', '|')
+  ), mais_recente AS (
+    SELECT escopo, chave, categoria, local_date AS data FROM (
+      SELECT escopo, chave, categoria, local_date,
+        ROW_NUMBER() OVER (PARTITION BY escopo, chave ORDER BY local_date DESC, id DESC) AS posicao
+      FROM aceitas
+    ) WHERE posicao = 1
+  )`;
+
+// A categoria e a regra de cada linha: a regra ativa da chave da linha (a subconsulta lê o escopo e a chave dela).
+const CATEGORIA_DA_REGRA_DA_LINHA = `(SELECT r.set_category_id FROM rules AS r WHERE r.household_id = t.household_id
+    AND r.disabled_at IS NULL AND r.scope = ${ESCOPO_DA_LINHA} AND r.match_value = ${CHAVE_DA_LINHA})`;
+const ID_DA_REGRA_DA_LINHA = `(SELECT r.id FROM rules AS r WHERE r.household_id = t.household_id
+    AND r.disabled_at IS NULL AND r.scope = ${ESCOPO_DA_LINHA} AND r.match_value = ${CHAVE_DA_LINHA})`;
+
+// Candidatas dos iguais: o estabelecimento lê o índice de (household_id, establishment_key); o destinatário (Pix e TED)
+// não tem índice, então só varre o lar quando há regra de destinatário no lote (o EXISTS é uncorrelated).
+const CANDIDATAS_DOS_IGUAIS = `SELECT x.id FROM transactions AS x INDEXED BY transactions_household_establishment_idx
+    WHERE x.household_id = ? AND x.establishment_key IN (SELECT chave FROM chaves WHERE escopo = 'estabelecimento')
+    UNION ALL
+    SELECT x.id FROM (SELECT 1 AS ok WHERE EXISTS (SELECT 1 FROM chaves WHERE escopo = 'destinatario')) AS gate
+      CROSS JOIN transactions AS x ON x.household_id = ? AND x.movement IN ('pix_enviado', 'ted_enviada')`;
+
+// Candidatas da volta: as chaves das regras de estabelecimento do alvo (índice) e, se houver regra de destinatário, as
+// transferências do lar.
+const CANDIDATAS_DA_VOLTA = `SELECT x.id FROM transactions AS x INDEXED BY transactions_household_establishment_idx
+    WHERE x.household_id = ? AND x.establishment_key IN (SELECT r.match_value FROM rules AS r
+      WHERE r.id IN (SELECT rule_id FROM regras_do_alvo) AND r.household_id = ? AND r.scope = 'estabelecimento')
+    UNION ALL
+    SELECT x.id FROM (SELECT 1 AS ok WHERE EXISTS (SELECT 1 FROM rules AS r WHERE r.id IN (SELECT rule_id FROM regras_do_alvo) AND r.scope = 'destinatario')) AS gate
+      CROSS JOIN transactions AS x ON x.household_id = ? AND x.movement IN ('pix_enviado', 'ted_enviada')`;
+
+// Campos da regra ativa da chave da linha (o nome e o tipo que a regra grava nos iguais).
+const regraDaLinha = (
+  coluna: string,
+): string => `(SELECT r.${coluna} FROM rules AS r WHERE r.household_id = t.household_id
+    AND r.disabled_at IS NULL AND r.scope = ${ESCOPO_DA_LINHA} AND r.match_value = ${CHAVE_DA_LINHA})`;
+const NOME_DA_REGRA_DA_LINHA = regraDaLinha("set_custom_name");
+const TIPO_DA_REGRA_DA_LINHA = regraDaLinha("set_spend_type");
+const TIPO_DOS_IGUAIS_VALE = `(${TIPO_DA_REGRA_DA_LINHA} IS NOT NULL
+    AND NOT (t.card_id IS NOT NULL AND ${TIPO_DA_REGRA_DA_LINHA} IN ('metas', 'investimentos')))`;
+const HERDADO_DA_LINHA = tipoDaCategoriaSql(CATEGORIA_DA_REGRA_DA_LINHA, "t");
+const TIPO_DOS_IGUAIS = `spend_type = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type
+      WHEN ${TIPO_DOS_IGUAIS_VALE} THEN ${TIPO_DA_REGRA_DA_LINHA} ELSE ${HERDADO_DA_LINHA.tipo} END,
+    spend_type_source = CASE WHEN t.spend_type_source IN ('escolhido', 'regra') THEN t.spend_type_source
+      WHEN ${TIPO_DOS_IGUAIS_VALE} THEN 'regra' ELSE ${HERDADO_DA_LINHA.origem} END`;
+
+// Aprender com a confirmação, no mesmo lote do aceite, depois das instruções de aceitar:
+// (1) a regra ativa da chave sem categoria válida (só de nome, ou com categoria arquivada) recebe a categoria da
+//     transação mais recente da chave; (2) uma regra por chave nova ("confirmacao", criada por esta pessoa), sem
+//     substituir a ativa que já existe; (3) o rule_id das aceitas (RETURNING: vínculos); (4) os iguais que esperavam
+//     (categoria nula ou da IA, mesma chave, não escolhidos por ninguém) recebem a regra (RETURNING: iguais).
+// Sem chave, ou com movimento fora de regra, nada é criado. A lista de ids vai num único parâmetro (sem grupos de 90).
+export function learnFromConfirmationStmts(
+  db: Db,
+  entrada: { householdId: string; transactionIds: readonly string[]; memberId: string; now: string },
+): { comandos: D1PreparedStatement[]; indiceDosVinculos: number; indiceDosIguais: number } {
+  const json = JSON.stringify(entrada.transactionIds);
+  const { householdId, memberId, now } = entrada;
+  const comandos: D1PreparedStatement[] = [
+    // (1) regra ativa sem categoria válida ganha a categoria da chave.
+    db.$client
+      .prepare(
+        `WITH ${cteAceitas()}
+        UPDATE rules SET set_category_id = (SELECT m.categoria FROM mais_recente AS m WHERE m.escopo = rules.scope AND m.chave = rules.match_value),
+          created_from = 'confirmacao', created_by = ?
+        WHERE household_id = ? AND disabled_at IS NULL
+          AND (set_category_id IS NULL OR NOT EXISTS (SELECT 1 FROM categories AS c WHERE c.id = rules.set_category_id
+            AND c.household_id = rules.household_id AND c.archived_at IS NULL))
+          AND EXISTS (SELECT 1 FROM mais_recente AS m WHERE m.escopo = rules.scope AND m.chave = rules.match_value)`,
+      )
+      .bind(json, householdId, memberId, now, memberId, householdId),
+    // (2) uma regra por chave das aceitas; a ativa que já existe fica (índice único parcial).
+    db.$client
+      .prepare(
+        `WITH ${cteAceitas()}
+        INSERT OR IGNORE INTO rules (id, household_id, scope, match_value, set_category_id, created_from, created_by, created_at, disabled_at)
+        SELECT lower(hex(randomblob(16))), ?, m.escopo, m.chave, m.categoria, 'confirmacao', ?, ?, NULL FROM mais_recente AS m`,
+      )
+      .bind(json, householdId, memberId, now, householdId, memberId, now),
+  ];
+  // (3) rule_id das aceitas (a regra ativa da chave, se houver).
+  const indiceDosVinculos = comandos.length;
+  comandos.push(
+    db.$client
+      .prepare(
+        `WITH ${cteAceitas()}
+        UPDATE transactions AS t SET rule_id = ${ID_DA_REGRA_DA_LINHA}
+        WHERE t.id IN (SELECT id FROM aceitas)
+        RETURNING id, rule_id`,
+      )
+      .bind(json, householdId, memberId, now),
+  );
+  // (4) os iguais que esperavam.
+  const indiceDosIguais = comandos.length;
+  comandos.push(
+    db.$client
+      .prepare(
+        `WITH ${cteAceitas()}, chaves AS (SELECT DISTINCT escopo, chave FROM aceitas)
+        UPDATE transactions AS t SET category_id = ${CATEGORIA_DA_REGRA_DA_LINHA},
+          categorized_at = ?, categorized_by = 'regra', rule_id = ${ID_DA_REGRA_DA_LINHA},
+          custom_name = CASE WHEN t.custom_name IS NULL AND ${NOME_DA_REGRA_DA_LINHA} IS NOT NULL
+            THEN ${NOME_DA_REGRA_DA_LINHA} ELSE t.custom_name END,
+          ${TIPO_DOS_IGUAIS}
+        WHERE t.id IN (${CANDIDATAS_DOS_IGUAIS}) AND t.removed_at IS NULL
+          AND t.movement IN ${MOVIMENTOS_COM_REGRA}
+          AND (t.category_id IS NULL OR t.categorized_by = 'ia')
+          AND (${ESCOPO_DA_LINHA}, ${CHAVE_DA_LINHA}) IN (SELECT escopo, chave FROM chaves)
+          AND ${CATEGORIA_DA_REGRA_DA_LINHA} IS NOT NULL
+        RETURNING id, category_id, rule_id, is_backfill`,
+      )
+      .bind(json, householdId, memberId, now, now, householdId, householdId),
+  );
+  return { comandos, indiceDosVinculos, indiceDosIguais };
+}
+
+// Desfazer o que a confirmação aprendeu, quando a linha desfeita tem regra "confirmacao" criada por esta pessoa: a
+// regra sem nome é desativada (com nome, só perde a categoria), e as linhas que vieram dela voltam (SET_DA_VOLTA).
+// Vem antes de clearTransactionCategoryStmt: lê o rule_id da linha desfeita.
+export function undoLearnedRuleStmts(
+  db: Db,
+  entrada: {
+    householdId: string;
+    items: readonly { transactionId: string; categoryId: string }[];
+    memberId: string;
+    now: string;
+  },
+): { comandos: D1PreparedStatement[]; indiceDasVoltas: number } {
+  const json = JSON.stringify(
+    entrada.items.map((item) => ({ transactionId: item.transactionId, categoryId: item.categoryId })),
+  );
+  const { householdId, memberId, now } = entrada;
+  const cteRegras = `WITH alvo AS (
+      SELECT json_extract(j.value, '$.transactionId') AS id, json_extract(j.value, '$.categoryId') AS categoria
+      FROM json_each(?) AS j
+    ), regras_do_alvo AS (
+      SELECT DISTINCT t.rule_id AS rule_id FROM alvo AS a CROSS JOIN transactions AS t ON t.id = a.id
+      WHERE t.household_id = ? AND t.category_id = a.categoria AND t.categorized_by = ? AND t.rule_id IS NOT NULL
+    )`;
+  const desativa = db.$client
+    .prepare(
+      `${cteRegras}
+      UPDATE rules SET disabled_at = CASE WHEN set_custom_name IS NULL THEN ? ELSE disabled_at END, set_category_id = NULL
+      WHERE id IN (SELECT rule_id FROM regras_do_alvo) AND household_id = ? AND created_from = 'confirmacao'
+        AND created_by = ? AND disabled_at IS NULL`,
+    )
+    .bind(json, householdId, memberId, now, householdId, memberId);
+  const volta = db.$client
+    .prepare(
+      `${cteRegras}
+      UPDATE transactions AS t SET ${SET_DA_VOLTA}
+      WHERE t.id IN (${CANDIDATAS_DA_VOLTA}) AND t.categorized_by = 'regra' AND t.rule_id IN (
+        SELECT r.id FROM rules AS r WHERE r.id IN (SELECT rule_id FROM regras_do_alvo) AND r.household_id = ?
+          AND r.created_from = 'confirmacao' AND r.created_by = ?)
+      RETURNING id, category_id`,
+    )
+    .bind(json, householdId, memberId, householdId, householdId, householdId, householdId, memberId);
+  return { comandos: [desativa, volta], indiceDasVoltas: 1 };
 }

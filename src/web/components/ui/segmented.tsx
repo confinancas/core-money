@@ -10,10 +10,12 @@ type Props = {
   onChange: (value: string) => void;
   label: string;
   className?: string;
+  // Largura pelo conteúdo (flex-auto) em vez de partes iguais: cabe rótulo com contagem de três algarismos.
+  fluido?: boolean;
 };
 
 // Seletor de uma opção entre poucas. Setas ← e → trocam a opção (e o foco), com volta no fim.
-export function Segmented({ options, value, onChange, label, className }: Props) {
+export function Segmented({ options, value, onChange, label, className, fluido = false }: Props) {
   const botoes = useRef<(HTMLButtonElement | null)[]>([]);
   const indiceAtual = Math.max(
     0,
@@ -50,7 +52,8 @@ export function Segmented({ options, value, onChange, label, className }: Props)
             tabIndex={ativo ? 0 : -1}
             onClick={() => onChange(opcao.value)}
             className={cn(
-              "h-11 flex-1 rounded-full px-3 text-[14px] font-extrabold transition-colors",
+              "h-11 whitespace-nowrap rounded-full font-extrabold transition-colors",
+              fluido ? "flex-auto px-2 text-[13px]" : "flex-1 px-3 text-[14px]",
               ativo ? "bg-card text-primary shadow-segment" : "text-ink-2",
             )}
           >
