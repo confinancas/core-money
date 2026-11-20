@@ -32,6 +32,11 @@ const DETALHE = {
   account: null,
   bill: null,
   cycle: null,
+  counterparty: null,
+  origin: null,
+  cardWouldAccept: false,
+  isCardPayment: false,
+  canMarkCardPayment: false,
 };
 
 function montar(entradas: InitialEntry[], indice: number) {

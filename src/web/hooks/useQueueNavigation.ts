@@ -15,7 +15,8 @@ export function nextInQueue(
   const depois = items.find(
     (item) =>
       item.transactionId !== atual.id &&
-      (item.localDate < atual.localDate || (item.localDate === atual.localDate && item.transactionId < atual.id)),
+      (item.localDate < atual.localDate ||
+        (item.localDate === atual.localDate && item.transactionId < atual.id)),
   );
   if (depois) return depois;
   return items.find((item) => item.transactionId !== atual.id) ?? null;
@@ -24,7 +25,9 @@ export function nextInQueue(
 // Acrescenta ?fila=1 aos caminhos de detalhe que entram no modo fila (Pix, compra e Pix recebido). Outros ficam como estão.
 export function withQueueParam(detailPath: string): string {
   const ehDetalhe =
-    detailPath.startsWith("/pix/") || detailPath.startsWith("/compras/") || detailPath.startsWith("/pix-recebido/");
+    detailPath.startsWith("/pix/") ||
+    detailPath.startsWith("/compras/") ||
+    detailPath.startsWith("/pix-recebido/");
   if (!ehDetalhe) return detailPath;
   return detailPath.includes("?") ? `${detailPath}&fila=1` : `${detailPath}?fila=1`;
 }
@@ -48,7 +51,11 @@ export async function lerFila(transactionId: string): Promise<EstadoDaFila> {
     const resposta = await fetchQueue("todos", cursor);
     total = resposta.counts.todos;
     for (const linha of resposta.items as LinhaDaFila[]) {
-      todos.push({ transactionId: linha.transactionId, localDate: linha.localDate, detailPath: linha.detailPath });
+      todos.push({
+        transactionId: linha.transactionId,
+        localDate: linha.localDate,
+        detailPath: linha.detailPath,
+      });
     }
     const achado = todos.findIndex((item) => item.transactionId === transactionId);
     if (achado !== -1) {
@@ -81,7 +88,10 @@ export function useQueueNavigation(transactionId: string, ativo: boolean) {
   const proximoCaminho = useCallback(async (): Promise<string> => {
     const lido = await lerFila(transactionId);
     setEstado(lido);
-    const proximo = nextInQueue(lido.itens, { id: transactionId, localDate: lido.itens.find((i) => i.transactionId === transactionId)?.localDate ?? "" });
+    const proximo = nextInQueue(lido.itens, {
+      id: transactionId,
+      localDate: lido.itens.find((i) => i.transactionId === transactionId)?.localDate ?? "",
+    });
     return proximo ? withQueueParam(proximo.detailPath) : "/para-categorizar";
   }, [transactionId]);
 

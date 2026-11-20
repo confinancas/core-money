@@ -30,3 +30,10 @@ export function criarRegraDoNome(transacaoId: string, nome: string): Promise<unk
     createdFrom: "lembrar",
   });
 }
+
+// "É pagamento de cartão" (TASK-0404): liga ou desliga; a resposta traz quantos iguais entraram junto (alsoMarked).
+export function marcarPagamentoDeCartao(transacaoId: string, isCardPayment: boolean): Promise<unknown> {
+  return apiEnviar<unknown>(`/api/transactions/${encodeURIComponent(transacaoId)}/card-payment`, "PUT", {
+    isCardPayment,
+  });
+}
