@@ -670,7 +670,7 @@ describe("segurança do aceite", () => {
     await convidaEAceita(app, lar, "cred-TEST-0105-dois-22");
     // O lar já tem cônjuge; um convite aguardando que sobrou (o banco é a fonte) não pode ser aceito.
     await env.DB.prepare(
-      "INSERT INTO invites (id, household_id, kind, token_hash, invitee_name, invitee_email, created_by, created_at, expires_at) VALUES ('convite-sobra-22', ?, 'conjuge', ?, '[TEST] Pessoa D', NULL, ?, '2026-11-08T00:00:00.000Z', '2026-11-20T00:00:00.000Z')",
+      "INSERT INTO invites (id, household_id, kind, token_hash, invitee_name, invitee_email, created_by, created_at, expires_at) VALUES ('convite-sobra-22', ?, 'conjuge', ?, '[TEST] Pessoa D', NULL, ?, '2026-11-08T00:00:00.000Z', '2026-12-31T00:00:00.000Z')",
     )
       .bind(lar.householdId, await sha256Hex("TOKEN-SOBRA-TEST-22"), lar.memberId)
       .run();
