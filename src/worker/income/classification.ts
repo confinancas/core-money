@@ -35,6 +35,7 @@ export type LinhaDaEntrada = {
   hidden_reason: string | null;
   categorized_by: string | null;
   is_backfill: number;
+  categorized_at: string | null;
   original_description: string;
   counterparty_name: string | null;
   counterparty_doc_masked: string | null;
