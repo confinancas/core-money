@@ -134,24 +134,20 @@ export function BancoDetalhe() {
         back={{ to: "/configuracoes", label: "Voltar para Configurações" }}
       >
         <div className="mt-2 flex flex-wrap items-center gap-2 text-white">
-          <span
-            className={
-              pilula.tom === "aviso"
-                ? "inline-flex items-center rounded-full bg-warn-bg px-2.5 py-[3px] text-[12px] font-extrabold text-warn"
-                : pilula.tom === "neutro"
-                  ? "inline-flex items-center rounded-full bg-white/22 px-2.5 py-[3px] text-[12px] font-extrabold text-white"
-                  : "inline-flex items-center rounded-full bg-success-bg px-2.5 py-[3px] text-[12px] font-extrabold text-success-ink"
-            }
-          >
+          {/* Os dois balões do topo são translúcidos, como no protótipo (N1, rodada 1 da Fable). */}
+          <span className="inline-flex items-center rounded-full bg-white/22 px-2.5 py-[3px] text-[12px] font-extrabold text-white">
             {pilula.texto}
           </span>
-          <span className="text-[13px] font-semibold text-white/90">{contas} contas e cartões</span>
+          <span className="inline-flex items-center rounded-full bg-white/22 px-2.5 py-[3px] text-[12px] font-extrabold text-white">
+            {contas} contas e cartões
+          </span>
         </div>
       </GreenTop>
 
-      <div className="mx-auto grid w-full max-w-[1120px] gap-4 px-4 pt-6 tablet:grid-cols-2 tablet:px-6">
-        <div className="flex min-w-0 flex-col gap-4">
-          {desconectado ? (
+      {/* Ordem do DOM = ordem do celular (como o protótipo). Tablet: duas colunas; desktop: três colunas (protótipo). */}
+      <div className="mx-auto grid w-full max-w-[1120px] grid-cols-1 gap-4 px-4 pt-6 tablet:grid-cols-2 tablet:px-6 desktop:grid-cols-3">
+        {desconectado ? (
+          <div className="min-w-0 tablet:col-start-1 tablet:row-start-1 desktop:col-start-1 desktop:row-start-1">
             <Card className="flex flex-col gap-3">
               <h2 className="text-[17px] font-extrabold text-ink">
                 Desconectado em {diaEMes(diaDaDesconexao)} · histórico mantido
@@ -160,20 +156,30 @@ export function BancoDetalhe() {
                 Conectar de novo
               </Button>
             </Card>
-          ) : (
-            <>
+          </div>
+        ) : (
+          <>
+            <div className="min-w-0 tablet:col-start-1 tablet:row-start-1 desktop:col-start-1 desktop:row-start-1">
               <ConsentCard banco={banco} hoje={hoje} aoMudar={() => void carregar()} />
+            </div>
+            <div className="min-w-0 tablet:col-start-1 tablet:row-start-2 desktop:col-start-1 desktop:row-start-2">
               <SyncCard banco={banco} hoje={hoje} aoMudar={() => void carregar()} />
-            </>
-          )}
+            </div>
+          </>
+        )}
+
+        <div className="min-w-0 tablet:col-start-1 tablet:row-start-3 desktop:col-start-2 desktop:row-start-1">
+          <ItemsList contas={banco.accounts} cartoes={banco.cards} />
+        </div>
+        <div className="min-w-0 tablet:col-start-2 tablet:row-start-1 desktop:col-start-2 desktop:row-start-2">
           <PermissionsCard />
         </div>
-
-        <div className="flex min-w-0 flex-col gap-4">
-          <ItemsList contas={banco.accounts} cartoes={banco.cards} />
+        <div className="min-w-0 tablet:col-start-2 tablet:row-start-2 desktop:col-start-3 desktop:row-start-1">
           <RunsList execucoes={banco.runs} agora={new Date()} />
+        </div>
 
-          {!desconectado && (
+        {!desconectado && (
+          <div className="min-w-0 tablet:col-start-2 tablet:row-start-3 desktop:col-start-3 desktop:row-start-2">
             <Card className="flex flex-col gap-3">
               <button
                 type="button"
@@ -187,13 +193,16 @@ export function BancoDetalhe() {
                 O histórico que já está no app continua. Só para de chegar coisa nova deste banco.
               </p>
             </Card>
-          )}
-          {aviso !== null && (
-            <p role="status" className="text-[13px] font-semibold text-danger">
-              {aviso}
-            </p>
-          )}
-        </div>
+          </div>
+        )}
+        {aviso !== null && (
+          <p
+            role="status"
+            className="text-[13px] font-semibold text-danger tablet:col-span-2 desktop:col-span-3"
+          >
+            {aviso}
+          </p>
+        )}
       </div>
     </section>
   );

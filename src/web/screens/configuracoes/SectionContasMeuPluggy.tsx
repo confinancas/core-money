@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { IconePessoas } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -76,7 +75,7 @@ export function SectionContasMeuPluggy() {
 
       {conexoes.length > 0 && (
         <Button variant="secondary" full onClick={() => navegar(CAMINHO_DO_CONECTAR)}>
-          Conectar outra conta Meu Pluggy
+          + Conectar outra conta Meu Pluggy
         </Button>
       )}
     </div>
@@ -93,7 +92,21 @@ function CartaoDaConexao({ conexao, agora }: { conexao: ConnectionDto; agora: Da
     <Card className="flex flex-col overflow-hidden p-0 [&>*+*]:border-t [&>*+*]:border-field-border">
       <div className="flex flex-col gap-2 px-4 py-3.5">
         <div className="flex flex-wrap items-center gap-2">
-          <IconePessoas size={18} className="shrink-0 text-ink-2" aria-hidden="true" />
+          <svg
+            width={18}
+            height={18}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            aria-hidden="true"
+            focusable="false"
+            className="shrink-0 text-primary"
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21a8 8 0 0 1 16 0" />
+          </svg>
           <span className="text-[16px] font-extrabold text-ink">{conexao.label}</span>
           <StatusPill tone={estado.tom}>{estado.texto}</StatusPill>
         </div>
@@ -133,13 +146,8 @@ function CartaoDaConexao({ conexao, agora }: { conexao: ConnectionDto; agora: Da
 function destaqueDoSubtitulo(texto: string) {
   if (texto === "Consentimento vencido") return <span className="font-bold text-warn">{texto}</span>;
   const sufixo = " · renovar";
-  if (texto.endsWith(sufixo)) {
-    return (
-      <>
-        {texto.slice(0, -sufixo.length)} · <span className="font-bold text-warn">renovar</span>
-      </>
-    );
-  }
+  // O aviso de renovar sai inteiro em laranja, como no protótipo (rodada 1 da Fable, N1).
+  if (texto.endsWith(sufixo)) return <span className="font-bold text-warn">{texto}</span>;
   return texto;
 }
 
