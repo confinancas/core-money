@@ -363,7 +363,7 @@ export function PixRecebido() {
 
       {erroAoSalvar && <p className="text-[13px] text-red-600">{erroAoSalvar}</p>}
 
-      <div className="fixed inset-x-0 bottom-0 bg-card p-4 shadow-md md:static md:bg-transparent md:p-0 md:shadow-none">
+      <div className="fixed inset-x-0 bottom-20 z-30 bg-card p-4 shadow-md md:static md:bg-transparent md:p-0 md:shadow-none">
         <button
           type="button"
           disabled={!podeSalvar}

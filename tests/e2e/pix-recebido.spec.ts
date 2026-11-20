@@ -18,6 +18,8 @@ function semeiaPix(id: string, valor: number, contraparte: string): void {
     "pronta",
     [
       `DELETE FROM transactions WHERE id = ${q(id)}`,
+      // O ciclo 2026-10 precisa existir: sem ele a renda do ciclo é nula, a prévia sai zerada e o impacto não aparece.
+      `INSERT OR IGNORE INTO cycles (household_id, key, starts_on, ends_on) VALUES (${q(LAR)}, '2026-10', '2026-10-11', '2026-11-10')`,
       `INSERT OR IGNORE INTO pluggy_connections (id, household_id, label, created_at) VALUES ('e2e-pix-conexao', ${q(LAR)}, '[TEST] Conexão Pix', ${q(agora)})`,
       `INSERT OR IGNORE INTO bank_items (id, connection_id, institution_name, created_at) VALUES ('e2e-pix-banco', 'e2e-pix-conexao', '[TEST] Banco Pix', ${q(agora)})`,
       `INSERT OR IGNORE INTO accounts (id, bank_item_id, kind, name, balance_cents, overdraft_used_cents, balance_at) VALUES ('e2e-pix-conta', 'e2e-pix-banco', 'corrente', '[TEST] Conta Pix', 0, 0, ${q(agora)})`,
@@ -110,8 +112,10 @@ test.describe("Pix recebido", () => {
         name: /Lembrar para os próximos Pix de \[TEST\] Ciclana Pix/,
       });
       await expect(switchLembrar).toBeVisible();
-      await switchLembrar.click();
+      // Pix ainda não classificado: o lembrar começa ligado (a spec da tela).
       await expect(switchLembrar).toHaveAttribute("aria-checked", "true");
+      await switchLembrar.click();
+      await expect(switchLembrar).toHaveAttribute("aria-checked", "false");
 
       await abreA(page, "/pix-recebido/e2e-pix-inexistente");
       await expect(page.getByText("Este Pix não foi encontrado.")).toBeVisible();
