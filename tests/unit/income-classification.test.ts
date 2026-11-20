@@ -20,7 +20,11 @@ const variavel = (incomeSubtype: string): ClassificacaoDeEntrada => ({
   incomeSubtype,
 });
 const reembolso: ClassificacaoDeEntrada = { option: "reembolso", fixedIncomeId: null, incomeSubtype: null };
-const transferencia: ClassificacaoDeEntrada = { option: "transferencia", fixedIncomeId: null, incomeSubtype: null };
+const transferencia: ClassificacaoDeEntrada = {
+  option: "transferencia",
+  fixedIncomeId: null,
+  incomeSubtype: null,
+};
 
 const renda = (overrides: Partial<RendaNoCiclo> = {}): RendaNoCiclo => ({
   id: "renda-brl",
@@ -100,7 +104,9 @@ describe("applyClassificationDelta", () => {
 
   it("variável -> nada tira da variável", () => {
     const comVariavel = applyClassificationDelta(ciclo, null, variavel("venda"), 150_000);
-    expect(applyClassificationDelta(comVariavel, variavel("venda"), null, 150_000).variavelCents).toBe(1_656_870);
+    expect(applyClassificationDelta(comVariavel, variavel("venda"), null, 150_000).variavelCents).toBe(
+      1_656_870,
+    );
   });
 
   it("renda em dólar sem cotação: a parte do salário conta o trazido, sem previsto", () => {
