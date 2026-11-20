@@ -145,3 +145,62 @@ export function usdInBrlCents(
   }
   return temDolar ? total : null;
 }
+
+// Pix recebido (TASK-0903): as quatro opções da tela e o tipo que cada uma grava em income_kind.
+export const INCOME_OPTIONS = {
+  salario: { incomeKind: "parte_salario", exigeRenda: true, exigeSubtipo: false },
+  variavel: { incomeKind: "variavel", exigeRenda: false, exigeSubtipo: true },
+  reembolso: { incomeKind: "reembolso", exigeRenda: false, exigeSubtipo: false },
+  transferencia: { incomeKind: "transferencia", exigeRenda: false, exigeSubtipo: false },
+} as const;
+export type IncomeOption = keyof typeof INCOME_OPTIONS;
+
+export const INCOME_SUBTYPES = ["venda", "rendimento", "cashback", "outro"] as const;
+
+// Classificação de uma entrada, como a tela a mostra. fixedIncomeId só em salario; incomeSubtype só em variavel.
+export type ClassificacaoDeEntrada = {
+  option: IncomeOption;
+  fixedIncomeId: string | null;
+  incomeSubtype: string | null;
+};
+
+// Entrada da renda do ciclo, já somada no SQL: as rendas (com o recebido) e a variável do ciclo.
+export type EntradaDoCiclo = {
+  rendas: RendaNoCiclo[];
+  variavelCents: number;
+};
+
+// Prévia de uma troca de classificação (TASK-0903): tira a contribuição atual da entrada e põe a nova. Pura: quem chama
+// soma o resultado com summarizeCycleIncome, a mesma função da renda do ciclo. Parte do salário soma no recebido da
+// renda (e conta um recebimento); variável soma na variável; reembolso e transferência não contam.
+export function applyClassificationDelta(
+  entrada: EntradaDoCiclo,
+  atual: ClassificacaoDeEntrada | null,
+  nova: ClassificacaoDeEntrada | null,
+  amountCents: number,
+): EntradaDoCiclo {
+  let rendas = entrada.rendas.map((renda) => ({ ...renda }));
+  let variavelCents = entrada.variavelCents;
+
+  const ajusta = (classificacao: ClassificacaoDeEntrada | null, sinal: 1 | -1): void => {
+    if (classificacao === null) return;
+    if (classificacao.option === "salario" && classificacao.fixedIncomeId !== null) {
+      const alvo = classificacao.fixedIncomeId;
+      rendas = rendas.map((renda) =>
+        renda.id === alvo
+          ? {
+              ...renda,
+              recebidoCents: renda.recebidoCents + sinal * amountCents,
+              recebimentos: renda.recebimentos + sinal,
+            }
+          : renda,
+      );
+    } else if (classificacao.option === "variavel") {
+      variavelCents += sinal * amountCents;
+    }
+  };
+
+  ajusta(atual, -1);
+  ajusta(nova, 1);
+  return { rendas, variavelCents };
+}
