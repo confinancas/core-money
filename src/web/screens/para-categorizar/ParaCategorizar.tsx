@@ -45,6 +45,32 @@ type Confirmada = {
   iguais: number;
 };
 
+const CHAVE_DA_VISITA = "mm.para-categorizar.visita";
+
+type VisitaGuardada = { confirmadas: Confirmada[]; total: number | null };
+
+function lerVisita(): VisitaGuardada {
+  try {
+    const bruto = sessionStorage.getItem(CHAVE_DA_VISITA);
+    if (!bruto) return { confirmadas: [], total: null };
+    const v = JSON.parse(bruto) as Partial<VisitaGuardada>;
+    return {
+      confirmadas: Array.isArray(v.confirmadas) ? v.confirmadas : [],
+      total: typeof v.total === "number" ? v.total : null,
+    };
+  } catch {
+    return { confirmadas: [], total: null };
+  }
+}
+
+function gravarVisita(visita: VisitaGuardada): void {
+  try {
+    sessionStorage.setItem(CHAVE_DA_VISITA, JSON.stringify(visita));
+  } catch {
+    // Sem armazenamento: a visita vale só nesta montagem.
+  }
+}
+
 export function ParaCategorizar() {
   const features = useFeatures();
   const [filtro, setFiltro] = useState<FiltroDaFila>("todos");
@@ -55,8 +81,11 @@ export function ParaCategorizar() {
   const [falhouAcao, setFalhouAcao] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [carregandoMais, setCarregandoMais] = useState(false);
-  const [total, setTotal] = useState<number | null>(null);
-  const [confirmadas, setConfirmadas] = useState<Confirmada[]>([]);
+  const [total, setTotal] = useState<number | null>(() => lerVisita().total);
+  const [confirmadas, setConfirmadas] = useState<Confirmada[]>(() => lerVisita().confirmadas);
+  useEffect(() => {
+    gravarVisita({ confirmadas, total });
+  }, [confirmadas, total]);
   const emCurso = useRef(false);
   const maisEmCurso = useRef(false);
 
