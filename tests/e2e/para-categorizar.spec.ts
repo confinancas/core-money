@@ -440,6 +440,9 @@ test("visita: sair para o Início e voltar começa uma visita nova", async ({ pa
   await expect(page.getByRole("heading", { name: "Para categorizar" })).toBeVisible();
   // A fila carregou quando o filtro mostra a contagem atual (uma linha): só então a visita é conferida.
   await expect(page.getByRole("radio", { name: /^Todos 1$/ })).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText("0 de 1 categorizados")).toBeVisible();
+  // expect.poll mostra o texto real do progresso se a visita não zerou (diagnóstico do CI).
+  await expect
+    .poll(async () => (await page.getByTestId("progresso").textContent()) ?? "", { timeout: 15000 })
+    .toContain("0 de 1 categorizados");
   await expect(page.getByText(/Categorizados agora/)).toHaveCount(0);
 });
