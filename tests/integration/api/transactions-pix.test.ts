@@ -157,6 +157,26 @@ describe("PUT /api/transactions/:id/card-payment (TASK-0404)", () => {
     expect(linhaIgual.category_id).toBeNull();
   });
 
+  it("passo 4 no desligar: a saída que volta recebe o tipo padrão e a origem 'padrao'", async () => {
+    const lar = await criarLar();
+    const pix = await pixEnviado(lar, "[TEST] NU PAGAMENTOS");
+    await callApi(appDoLar(lar), "PUT", `/api/transactions/${pix}/card-payment`, { isCardPayment: true });
+    const linhaLigada = await env.DB.prepare("SELECT spend_type, spend_type_source FROM transactions WHERE id = ?")
+      .bind(pix)
+      .first<{ spend_type: string | null; spend_type_source: string | null }>();
+    expect(linhaLigada?.spend_type_source).toBeNull();
+
+    const desligar = await callApi(appDoLar(lar), "PUT", `/api/transactions/${pix}/card-payment`, {
+      isCardPayment: false,
+    });
+    expect(desligar.status).toBe(200);
+    const linha = await env.DB.prepare("SELECT spend_type, spend_type_source FROM transactions WHERE id = ?")
+      .bind(pix)
+      .first<{ spend_type: string | null; spend_type_source: string | null }>();
+    expect(linha?.spend_type).toBe("prazeres");
+    expect(linha?.spend_type_source).toBe("padrao");
+  });
+
   it("decisão 2b: desligar devolve o pix à base e a regra fica ativa com a categoria de antes", async () => {
     const lar = await criarLar();
     const servicos = categoriaDoLar(lar, "servicos");
