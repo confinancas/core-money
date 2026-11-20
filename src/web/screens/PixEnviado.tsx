@@ -218,13 +218,8 @@ export function PixEnviado() {
       {estado === "pronta" && dados !== null && (
         <div className="mx-auto -mt-11 grid w-full max-w-[1120px] items-start gap-5 px-4 pb-8 tablet:grid-cols-2 tablet:px-6 desktop:grid-cols-3">
           <div className="flex min-w-0 flex-col gap-5">
-            {avatar !== null && (
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-[13px] font-extrabold text-ink">
-                {avatar}
-              </span>
-            )}
             <TitleCard detalhe={dados} hoje={hoje} aoSalvarNome={salvarNome} />
-            <CounterpartyRows detalhe={dados} />
+            {!ehPagamento && <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />}
           </div>
 
           <div className="flex min-w-0 flex-col gap-5">
@@ -233,21 +228,32 @@ export function PixEnviado() {
                 Pagamento de cartão · não conta como gasto
               </p>
             ) : (
+              temTipoDeGasto(dados) && (
+                <SpendTypePicker
+                  detalhe={dados}
+                  erro={erroDe.tipo ?? null}
+                  aoEscolher={(tipo: SpendType) =>
+                    void gravar(
+                      "tipo",
+                      { spendType: tipo },
+                      { spendType: tipo, spendTypeSource: "escolhido" },
+                    )
+                  }
+                />
+              )
+            )}
+            <CounterpartyRows detalhe={dados} />
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-5">
+            <CardPaymentToggle
+              ligada={ehPagamento}
+              matchLabel={previa?.matchLabel ?? "este destinatário"}
+              erro={erroDe.cartao ?? null}
+              aoMudar={(ligada) => void alternarPagamento(ligada)}
+            />
+            {!ehPagamento && (
               <>
-                <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />
-                {categoriaHabilitada && temTipoDeGasto(dados) && (
-                  <SpendTypePicker
-                    detalhe={dados}
-                    erro={erroDe.tipo ?? null}
-                    aoEscolher={(tipo: SpendType) =>
-                      void gravar(
-                        "tipo",
-                        { spendType: tipo },
-                        { spendType: tipo, spendTypeSource: "escolhido" },
-                      )
-                    }
-                  />
-                )}
                 <RememberToggle
                   ligada={lembrar && dados.category !== null}
                   desabilitada={dados.category === null}
@@ -261,19 +267,6 @@ export function PixEnviado() {
                   }
                   aoMudar={setLembrar}
                 />
-              </>
-            )}
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-5">
-            <CardPaymentToggle
-              ligada={ehPagamento}
-              matchLabel={previa?.matchLabel ?? "este destinatário"}
-              erro={erroDe.cartao ?? null}
-              aoMudar={(ligada) => void alternarPagamento(ligada)}
-            />
-            {!ehPagamento && (
-              <>
                 <CardWouldAcceptToggle
                   ligada={dados.cardWouldAccept}
                   erro={erroDe.aceita ?? null}
