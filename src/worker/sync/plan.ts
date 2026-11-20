@@ -41,6 +41,12 @@ export type SyncCursor = {
   pageCursor: string | null;
   offset: number;
   inserted: number;
+  // Leituras da janela atual (TASK-0205): só conta a primeira página de cada uma. Zero na janela = nada marcado.
+  lidas: number;
+  // Algum sumiço grande foi recusado nesta execução: a execução grava error_code = 'conferir_sumidas' (TASK-0205).
+  conferir: boolean;
+  // O item veio OUTDATED ou PARTIAL_SUCCESS nesta execução: a volta a ativo não acontece (TASK-0205, N6).
+  instavelNoPluggy: boolean;
 };
 
 // A mensagem da fila: uma fatia por vez (max_batch_size 1).
@@ -63,6 +69,31 @@ export function somaMeses(dataIso: string, meses: number): string {
   const mesDestino = (base % 12) + 1;
   const ultimoDia = new Date(Date.UTC(anoDestino, mesDestino, 0)).getUTCDate();
   return `${anoDestino}-${pad(mesDestino)}-${pad(Math.min(dia ?? 1, ultimoDia))}`;
+}
+
+// Sincronização diária (TASK-0205). Conta BANK: do dia da última sincronização (ou de hoje, se for depois) menos 10
+// dias, no máximo 60 dias atrás, até hoje; o Meu Pluggy recoleta os 4 dias anteriores ao último sucesso e transações
+// pendentes mudam. Cartão: 45 dias até hoje (a fatura aberta e a última fechada) e as parcelas futuras.
+export const DIAS_DA_RECOLETA = 10;
+// A janela começa na última sincronização com sucesso (com a margem de recoleta), e no máximo 12 meses atrás (TASK-0205,
+// N2): um banco parado mais que 60 dias volta com os movimentos do intervalo, até o teto da importação.
+export const MESES_MAXIMOS_DA_RECOLETA = 12;
+export const DIAS_DO_CARTAO_NA_DIARIA = 45;
+export function dailyWindows(
+  tipo: "BANK" | "CREDIT",
+  lastSyncOn: string | null,
+  today: string,
+): SyncWindow[] {
+  const base = lastSyncOn !== null && lastSyncOn < today ? lastSyncOn : today;
+  const limite = somaMeses(today, -MESES_MAXIMOS_DA_RECOLETA);
+  const desde = somaDias(base, -DIAS_DA_RECOLETA);
+  const comRecoleta = desde < limite ? limite : desde;
+  if (tipo === "BANK") {
+    return [{ from: comRecoleta, to: today }];
+  }
+  // Cartão: 45 dias, ou mais quando a última sincronização é mais antiga.
+  const dosCartao = somaDias(today, -DIAS_DO_CARTAO_NA_DIARIA);
+  return [{ from: comRecoleta < dosCartao ? comRecoleta : dosCartao, to: today }, futureWindow(today)];
 }
 
 // Janelas de 30 dias que cobrem os últimos `meses` meses, da mais nova para a mais antiga. A primeira termina hoje;
@@ -117,5 +148,8 @@ export function lerCursor(texto: string | null): SyncCursor {
     pageCursor: bruto.pageCursor ?? null,
     offset: bruto.offset ?? 0,
     inserted: bruto.inserted ?? 0,
+    lidas: bruto.lidas ?? 0,
+    conferir: bruto.conferir ?? false,
+    instavelNoPluggy: bruto.instavelNoPluggy ?? false,
   };
 }

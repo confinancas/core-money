@@ -46,6 +46,8 @@ const LINHAS_POR_COMANDO = Math.floor(MAX_PARAMETROS / (COLUNAS_DA_LINHA.length 
 // Só o que vem do banco é atualizado no conflito. Nunca tocam: movement, movement_original, movement_locked,
 // custom_name, category_id, spend_type*, hidden*, income_*, fixed_income_id, card_would_accept, ai_*, categorized_*,
 // rule_id, fixed_bill_id, is_backfill, pix_key_masked, cycle_key, household_id e bank_item_id.
+// A última leitura (last_seen_at) não entra aqui: ela anda num UPDATE à parte, para todas as linhas lidas, e não só as que
+// mudaram (TASK-0205, A1). Assim a releitura sem mudança grava uma escrita por linha, e não sete.
 const ATUALIZADAS_DO_BANCO = [
   "occurred_at",
   "local_date",
@@ -62,7 +64,6 @@ const ATUALIZADAS_DO_BANCO = [
   "card_id",
   "provider_category",
   "provider_operation_type",
-  "last_seen_at",
 ] as const;
 
 // O mesmo cálculo de cicloDaData (assign.ts), com a data que decide: a da fatura, quando a linha tem uma, ou a do dia.
@@ -83,7 +84,11 @@ const SQL_INSERT_TRANSACAO = (temTipo: boolean[]): string =>
     .join(", ")} ON CONFLICT (bank_item_id, external_id) DO UPDATE SET ${[
     ...ATUALIZADAS_DO_BANCO.map((coluna) => `${coluna} = excluded.${coluna}`),
     "removed_at = NULL",
-  ].join(", ")}`;
+  ].join(", ")}
+    WHERE ${[
+      ...ATUALIZADAS_DO_BANCO.map((coluna) => `transactions.${coluna} IS NOT excluded.${coluna}`),
+      "transactions.removed_at IS NOT NULL",
+    ].join(" OR ")}`;
 
 // Fatura real ou sintética: uma linha por id. A aberta tem id sint: e status "aberta"; no conflito, mantém cycle_key.
 const SQL_UPSERT_FATURA = `INSERT INTO bills (id, card_id, closes_on, due_on, amount_cents, status, paid_on, cycle_key)
@@ -100,6 +105,9 @@ export type IngestInput = {
   bankItemId: string;
   rows: MappedTransaction[];
   now: string;
+  // Início da execução (sync_runs.started_at). Com ele, devolve as atualizadas que já tinham sido lidas nesta execução
+  // (TASK-0205, A3): a repetição de uma fatia, e não a releitura diária do que existe desde antes.
+  inicioDaExecucao?: string;
 };
 
 const emGrupos = <T>(itens: T[], tamanho: number): T[][] => {
@@ -212,8 +220,8 @@ export function upsertBillsStmts(
 export async function ingestTransactions(
   db: Db,
   entrada: IngestInput,
-): Promise<{ insertedIds: string[]; updatedIds: string[] }> {
-  const { householdId, bankItemId, now } = entrada;
+): Promise<{ insertedIds: string[]; updatedIds: string[]; atualizadasDaExecucao: string[] }> {
+  const { householdId, bankItemId, now, inicioDaExecucao } = entrada;
   if (entrada.rows.length > MAX_LINHAS) {
     throw new RangeError(`ingestTransactions aceita até ${MAX_LINHAS} linhas por chamada.`);
   }
@@ -222,6 +230,8 @@ export async function ingestTransactions(
   const linhas = [...new Map(entrada.rows.map((linha) => [linha.external_id, linha])).values()];
   const insertedIds: string[] = [];
   const updatedIds: string[] = [];
+  // Última leitura (last_seen_at) de cada linha que já existia, antes desta gravação.
+  const ultimaLeitura = new Map<string, string>();
 
   if (linhas.length > 0) {
     // Os existentes por external_id, em grupos de 90 ids, e o calendário do lar: tudo numa ida ao D1.
@@ -231,15 +241,16 @@ export async function ingestTransactions(
     ).map((grupo) =>
       db.$client
         .prepare(
-          `SELECT id, external_id FROM transactions WHERE bank_item_id = ? AND external_id IN (${grupo.map(() => "?").join(", ")})`,
+          `SELECT id, external_id, last_seen_at FROM transactions WHERE bank_item_id = ? AND external_id IN (${grupo.map(() => "?").join(", ")})`,
         )
         .bind(bankItemId, ...grupo),
     );
     const leitura = await db.$client.batch([...buscas, ...leituraCalendarioStmts(db, householdId)]);
     const existentes = new Map<string, string>();
     for (const resultado of leitura.slice(0, buscas.length)) {
-      for (const linha of resultado.results as { id: string; external_id: string }[]) {
+      for (const linha of resultado.results as { id: string; external_id: string; last_seen_at: string }[]) {
         existentes.set(linha.external_id, linha.id);
+        ultimaLeitura.set(linha.id, linha.last_seen_at);
       }
     }
     const { ciclos, diaDoLar } = calendarioDaLeitura(leitura[buscas.length], leitura[buscas.length + 1]);
@@ -305,6 +316,15 @@ export async function ingestTransactions(
       ]);
       comandos.push(db.$client.prepare(SQL_INSERT_TRANSACAO(temTipo)).bind(...valores));
     }
+    // A última leitura de cada linha que já existia: uma escrita por linha, sem depender de o conflito ter mudado algo.
+    const jaExistiam = [...existentes.values()];
+    if (jaExistiam.length > 0) {
+      comandos.push(
+        db.$client
+          .prepare("UPDATE transactions SET last_seen_at = ? WHERE id IN (SELECT value FROM json_each(?))")
+          .bind(now, JSON.stringify(jaExistiam)),
+      );
+    }
     await db.$client.batch(comandos);
 
     linhas.forEach((linha, i) => {
@@ -315,5 +335,11 @@ export async function ingestTransactions(
   }
 
   await afterIngest(db, { householdId, bankItemId, insertedIds, updatedIds, now });
-  return { insertedIds, updatedIds };
+  // Atualizadas que já estavam gravadas com a leitura desta execução (a mesma execução gravou antes, numa tentativa
+  // anterior da fatia). A releitura diária de linhas de dias antes não entra.
+  const atualizadasDaExecucao =
+    inicioDaExecucao === undefined
+      ? []
+      : updatedIds.filter((id) => (ultimaLeitura.get(id) ?? "") >= inicioDaExecucao);
+  return { insertedIds, updatedIds, atualizadasDaExecucao };
 }

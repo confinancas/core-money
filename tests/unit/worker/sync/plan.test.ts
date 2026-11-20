@@ -115,6 +115,9 @@ describe("lerCursor", () => {
       pageCursor: null,
       offset: 0,
       inserted: 0,
+      lidas: 0,
+      conferir: false,
+      instavelNoPluggy: false,
     });
   });
 });

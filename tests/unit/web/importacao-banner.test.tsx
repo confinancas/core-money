@@ -25,7 +25,7 @@ let estado: SyncStatusResponse;
 let consultas: string[];
 
 function sincronizacaoCom(corpo: Partial<SyncStatusResponse>): SyncStatusResponse {
-  return { importing: [], recentlyFinished: [], ...corpo };
+  return { importing: [], recentlyFinished: [], lastSync: null, banks: [], ...corpo };
 }
 
 function terminada(

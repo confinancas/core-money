@@ -152,7 +152,7 @@ test.describe("lar com uma pessoa (instalação pronta)", () => {
 
     const linha = page.getByText("Atualização diária", { exact: true });
     await expect(linha).toBeVisible();
-    await expect(page.getByText("Toda noite, automaticamente")).toBeVisible();
+    await expect(page.getByText("Ainda não atualizou")).toBeVisible();
     await expect(page.getByText("00:00", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: /Atualização diária/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Atualização diária/ })).toHaveCount(0);
