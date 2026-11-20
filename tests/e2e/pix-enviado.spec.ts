@@ -24,11 +24,11 @@ function ciclo() {
   return { hoje, atual };
 }
 
-// Um Pix enviado da conta, sem categoria (vai para a fila). Chave de contraparte "TESTE PIX <nome>|<doc>".
+// Um Pix enviado da conta, sem categoria (vai para a fila). Quem recebeu tem banco e chave, para as linhas aparecerem.
 function pix(id: string, valor: number, nome: string, dia: string): string {
   const { atual } = ciclo();
   const agora = new Date().toISOString();
-  return `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, cycle_key, last_seen_at) VALUES (${q(id)}, ${q(LAR)}, ${q(`e2e-px-ext-${id}`)}, ${q(BANCO)}, ${q(CONTA)}, NULL, NULL, 'pix_enviado', ${q(`${dia}T17:32:00.000Z`)}, ${q(dia)}, ${q(valor)}, ${q(`PIX ENVIADO ${nome}`)}, NULL, ${q(nome)}, ${q("•••.456.789-••")}, ${q(atual.key)}, ${q(agora)})`;
+  return `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, counterparty_bank, pix_key_masked, cycle_key, last_seen_at) VALUES (${q(id)}, ${q(LAR)}, ${q(`e2e-px-ext-${id}`)}, ${q(BANCO)}, ${q(CONTA)}, NULL, NULL, 'pix_enviado', ${q(`${dia}T17:32:00.000Z`)}, ${q(dia)}, ${q(valor)}, ${q(`PIX ENVIADO ${nome}`)}, NULL, ${q(nome)}, ${q("•••.456.789-••")}, ${q("Banco do Brasil")}, ${q("Celular (11) 9••••-4821")}, ${q(atual.key)}, ${q(agora)})`;
 }
 
 function preparaPix(): void {
@@ -92,6 +92,30 @@ for (const largura of LARGURAS) {
       await expect(page.getByRole("button", { name: "Salvar" })).toBeVisible();
     });
 
+    test("textos do Pix: pílula, avatar, 'saiu do', caixa de guardado, linhas do banco e o Ocultar", async ({
+      page,
+    }) => {
+      await page.goto("/pix/e2e-px-1");
+      await esperaPix(page);
+      await expect(page.getByText("PIX", { exact: true })).toBeVisible();
+      // Iniciais de "[TEST] JOAO P SILVA": a primeira letra da primeira palavra e da última ("[" e "S"). "JS" é provado na unidade.
+      await expect(page.getByText("[S", { exact: true })).toBeVisible();
+      await expect(page.getByText(/saiu do \[TEST\] Banco E2E Pix/)).toBeVisible();
+      await expect(page.getByText("Pix não diz o que foi.", { exact: false })).toBeVisible();
+      await expect(page.getByText("Dinheiro guardado · só Pix e TED", { exact: true })).toBeVisible();
+      await expect(page.getByText("Banco do Brasil", { exact: true })).toBeVisible();
+      await expect(page.getByText("Celular (11) 9••••-4821", { exact: true })).toBeVisible();
+      await expect(page.getByText("Conta no ciclo", { exact: true })).toBeVisible();
+      await expect(page.getByText(/ · \d{2}\/\d{2} – \d{2}\/\d{2}$/)).toBeVisible();
+      await expect(page.getByText("PIX ENVIADO [TEST] JOAO P SILVA", { exact: true })).toBeVisible();
+      await expect(
+        page.getByText(
+          "Para Pix feito por outra pessoa ou em nome dela. Continua no extrato, mas sai dos totais, gráficos e insights.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+    });
+
     test("ligar e desligar 'É pagamento de cartão' muda o texto e volta ao gasto", async ({ page }) => {
       await page.goto("/pix/e2e-px-2");
       await esperaPix(page);
@@ -104,7 +128,7 @@ for (const largura of LARGURAS) {
     test("modo fila: mostra 'N de M para categorizar' e o botão com 'faltam'", async ({ page }) => {
       await page.goto("/pix/e2e-px-1?fila=1");
       await esperaPix(page);
-      await expect(page.getByText(/\d+ de \d+ para categorizar/)).toBeVisible();
+      await expect(page.getByText(/^\d+ de 3 para categorizar$/)).toBeVisible();
       await expect(page.getByRole("button", { name: /Salvar e ir para o próximo/ })).toBeVisible();
     });
   });
