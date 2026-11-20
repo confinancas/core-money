@@ -424,3 +424,22 @@ test("visita: as confirmações sobrevivem a girar o tablet", async ({ page }) =
   await page.setViewportSize({ width: 834, height: 1194 });
   await expect(page.getByText(/Categorizados agora · 1/)).toBeVisible();
 });
+
+// Rodada 3, C1: a visita acaba quando a pessoa sai da fila. Confirma uma linha, vai ao Início pelo menu e volta:
+// Y é o counts.todos atual (uma linha) e X começa em zero, sem "Categorizados agora" da visita anterior.
+test("visita: sair para o Início e voltar começa uma visita nova", async ({ page }) => {
+  await abre(page);
+  await page
+    .getByRole("button", { name: /^Confirmar/ })
+    .first()
+    .click();
+  await expect(page.getByText(/Categorizados agora · 1/)).toBeVisible();
+  await page.getByRole("link", { name: "Início" }).first().click();
+  await expect(page).toHaveURL(/\/inicio$/);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Para categorizar" })).toBeVisible();
+  // A fila carregou quando o filtro mostra a contagem atual (uma linha): só então a visita é conferida.
+  await expect(page.getByRole("radio", { name: /^Todos 1$/ })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("0 de 1 categorizados")).toBeVisible();
+  await expect(page.getByText(/Categorizados agora/)).toHaveCount(0);
+});

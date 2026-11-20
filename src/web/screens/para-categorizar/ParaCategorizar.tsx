@@ -46,6 +46,7 @@ type Confirmada = {
 };
 
 const CHAVE_DA_VISITA = "mm.para-categorizar.visita";
+const CAMINHO_DA_FILA = "/para-categorizar";
 
 type VisitaGuardada = { confirmadas: Confirmada[]; total: number | null };
 
@@ -60,6 +61,14 @@ function lerVisita(): VisitaGuardada {
     };
   } catch {
     return { confirmadas: [], total: null };
+  }
+}
+
+function apagarVisita(): void {
+  try {
+    sessionStorage.removeItem(CHAVE_DA_VISITA);
+  } catch {
+    // Sem armazenamento, não há o que apagar.
   }
 }
 
@@ -85,6 +94,11 @@ export function ParaCategorizar() {
   const [confirmadas, setConfirmadas] = useState<Confirmada[]>(() => lerVisita().confirmadas);
   useEffect(() => {
     gravarVisita({ confirmadas, total });
+    return () => {
+      // A visita acaba quando a pessoa sai da fila por navegação: na limpeza, o caminho já é outro. Na remontagem por
+      // largura (girar o celular), o caminho continua o da fila, e a visita fica.
+      if (window.location.pathname !== CAMINHO_DA_FILA) apagarVisita();
+    };
   }, [confirmadas, total]);
   const emCurso = useRef(false);
   const maisEmCurso = useRef(false);
