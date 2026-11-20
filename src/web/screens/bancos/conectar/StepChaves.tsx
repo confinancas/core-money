@@ -66,7 +66,7 @@ export function StepChaves({
         label="Client Secret"
         name="client-secret"
         type="password"
-        autoComplete="off"
+        autoComplete="new-password"
         spellCheck={false}
         value={chaves.clientSecret}
         onChange={(evento) => aoMudar("clientSecret", evento.target.value)}

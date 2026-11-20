@@ -143,6 +143,7 @@ export function subtituloDoBanco(banco: BankItemDto, agora: Date): string {
   if (banco.status === "acao_necessaria") return "Precisa de atenção";
   if (banco.consentExpiresAt !== null) {
     const faltam = (Date.parse(banco.consentExpiresAt) - agora.getTime()) / DIAS;
+    if (faltam < 0) return "Consentimento vencido";
     if (faltam <= DIAS_PARA_RENOVAR)
       return `Consentimento expira em ${diaEMesIso(banco.consentExpiresAt)} · renovar`;
     return `Ativo · expira em ${mesEAno(banco.consentExpiresAt)}`;

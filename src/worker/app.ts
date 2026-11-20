@@ -4,6 +4,7 @@ import { resetsAt } from "../shared/usage";
 import { isPublicRoute } from "./auth/public-routes";
 import { requireSession, sessaoDoCookie } from "./auth/sessions";
 import { verificadorReal, type WebAuthnLoginVerifier, type WebAuthnVerifier } from "./auth/webauthn";
+import { bankItemsRoutes } from "./bank/routes";
 import { categoriesRoutes } from "./categories/routes";
 import { statusRoutes } from "./categorization/status-routes";
 import { createDb } from "./db/client";
@@ -144,6 +145,11 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   );
   app.route("/sync", syncRoutes(resolverDaSessao, options.agora));
   app.route("/bank-items", bankItemsSyncRoutes(resolverDaSessao, options.agora));
+  // Detalhe do banco, conferência do consentimento, desconectar e conectar de novo (TASK-0206).
+  app.route(
+    "/bank-items",
+    bankItemsRoutes(resolverDaSessao, { agora: options.agora, fetch: options.pluggyFetch }),
+  );
   app.route("/dev", devRoutes(resolverDaSessao, { fetch: options.pluggyFetch }));
   app.route("/invites", invitesRoutes(webauthn, resolverDaSessao, options.agora));
   app.route("/devices", devicesRoutes(webauthn, resolverDaSessao, options.agora));

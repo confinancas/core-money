@@ -18,7 +18,6 @@ const DIA_1 = "2026-11-10T12:00:00.000Z";
 const DIA_2 = "2026-11-10T13:00:00.000Z";
 const DIA_3 = "2026-11-10T14:00:00.000Z";
 const ONTEM = "2026-11-09T12:00:00.000Z";
-const MEIA_NOITE_SP = "2026-11-10T03:00:00.000Z";
 
 const AMBIENTE_COM_FILA = Object.assign({}, AMBIENTE, {
   SYNC_QUEUE: { send: async () => undefined },

@@ -79,21 +79,32 @@ export const DIAS_DA_RECOLETA = 10;
 // N2): um banco parado mais que 60 dias volta com os movimentos do intervalo, até o teto da importação.
 export const MESES_MAXIMOS_DA_RECOLETA = 12;
 export const DIAS_DO_CARTAO_NA_DIARIA = 45;
+// Menor e maior de duas datas AAAA-MM-DD (texto comparável). Ternário com os mesmos operandos sai no lint (useMathMinMax).
+function menorDeData(a: string, b: string): string {
+  if (a < b) return a;
+  return b;
+}
+
+function maiorDeData(a: string, b: string): string {
+  if (a > b) return a;
+  return b;
+}
+
 export function dailyWindows(
   tipo: "BANK" | "CREDIT",
   lastSyncOn: string | null,
   today: string,
 ): SyncWindow[] {
-  const base = lastSyncOn !== null && lastSyncOn < today ? lastSyncOn : today;
+  const base = lastSyncOn !== null ? menorDeData(lastSyncOn, today) : today;
   const limite = somaMeses(today, -MESES_MAXIMOS_DA_RECOLETA);
   const desde = somaDias(base, -DIAS_DA_RECOLETA);
-  const comRecoleta = desde < limite ? limite : desde;
+  const comRecoleta = maiorDeData(desde, limite);
   if (tipo === "BANK") {
     return [{ from: comRecoleta, to: today }];
   }
   // Cartão: 45 dias, ou mais quando a última sincronização é mais antiga.
   const dosCartao = somaDias(today, -DIAS_DO_CARTAO_NA_DIARIA);
-  return [{ from: comRecoleta < dosCartao ? comRecoleta : dosCartao, to: today }, futureWindow(today)];
+  return [{ from: menorDeData(comRecoleta, dosCartao), to: today }, futureWindow(today)];
 }
 
 // Janelas de 30 dias que cobrem os últimos `meses` meses, da mais nova para a mais antiga. A primeira termina hoje;
