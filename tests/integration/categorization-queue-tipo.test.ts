@@ -116,3 +116,107 @@ describe("tipo de gasto e nome na fila", () => {
     expect(linha.spend_type_source).toBe("regra");
   });
 });
+
+describe("rodada 2: casos que faltavam (B2)", () => {
+  it("volta de linha do histórico: o tipo que veio de regra ou de escolha não muda", async () => {
+    const lar = await criarLar();
+    const porRegra = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -5000,
+      descricao: "[TEST] HISTORICO REGRA",
+      localDate: "2026-09-02",
+      aiCategoryId: categoriaDoLar(lar, "servicos"),
+    });
+    const escolhido = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -6000,
+      descricao: "[TEST] HISTORICO ESCOLHIDO",
+      localDate: "2026-09-03",
+      aiCategoryId: categoriaDoLar(lar, "servicos"),
+    });
+    for (const [id, origem] of [
+      [porRegra, "regra"],
+      [escolhido, "escolhido"],
+    ] as const) {
+      await env.DB.prepare(
+        "UPDATE transactions SET is_backfill = 1, category_id = ?, categorized_at = ?, categorized_by = ?, spend_type = 'fixos', spend_type_source = ? WHERE id = ?",
+      )
+        .bind(categoriaDoLar(lar, "lazer"), AGORA, lar.memberId, origem, id)
+        .run();
+    }
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/undo", {
+      items: [
+        { transactionId: porRegra, categoryId: categoriaDoLar(lar, "lazer") },
+        { transactionId: escolhido, categoryId: categoriaDoLar(lar, "lazer") },
+      ],
+    });
+    expect(r.status).toBe(200);
+    const linhaDaRegra = await lerTransacao(porRegra);
+    expect(linhaDaRegra.category_id).toBe(categoriaDoLar(lar, "servicos"));
+    expect(linhaDaRegra.categorized_by).toBe("ia");
+    expect(linhaDaRegra.spend_type).toBe("fixos");
+    expect(linhaDaRegra.spend_type_source).toBe("regra");
+    const linhaEscolhida = await lerTransacao(escolhido);
+    expect(linhaEscolhida.spend_type).toBe("fixos");
+    expect(linhaEscolhida.spend_type_source).toBe("escolhido");
+  });
+
+  it("iguais: a regra de Metas não entra na compra de cartão", async () => {
+    const lar = await criarLar();
+    const chave = establishmentKey("[TEST] LOJA METAS") ?? "";
+    await criarRegra(lar, { scope: "estabelecimento", matchValue: chave, setSpendType: "metas" });
+    const aceita = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -9000,
+      descricao: "[TEST] LOJA METAS",
+      localDate: "2026-11-09",
+      aiCategoryId: categoriaDoLar(lar, "servicos"),
+    });
+    const cartao = await inserirTransacao(lar, {
+      na: "cartao",
+      movement: "compra",
+      amountCents: -4000,
+      descricao: "[TEST] LOJA METAS",
+      localDate: "2026-11-01",
+    });
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: [aceita] });
+    expect((r.corpo.alsoResolved as { transactionId: string }[]).map((x) => x.transactionId)).toEqual([
+      cartao,
+    ]);
+    const linha = await lerTransacao(cartao);
+    expect(linha.category_id).toBe(categoriaDoLar(lar, "servicos"));
+    expect(linha.spend_type).not.toBe("metas");
+    expect(linha.spend_type_source).not.toBe("regra");
+  });
+
+  it("iguais: o nome próprio fica quando a regra também tem nome", async () => {
+    const lar = await criarLar();
+    const chave = establishmentKey("[TEST] LOJA NOME") ?? "";
+    await criarRegra(lar, {
+      scope: "estabelecimento",
+      matchValue: chave,
+      setCustomName: "[TEST] Nome da regra",
+    });
+    const aceita = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -9000,
+      descricao: "[TEST] LOJA NOME",
+      localDate: "2026-11-09",
+      aiCategoryId: categoriaDoLar(lar, "servicos"),
+    });
+    const igual = await inserirTransacao(lar, {
+      movement: "compra",
+      amountCents: -9000,
+      descricao: "[TEST] LOJA NOME",
+      localDate: "2026-11-01",
+    });
+    await env.DB.prepare("UPDATE transactions SET custom_name = ? WHERE id = ?")
+      .bind("[TEST] Nome próprio", igual)
+      .run();
+    const r = await chamar(appDoLar(lar), "POST", "/api/categorization/accept", { transactionIds: [aceita] });
+    expect((r.corpo.alsoResolved as { transactionId: string }[]).map((x) => x.transactionId)).toEqual([
+      igual,
+    ]);
+    expect((await lerTransacao(igual)).custom_name).toBe("[TEST] Nome próprio");
+  });
+});
