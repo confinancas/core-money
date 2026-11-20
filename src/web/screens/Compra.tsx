@@ -5,6 +5,7 @@ import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { SpendType } from "../../shared/spend-types";
 import {
   criarRegraDoNome,
+  fetchMatchLabel,
   fetchTransaction,
   marcarPagamentoDeCartao,
   patchTransaction,
@@ -24,7 +25,7 @@ import { HideToggle } from "./transaction/HideToggle";
 import { QueueFooter } from "./transaction/QueueFooter";
 import { SpendTypePicker } from "./transaction/SpendTypePicker";
 import { type ResultadoDoNome, TitleCard } from "./transaction/TitleCard";
-import { podeOcultar, temTipoDeGasto, tituloDaCompra } from "./transaction/view-model";
+import { podeOcultar, rotuloDoPagamento, temTipoDeGasto, tituloDaCompra } from "./transaction/view-model";
 
 // Compra (TASK-0403): o detalhe de uma compra do cartão, ou de uma saída da conta (débito, boleto, outra). Nome próprio,
 // categoria, tipo e ocultar. Cada mudança grava na hora, com atualização otimista; se o servidor recusa ou cai, o
@@ -42,6 +43,7 @@ export function Compra() {
   const [dados, setDados] = useState<DetalheDaCompra | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
   const [erros, setErros] = useState<Partial<Record<CampoComErro, string>>>({});
+  const [matchLabel, setMatchLabel] = useState<string | null>(null);
   const partida = useRef(0);
   const [busca] = useSearchParams();
   // Modo fila (TASK-0404): ?fila=1 mostra "N de M" e o rodapé que leva ao próximo item. A compra já grava na hora.
@@ -56,6 +58,12 @@ export function Compra() {
       const lida = await fetchTransaction(transactionId);
       if (esta !== partida.current) return;
       setDados(lida);
+      // O rótulo do destinatário vem da categorização (TASK-0302); se falhar, o texto usa o nome da compra.
+      void fetchMatchLabel(transactionId)
+        .then((rotulo) => {
+          if (esta === partida.current) setMatchLabel(rotulo);
+        })
+        .catch(() => undefined);
       setEstado("pronta");
     } catch (erro) {
       if (esta !== partida.current) return;
@@ -196,6 +204,7 @@ export function Compra() {
           aoEscolherTipo={escolherTipo}
           aoAlternarOcultar={alternarOcultar}
           aoSalvarNome={salvarNome}
+          matchLabel={matchLabel}
           aoAlternarPagamento={alternarPagamento}
           fila={emFila ? fila.estado : null}
           aoProximo={() => void irParaProximo()}
@@ -217,6 +226,7 @@ function Corpo({
   aoAlternarPagamento,
   fila,
   aoProximo,
+  matchLabel,
 }: {
   dados: DetalheDaCompra;
   aba: Aba | null;
@@ -227,6 +237,7 @@ function Corpo({
   aoAlternarOcultar: (oculta: boolean) => void;
   aoSalvarNome: (nome: string | null, comRegra: boolean) => Promise<ResultadoDoNome>;
   aoAlternarPagamento: (ligada: boolean) => void;
+  matchLabel: string | null;
   fila: { faltam: number; position: number | null; total: number } | null;
   aoProximo: () => void;
 }) {
@@ -248,7 +259,7 @@ function Corpo({
         {dados.canMarkCardPayment && (
           <CardPaymentToggle
             ligada={dados.isCardPayment}
-            matchLabel={dados.displayName}
+            matchLabel={rotuloDoPagamento(matchLabel, dados.displayName)}
             erro={erros.cartao ?? null}
             aoMudar={aoAlternarPagamento}
           />

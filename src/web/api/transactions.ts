@@ -37,3 +37,11 @@ export function marcarPagamentoDeCartao(transacaoId: string, isCardPayment: bool
     isCardPayment,
   });
 }
+
+// Rótulo do destinatário para o texto "Os próximos de <matchLabel>" (TASK-0404): vem do GET de categorização (TASK-0302).
+export async function fetchMatchLabel(transacaoId: string): Promise<string | null> {
+  const resposta = await apiFetch<{ matchLabel: string }>(
+    `/api/rules/${encodeURIComponent(transacaoId)}/categorization`,
+  );
+  return resposta.matchLabel;
+}
