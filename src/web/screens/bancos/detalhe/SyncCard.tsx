@@ -20,7 +20,8 @@ export function SyncCard({
   aoMudar: () => void;
 }) {
   const [enviando, setEnviando] = useState(false);
-  const [tentou, setTentou] = useState(false);
+  // Id da última execução encerrada no momento do toque: a frase de falha só vale para uma execução nova (A2, Fable).
+  const [encerradaNoToque, setEncerradaNoToque] = useState<string | null | undefined>(undefined);
   const [aviso, setAviso] = useState<string | null>(null);
   const pilula = freshnessPill(banco.lastSyncAt, hoje);
   const ultimaFalha = banco.runs.find((execucao) => execucao.finishedAt !== null) ?? null;
@@ -29,10 +30,18 @@ export function SyncCard({
     ultimaFalha !== null &&
     (ultimaFalha.errorCode === "chaves_invalidas" || ultimaFalha.errorCode === "sem_chaves");
   const execucaoAberta = banco.runs.find((execucao) => execucao.finishedAt === null) ?? null;
+  const ultimaEncerrada = banco.runs.find((execucao) => execucao.finishedAt !== null) ?? null;
+  // Depois do toque, a frase só aparece quando chega uma execução nova encerrada com falha (não a de antes do toque).
+  const tentouENovaFalha =
+    encerradaNoToque !== undefined &&
+    !banco.running &&
+    banco.failed &&
+    ultimaEncerrada !== null &&
+    ultimaEncerrada.id !== encerradaNoToque;
 
   async function baixar() {
     setEnviando(true);
-    setTentou(true);
+    setEncerradaNoToque(ultimaEncerrada?.id ?? null);
     setAviso(null);
     try {
       await baixarAgora(banco.id);
@@ -52,6 +61,10 @@ export function SyncCard({
       </div>
       <p className="text-[14px] text-ink">{horaDaUltimaComSucesso(banco.lastSyncAt)}</p>
 
+      {enviando && execucaoAberta === null && (
+        <p className="text-[14px] font-semibold text-ink-2">Baixando…</p>
+      )}
+
       {execucaoAberta !== null && (
         <p className="text-[14px] font-semibold text-ink-2">Baixando… {execucaoAberta.progressPct}%</p>
       )}
@@ -59,7 +72,7 @@ export function SyncCard({
       {linhaDaFalha !== null && execucaoAberta === null && (
         <div className="flex flex-col gap-2 rounded-field bg-warn-bg px-3.5 py-3">
           <p className="text-[14px] font-semibold text-warn">{linhaDaFalha.texto}</p>
-          {tentou && !banco.running && (
+          {tentouENovaFalha && (
             <p className="text-[13px] text-ink-2">Não deu de novo. O app tenta sozinho à meia-noite.</p>
           )}
         </div>
