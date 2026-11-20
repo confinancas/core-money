@@ -78,9 +78,7 @@
       },
       "corpos": [
         {
-          "transactionIds": [
-            "cpu-pix-1"
-          ]
+          "transactionIds": ["cpu-pix-1"]
         }
       ]
     }

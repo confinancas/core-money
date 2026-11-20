@@ -346,13 +346,18 @@ export function PixRecebido() {
               A escolha vira regra para esse remetente. Dá para desfazer em Configurações › Regras.
             </span>
           </div>
-          <input
-            type="checkbox"
+          <button
+            type="button"
             role="switch"
+            aria-checked={lembrar}
             aria-label={`Lembrar para os próximos Pix de ${contraparte ?? ""}`.trim()}
-            checked={lembrar}
-            onChange={(evento) => setLembrar(evento.target.checked)}
-          />
+            onClick={() => setLembrar((atual) => !atual)}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${lembrar ? "bg-primary" : "bg-divider"}`}
+          >
+            <span
+              className={`absolute top-1 size-5 rounded-full bg-white transition-transform ${lembrar ? "translate-x-6" : "translate-x-1"}`}
+            />
+          </button>
         </section>
       )}
 

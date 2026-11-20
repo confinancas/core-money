@@ -17,7 +17,6 @@ import { addTransactionReceiptStmts, removeTransactionReceiptStmt } from "./rece
 // o primeiro lê a transação, as rendas ativas e a regra; o segundo é o cálculo da renda do ciclo (prévia e GET) ou as
 // escritas (PUT, aceite, histórico). Nenhuma rota tem laço sobre o lar: os iguais saem de uma escrita por chave.
 
-const MOVIMENTOS_DE_ENTRADA = INCOME_CANDIDATE_MOVEMENTS.map((movimento) => `'${movimento}'`).join(", ");
 // Movimentos que a regra de remetente casa (SCOPE_MOVEMENTS.remetente, em shared/rule-match.ts).
 const MOVIMENTOS_DO_REMETENTE = "'pix_recebido', 'ted_recebida'";
 

@@ -32,11 +32,20 @@ function semeiaPix(id: string, valor: number, contraparte: string): void {
 }
 
 function limpaPix(id: string): void {
-  executaSql("pronta", [`DELETE FROM fixed_income_receipts WHERE transaction_id = ${q(id)}`, `DELETE FROM transactions WHERE id = ${q(id)}`].join("; "));
+  executaSql(
+    "pronta",
+    [
+      `DELETE FROM fixed_income_receipts WHERE transaction_id = ${q(id)}`,
+      `DELETE FROM transactions WHERE id = ${q(id)}`,
+    ].join("; "),
+  );
 }
 
 function lerPix(id: string): Record<string, unknown> | undefined {
-  return consultaSql("pronta", `SELECT income_kind, income_subtype, hidden, hidden_reason, categorized_by FROM transactions WHERE id = ${q(id)}`)[0];
+  return consultaSql(
+    "pronta",
+    `SELECT income_kind, income_subtype, hidden, hidden_reason, categorized_by FROM transactions WHERE id = ${q(id)}`,
+  )[0];
 }
 
 async function abreA(page: Page, caminho: string): Promise<void> {
@@ -79,7 +88,9 @@ for (const { nome, largura, altura } of LARGURAS) {
       }
     });
 
-    test("reembolso oculta o Pix e não há renda fixa cadastrada na opção de parte do salário", async ({ page }) => {
+    test("reembolso oculta o Pix e não há renda fixa cadastrada na opção de parte do salário", async ({
+      page,
+    }) => {
       const id = `e2e-pix-reembolso-${nome}`;
       semeiaPix(id, 90_000, "[TEST] Beltrana Pix");
       try {
@@ -94,12 +105,16 @@ for (const { nome, largura, altura } of LARGURAS) {
       }
     });
 
-    test("o switch de lembrar aparece com o remetente e o botão do Pix inexistente diz que não foi encontrado", async ({ page }) => {
+    test("o switch de lembrar aparece com o remetente e o botão do Pix inexistente diz que não foi encontrado", async ({
+      page,
+    }) => {
       const id = `e2e-pix-lembrar-${nome}`;
       semeiaPix(id, 60_000, "[TEST] Ciclana Pix");
       try {
         await abreA(page, `/pix-recebido/${id}`);
-        const switchLembrar = page.getByRole("switch", { name: /Lembrar para os próximos Pix de \[TEST\] Ciclana Pix/ });
+        const switchLembrar = page.getByRole("switch", {
+          name: /Lembrar para os próximos Pix de \[TEST\] Ciclana Pix/,
+        });
         await expect(switchLembrar).toBeVisible();
         await switchLembrar.click();
         await expect(switchLembrar).toBeChecked();
