@@ -474,11 +474,17 @@ describe("conectar de novo respeita o limite de 5 bancos ativos da conexão (A1,
         .run();
     }
     expect(
-      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL", lar.connectionId),
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL",
+        lar.connectionId,
+      ),
     ).toBe(5);
     await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/disconnect`);
     expect(
-      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL", lar.connectionId),
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL",
+        lar.connectionId,
+      ),
     ).toBe(4);
     await env.DB.prepare(
       `INSERT INTO bank_items (id, connection_id, institution_name, institution_color, consent_expires_at, last_sync_at,
@@ -493,10 +499,159 @@ describe("conectar de novo respeita o limite de 5 bancos ativos da conexão (A1,
       corpo: { error: "limite_meu_pluggy", message: "O Meu Pluggy gratuito aceita até 5 bancos por conta." },
     });
     expect(
-      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND disconnected_at IS NOT NULL", lar.itemId),
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND disconnected_at IS NOT NULL",
+        lar.itemId,
+      ),
     ).toBe(1);
     expect(
-      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL", lar.connectionId),
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL",
+        lar.connectionId,
+      ),
     ).toBe(5);
+  });
+});
+
+// Lacunas da suíte apontadas pela Fable (rodada 1, A3): cada teste falha se a regra correspondente sair.
+describe("lacunas da suíte (A3, Fable)", () => {
+  it("F2: conectar de novo devolve o banco a 'ativo' (o status estava 'instavel')", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f2", status: "instavel" });
+    await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/disconnect`);
+    const resposta = await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/reconnect`);
+    expect(resposta.status).toBe(202);
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND status = 'ativo'", lar.itemId),
+    ).toBe(1);
+  });
+
+  it("F5: a conferência do consentimento não aceita banco desconectado (409, sem chamar o Pluggy)", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f5" });
+    await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/disconnect`);
+    consultasDeItem = 0;
+    const resposta = await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/consent-check`);
+    expect(resposta).toMatchObject({ status: 409, corpo: { error: "banco_desconectado" } });
+    expect(consultasDeItem).toBe(0);
+  });
+
+  it("F6: conferência sem problema não devolve 'instavel' a 'ativo'", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f6", status: "instavel" });
+    itensDoFalso[lar.itemId] = { consentExpiresAt: VALIDADE_RENOVADA };
+    await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/consent-check`);
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND status = 'instavel'", lar.itemId),
+    ).toBe(1);
+  });
+
+  it("F7: item em LOGIN_ERROR vai a 'acao_necessaria', mesmo com a validade nova", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f7" });
+    itensDoFalso[lar.itemId] = { consentExpiresAt: VALIDADE_RENOVADA, status: "LOGIN_ERROR" };
+    await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/consent-check`);
+    expect(
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND status = 'acao_necessaria'",
+        lar.itemId,
+      ),
+    ).toBe(1);
+  });
+
+  it("F8: erro no item vai a 'acao_necessaria', mesmo com a validade nova", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f8" });
+    itensDoFalso[lar.itemId] = {
+      consentExpiresAt: VALIDADE_RENOVADA,
+      error: { code: "INVALID_CREDENTIALS" },
+    };
+    await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/consent-check`);
+    expect(
+      await contagem(
+        "SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND status = 'acao_necessaria'",
+        lar.itemId,
+      ),
+    ).toBe(1);
+  });
+
+  it("F9: desconectar de novo não troca a data (o relógio é outro na segunda vez)", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f9" });
+    await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/disconnect`);
+    const depois = createApp({
+      pluggyFetch: fetchPluggy(),
+      agora: () => new Date("2026-11-12T13:00:00.000Z"),
+    });
+    const resposta = await callApi(depois, "POST", `/api/bank-items/${lar.itemId}/disconnect`, undefined, {
+      cookie: COOKIE,
+    });
+    expect(await resposta.json()).toEqual({ disconnectedAt: AGORA });
+  });
+
+  it("F11: validade gravada nula com validade nova conta como renovada", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f11", consentExpiresAt: null });
+    itensDoFalso[lar.itemId] = { consentExpiresAt: VALIDADE_RENOVADA };
+    const resposta = await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/consent-check`);
+    expect(resposta.corpo).toMatchObject({ renewed: true, consentExpiresAt: VALIDADE_RENOVADA });
+  });
+
+  it("F12: o detalhe devolve no máximo 10 execuções", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f12" });
+    for (let i = 0; i < 12; i++) {
+      const dia = `2026-11-${String(i + 1).padStart(2, "0")}T10:00:00.000Z`;
+      await env.DB.prepare(
+        "INSERT INTO sync_runs (id, bank_item_id, kind, started_at, finished_at, status, cursor_json, heartbeat_at) VALUES (?, ?, 'diaria', ?, ?, 'ok', '{\"seq\":0,\"phase\":\"fim\"}', NULL)",
+      )
+        .bind(crypto.randomUUID(), lar.itemId, dia, dia)
+        .run();
+    }
+    const corpo = (await pedir(fetchPluggy(), "GET", `/api/bank-items/${lar.itemId}`)).corpo as {
+      runs: unknown[];
+    };
+    expect(corpo.runs).toHaveLength(10);
+  });
+
+  it("F13: as execuções vêm da mais recente para a mais antiga", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f13" });
+    for (const dia of ["2026-11-01", "2026-11-05", "2026-11-03"]) {
+      await env.DB.prepare(
+        "INSERT INTO sync_runs (id, bank_item_id, kind, started_at, finished_at, status, cursor_json, heartbeat_at) VALUES (?, ?, 'diaria', ?, ?, 'ok', '{\"seq\":0,\"phase\":\"fim\"}', NULL)",
+      )
+        .bind(crypto.randomUUID(), lar.itemId, `${dia}T10:00:00.000Z`, `${dia}T10:00:00.000Z`)
+        .run();
+    }
+    const corpo = (await pedir(fetchPluggy(), "GET", `/api/bank-items/${lar.itemId}`)).corpo as {
+      runs: { startedAt: string }[];
+    };
+    expect(corpo.runs.map((r) => r.startedAt.slice(0, 10))).toEqual([
+      "2026-11-05",
+      "2026-11-03",
+      "2026-11-01",
+    ]);
+  });
+
+  it("F14: fatura que não está aberta não aparece como 'fatura aberta'", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f14" });
+    await env.DB.prepare(
+      "INSERT INTO bills (id, card_id, closes_on, due_on, amount_cents, status, paid_on, cycle_key) VALUES (?, ?, '2026-10-20', '2026-10-28', 15000, 'paga', '2026-10-27', NULL)",
+    )
+      .bind(`${lar.itemId}-paga`, `${lar.itemId}-cartao`)
+      .run();
+    const corpo = (await pedir(fetchPluggy(), "GET", `/api/bank-items/${lar.itemId}`)).corpo as {
+      cards: { openBill: unknown }[];
+    };
+    expect(corpo.cards[0]?.openBill).toBeNull();
+  });
+
+  it("F15: a fatia do banco desconectado não muda o status do banco", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-f15", status: "instavel" });
+    const runId = (await startRun(createDb(env.DB, newMeter()), lar.itemId, "historico", AGORA)) as string;
+    await env.DB.prepare("UPDATE bank_items SET disconnected_at = ? WHERE id = ?")
+      .bind(AGORA, lar.itemId)
+      .run();
+    await runSyncSlice(
+      AMBIENTE_COM_FILA,
+      { db: createDb(env.DB, newMeter()), fetch: fetchPluggy() },
+      { runId, seq: 0, tentativa: 1 },
+      AGORA,
+    );
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND status = 'instavel'", lar.itemId),
+    ).toBe(1);
   });
 });

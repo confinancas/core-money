@@ -58,6 +58,11 @@ describe("consentView", () => {
     expect(v.tom).toBe("sucesso");
   });
 
+  it("F24: a barra é dias restantes sobre 365 (182 dias ≈ 49,9%, não 100%)", () => {
+    const v = consentView(validadeEm(182), HOJE, NOME);
+    expect(v.barraPct).toBeCloseTo((182 / 365) * 100, 5);
+  });
+
   it("sem data: 'Validade não informada' e sem linha de baixo", () => {
     const v = consentView(null, HOJE, NOME);
     expect(v.titulo).toBe("Validade não informada");
