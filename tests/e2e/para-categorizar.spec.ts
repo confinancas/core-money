@@ -409,3 +409,18 @@ test("notas: progresso alinhado com o conteúdo no desktop e texto da IA em até
     expect(Math.abs(progresso!.x - colunaDaEsquerda!.x)).toBeLessThanOrEqual(12);
   }
 });
+
+// Rodada 2: a visita não se perde ao girar o tablet. Confirma uma linha, gira a janela (paisagem e de volta ao retrato)
+// e confere que "Categorizados agora" continua com a confirmação.
+test("visita: as confirmações sobrevivem a girar o tablet", async ({ page }) => {
+  await abre(page);
+  await page
+    .getByRole("button", { name: /^Confirmar/ })
+    .first()
+    .click();
+  await expect(page.getByText(/Categorizados agora · 1/)).toBeVisible();
+  await page.setViewportSize({ width: 1194, height: 834 });
+  await expect(page.getByText(/Categorizados agora · 1/)).toBeVisible();
+  await page.setViewportSize({ width: 834, height: 1194 });
+  await expect(page.getByText(/Categorizados agora · 1/)).toBeVisible();
+});
