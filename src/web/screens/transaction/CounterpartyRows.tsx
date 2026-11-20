@@ -1,18 +1,19 @@
 import type { DetalheDaCompra } from "../../../shared/api/transactions";
 import { Card } from "../../components/ui/card";
+import { textoDoCiclo } from "./view-model";
 
-// Dados de quem recebeu (TASK-0404). Cada linha some quando o dado é nulo; "Documento" quando não há o tipo.
+// Dados de quem recebeu e do banco (TASK-0404). Cada linha some quando o dado é nulo; "Documento" quando não há o tipo.
+// "Descrição do banco" fica embaixo, com o valor em negrito e sem alinhar à direita.
 export function CounterpartyRows({ detalhe }: { detalhe: DetalheDaCompra }) {
   const c = detalhe.counterparty;
-  if (c === null) return null;
   const linhas: { rotulo: string; valor: string }[] = [];
-  if (c.name !== null) linhas.push({ rotulo: "Para", valor: c.name });
-  if (c.docMasked !== null) {
+  if (c?.name) linhas.push({ rotulo: "Para", valor: c.name });
+  if (c?.docMasked) {
     const rotuloDoc = c.docKind === "cnpj" ? "CNPJ" : c.docKind === "cpf" ? "CPF" : "Documento";
     linhas.push({ rotulo: rotuloDoc, valor: c.docMasked });
   }
-  if (c.bank !== null) linhas.push({ rotulo: "Banco de quem recebeu", valor: c.bank });
-  if (c.pixKeyMasked !== null) linhas.push({ rotulo: "Chave Pix", valor: c.pixKeyMasked });
+  if (c?.bank) linhas.push({ rotulo: "Banco de quem recebeu", valor: c.bank });
+  if (c?.pixKeyMasked) linhas.push({ rotulo: "Chave Pix", valor: c.pixKeyMasked });
   if (detalhe.origin !== null && detalhe.origin.institution !== null) {
     const conexao = detalhe.origin.connectionLabel;
     linhas.push({
@@ -20,7 +21,9 @@ export function CounterpartyRows({ detalhe }: { detalhe: DetalheDaCompra }) {
       valor: conexao ? `${detalhe.origin.institution} · ${conexao}` : detalhe.origin.institution,
     });
   }
-  if (linhas.length === 0) return null;
+  if (detalhe.cycle !== null) linhas.push({ rotulo: "Conta no ciclo", valor: textoDoCiclo(detalhe.cycle) });
+  const descricao = detalhe.originalDescription.trim() !== "" ? detalhe.originalDescription : null;
+  if (linhas.length === 0 && descricao === null) return null;
 
   return (
     <Card className="flex flex-col px-[22px] py-1">
@@ -33,6 +36,12 @@ export function CounterpartyRows({ detalhe }: { detalhe: DetalheDaCompra }) {
           <span className="text-right text-[13px] font-semibold text-ink">{linha.valor}</span>
         </div>
       ))}
+      {descricao !== null && (
+        <div className="flex min-h-11 flex-col gap-0.5 py-2">
+          <span className="text-[13px] text-ink-2">Descrição do banco</span>
+          <span className="break-words text-[13px] font-bold text-ink">{descricao}</span>
+        </div>
+      )}
     </Card>
   );
 }

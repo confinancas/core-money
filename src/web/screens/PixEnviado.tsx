@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import type { CorpoDoPatch, DetalheDaCompra } from "../../shared/api/transactions";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { SpendType } from "../../shared/spend-types";
+import { iniciaisDe } from "../../shared/transactions/counterparty";
 import {
   criarRegraDoNome,
   fetchTransaction,
@@ -26,7 +27,7 @@ import { QueueFooter } from "./transaction/QueueFooter";
 import { RememberToggle } from "./transaction/RememberToggle";
 import { SpendTypePicker } from "./transaction/SpendTypePicker";
 import { type ResultadoDoNome, TitleCard } from "./transaction/TitleCard";
-import { temTipoDeGasto } from "./transaction/view-model";
+import { linhaDeData, temTipoDeGasto } from "./transaction/view-model";
 
 // Pix enviado (TASK-0404): o detalhe de um Pix (ou TED) de saída de conta. Tudo grava na hora, menos o rodapé: "Lembrar"
 // só cria a regra pelo POST /api/rules da TASK-0302. Em modo fila (?fila=1), o rodapé leva ao próximo item.
@@ -192,6 +193,13 @@ export function PixEnviado() {
       ? `${fila.estado.position} de ${fila.estado.total} para categorizar`
       : undefined;
   const ehPagamento = dados?.isCardPayment === true;
+  // A linha de data do Pix diz de qual instituição saiu o dinheiro (TASK-0404).
+  const linhaPix =
+    dados !== null
+      ? `${linhaDeData({ ...dados, card: null, account: null }, hoje)}${
+          dados.origin?.institution ? ` · saiu do ${dados.origin.institution}` : ""
+        }`
+      : undefined;
 
   return (
     <section className="flex min-h-dvh flex-col bg-bg">
@@ -200,6 +208,13 @@ export function PixEnviado() {
         title={titulo}
         subtitle={subtitulo}
         back={{ to: emFila ? "/para-categorizar" : voltarPara, label: "Voltar", aoClicar: voltar }}
+        actions={
+          dados !== null ? (
+            <span className="rounded-full bg-white/20 px-3 py-1 text-[12px] font-bold text-white">
+              {dados.movement === "ted_enviada" ? "TED" : "PIX"}
+            </span>
+          ) : undefined
+        }
         overlap
       />
 
@@ -221,8 +236,21 @@ export function PixEnviado() {
       {estado === "pronta" && dados !== null && (
         <div className="mx-auto -mt-11 grid w-full max-w-[1120px] items-start gap-5 px-4 pb-8 tablet:grid-cols-2 tablet:px-6 desktop:grid-cols-3">
           <div className="flex min-w-0 flex-col gap-5">
-            <TitleCard detalhe={dados} hoje={hoje} aoSalvarNome={salvarNome} />
-            {!ehPagamento && <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />}
+            <TitleCard
+              detalhe={dados}
+              hoje={hoje}
+              aoSalvarNome={salvarNome}
+              avatar={{ iniciais: iniciaisDe(dados.counterparty?.name ?? null) }}
+              linhaDaData={linhaPix}
+            />
+            {!ehPagamento && (
+              <CategoryCard
+                detalhe={dados}
+                aba={aba}
+                temHistorico={temHistorico}
+                prefixoSemCategoria="Pix não diz o que foi. "
+              />
+            )}
           </div>
 
           <div className="flex min-w-0 flex-col gap-5">
@@ -233,6 +261,7 @@ export function PixEnviado() {
             ) : (
               temTipoDeGasto(dados) && (
                 <SpendTypePicker
+                  kind="pix"
                   detalhe={dados}
                   erro={erroDe.tipo ?? null}
                   aoEscolher={(tipo: SpendType) =>
@@ -280,6 +309,7 @@ export function PixEnviado() {
                 <HideToggle
                   hidden={dados.hidden}
                   erro={erroDe.ocultar ?? null}
+                  texto="Para Pix feito por outra pessoa ou em nome dela. Continua no extrato, mas sai dos totais, gráficos e insights."
                   aoMudar={(oculta) =>
                     void gravar(
                       "ocultar",
