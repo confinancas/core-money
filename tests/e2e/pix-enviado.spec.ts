@@ -109,3 +109,17 @@ for (const largura of LARGURAS) {
     });
   });
 }
+
+// Capturas da janela (TASK-0404, item 7): só quando MM_CAPTURAS_0404 aponta uma pasta. Sem fullPage.
+const PASTA_DAS_CAPTURAS = process.env.MM_CAPTURAS_0404;
+for (const largura of LARGURAS) {
+  test(`captura ${largura}`, async ({ page }) => {
+    test.skip(!PASTA_DAS_CAPTURAS, "sem MM_CAPTURAS_0404");
+    await page.setViewportSize({ width: largura, height: 900 });
+    await signUpAndSignIn(page);
+    await page.goto("/pix/e2e-px-1");
+    await esperaPix(page);
+    await expect(page.getByText("[TEST] JOAO P SILVA").first()).toBeVisible();
+    await page.screenshot({ path: `${PASTA_DAS_CAPTURAS}/pix-enviado-${largura}.png` });
+  });
+}
