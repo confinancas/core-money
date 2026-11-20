@@ -340,3 +340,52 @@ test("cenário 26: sem a chave do Claude, a tela oferece colar a chave e não ac
   await expect(page.getByRole("button", { name: /^Confirmar/ })).toHaveCount(0);
   await expect(page.getByText("Sem sugestão · toque para escolher")).toHaveCount(2);
 });
+
+// Rodada 2, B1: com contagens de três algarismos em todas as abas, o segmentado cabe na pílula e não invade a lista.
+// Semeia 100 compras de cartão, 100 Pix e 100 entradas de uma vez (um comando SQL), com as duas linhas da semente.
+test("B1: três algarismos nas abas, o segmentado cabe na pílula e não invade a lista", async ({ page }) => {
+  executaSql(
+    "pronta",
+    [
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100)
+       INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, movement, occurred_at, local_date,
+         amount_cents, original_description, establishment_key, counterparty_name, ai_category_id, last_seen_at)
+       SELECT 'e2e-pc-c' || i, ${q(LAR)}, '[TEST] ext-c' || i, ${q(BANCO)}, NULL, ${q(CARTAO)}, 'compra', ${q("2026-11-11T00:00:00.000Z")},
+         '2026-11-05', -1000 - i, '[TEST] Compra muitas ' || i, 'TEST MUITAS C ' || i, NULL, NULL, ${q("2026-11-11T00:00:00.000Z")} FROM n`,
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100)
+       INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, movement, occurred_at, local_date,
+         amount_cents, original_description, establishment_key, counterparty_name, ai_category_id, last_seen_at)
+       SELECT 'e2e-pc-p' || i, ${q(LAR)}, '[TEST] ext-p' || i, ${q(BANCO)}, ${q(CONTA)}, NULL, 'pix_enviado', ${q("2026-11-11T00:00:00.000Z")},
+         '2026-11-05', -1000 - i, '[TEST] Pix muitos ' || i, 'TEST MUITAS P ' || i, '[TEST] Pessoa ' || i, NULL, ${q("2026-11-11T00:00:00.000Z")} FROM n`,
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100)
+       INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, movement, occurred_at, local_date,
+         amount_cents, original_description, establishment_key, counterparty_name, ai_category_id, last_seen_at)
+       SELECT 'e2e-pc-e' || i, ${q(LAR)}, '[TEST] ext-e' || i, ${q(BANCO)}, ${q(CONTA)}, NULL, 'pix_recebido', ${q("2026-11-11T00:00:00.000Z")},
+         '2026-11-05', 1000 + i, '[TEST] Entrada muitas ' || i, 'TEST MUITAS E ' || i, '[TEST] Remetente ' || i, NULL, ${q("2026-11-11T00:00:00.000Z")} FROM n`,
+    ].join(";\n"),
+  );
+  await abre(page);
+  await expect(page.getByRole("radio", { name: /^Cartão \d{3}$/ })).toBeVisible();
+  const larguraDaJanela = page.viewportSize()?.width ?? 0;
+  for (const rotulo of [/^Todos \d{3}$/, /^Pix \d{3}$/, /^Cartão \d{3}$/, /^Entradas \d{3}$/]) {
+    await expect(page.getByRole("radio", { name: rotulo })).toBeVisible();
+  }
+  const grupo = await page.getByRole("radiogroup", { name: "Filtrar" }).boundingBox();
+  expect(grupo).toBeTruthy();
+  for (const botao of await page.getByRole("radio").all()) {
+    const caixa = await botao.boundingBox();
+    expect(caixa).toBeTruthy();
+    expect(caixa!.x).toBeGreaterThanOrEqual(grupo!.x - 1);
+    expect(caixa!.x + caixa!.width).toBeLessThanOrEqual(grupo!.x + grupo!.width + 1);
+  }
+  if (larguraDaJanela >= 1200) {
+    const lista = await page.getByTestId("lista").boundingBox();
+    expect(lista).toBeTruthy();
+    expect(grupo!.x + grupo!.width).toBeLessThanOrEqual(lista!.x + 1);
+  }
+  const semRolagem = await page.evaluate(
+    (larg) => document.documentElement.scrollWidth <= larg,
+    larguraDaJanela,
+  );
+  expect(semRolagem).toBe(true);
+});

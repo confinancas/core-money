@@ -210,7 +210,7 @@ export function ParaCategorizar() {
         )}
       </GreenTop>
 
-      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-4 px-4 tablet:px-6 desktop:grid desktop:grid-cols-[320px_minmax(0,1fr)] desktop:items-start desktop:gap-6">
+      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-4 px-4 tablet:px-6 desktop:grid desktop:grid-cols-[360px_minmax(0,1fr)] desktop:items-start desktop:gap-6">
         <aside className="flex min-w-0 flex-col gap-4">
           {contagens && sugeridas && cartao.modo === "sem_ia" && (
             <Card overlap className="flex items-start gap-3 p-4">
@@ -256,6 +256,7 @@ export function ParaCategorizar() {
             </Card>
           )}
           <Segmented
+            fluido
             label="Filtrar"
             value={filtro}
             onChange={(valor) => setFiltro(valor as FiltroDaFila)}
