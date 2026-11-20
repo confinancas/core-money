@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../../src/worker/app";
 import { createDb } from "../../../src/worker/db/client";
-import { newMeter } from "../../../src/worker/db/metered-d1";
+import { type Meter, newMeter } from "../../../src/worker/db/metered-d1";
 import type { Env } from "../../../src/worker/env";
 import { nomeDaChave } from "../../../src/worker/pluggy/connections";
 import { encryptSecret } from "../../../src/worker/security/crypto";
@@ -236,6 +236,28 @@ describe("GET /api/bank-items/:id (forma e isolamento)", () => {
       ),
     ).toBe(1);
     expect(consultasDeItem).toBe(0);
+  });
+
+  it("o detalhe lê o banco em um lote de 4 leituras (um batch), além da sessão e do portão", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-lote" });
+    const medidor: { ultimo: Meter | null } = { ultimo: null };
+    const medido = createApp({
+      pluggyFetch: fetchPluggy(),
+      agora: () => new Date(AGORA),
+      onMeter: (m) => {
+        medidor.ultimo = m;
+      },
+    });
+    const resposta = await callApi(medido, "GET", `/api/bank-items/${lar.itemId}`, undefined, {
+      cookie: COOKIE,
+    });
+    expect(resposta.status).toBe(200);
+    const m = medidor.ultimo;
+    if (m === null) throw new Error("medidor sem leitura");
+    // Sessão e portão: poucas idas. O detalhe em si são 4 comandos num único batch (uma ida).
+    expect(m.calls).toBeLessThanOrEqual(8);
+    expect(m.statements).toBeGreaterThanOrEqual(4);
+    expect(m.calls).toBeLessThan(m.statements);
   });
 
   it("cenário 12: última execução ok → sem falha e sem botão (failed falso, canRetry falso)", async () => {
