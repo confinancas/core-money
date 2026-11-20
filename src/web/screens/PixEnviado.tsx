@@ -3,14 +3,13 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import type { CorpoDoPatch, DetalheDaCompra } from "../../shared/api/transactions";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { SpendType } from "../../shared/spend-types";
-import { iniciaisDe } from "../../shared/transactions/counterparty";
 import {
   criarRegraDoNome,
   fetchTransaction,
   marcarPagamentoDeCartao,
   patchTransaction,
 } from "../api/transactions";
-import { type Aba, destinoDeVoltar } from "../app/frame/aba";
+import { destinoDeVoltar } from "../app/frame/aba";
 import { useRotaAtual } from "../app/rota-atual";
 import { EmptyState } from "../components/ui/empty-state";
 import { ErrorState } from "../components/ui/error-state";
@@ -193,8 +192,6 @@ export function PixEnviado() {
       ? `${fila.estado.position} de ${fila.estado.total} para categorizar`
       : undefined;
   const ehPagamento = dados?.isCardPayment === true;
-  const categoriaHabilitada = !ehPagamento;
-  const avatar = iniciaisDe(dados?.counterparty?.name ?? null);
 
   return (
     <section className="flex min-h-dvh flex-col bg-bg">

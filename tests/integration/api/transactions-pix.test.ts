@@ -161,7 +161,9 @@ describe("PUT /api/transactions/:id/card-payment (TASK-0404)", () => {
     const lar = await criarLar();
     const pix = await pixEnviado(lar, "[TEST] NU PAGAMENTOS");
     await callApi(appDoLar(lar), "PUT", `/api/transactions/${pix}/card-payment`, { isCardPayment: true });
-    const linhaLigada = await env.DB.prepare("SELECT spend_type, spend_type_source FROM transactions WHERE id = ?")
+    const linhaLigada = await env.DB.prepare(
+      "SELECT spend_type, spend_type_source FROM transactions WHERE id = ?",
+    )
       .bind(pix)
       .first<{ spend_type: string | null; spend_type_source: string | null }>();
     expect(linhaLigada?.spend_type_source).toBeNull();
