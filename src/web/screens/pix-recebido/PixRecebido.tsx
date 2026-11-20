@@ -11,7 +11,7 @@ import {
   saveIncomeClassification,
 } from "../../api/income-classification";
 import { ApiError } from "../../lib/api";
-import { iniciais, rotuloDoDocumento, textoDaData, textoDeEstado, textoDoImpacto } from "./format";
+import { estadoDaEscolha, iniciais, rotuloDoDocumento, textoDaData, textoDoImpacto } from "./format";
 
 // Pix recebido (TASK-0903): a pessoa diz como o Pix conta. A prévia do impacto na renda do ciclo vem do servidor, e nada
 // é gravado até "Salvar classificação". ?voltar=<caminho> e ?opcao=salario|variavel|reembolso|transferencia.
@@ -140,7 +140,7 @@ export function PixRecebido() {
   const dados = estado.dados;
   const t = dados.transaction;
   const entrada = dados.classification;
-  const estadoAtual = textoDeEstado(entrada);
+  const estadoAtual = estadoDaEscolha(opcao, subtipo);
   const reembolso = entrada?.option === "reembolso";
   const transferencia = entrada?.option === "transferencia";
   const impacto = previa ? textoDoImpacto(previa.beforeCents, previa.afterCents) : null;

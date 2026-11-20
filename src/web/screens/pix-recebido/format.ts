@@ -39,7 +39,10 @@ export function textoDeEstado(classificacao: { option: IncomeOption; incomeSubty
       return { texto: "Parte do salário", aviso: false };
     case "variavel":
       return {
-        texto: `Renda variável · ${NOME_DO_SUBTIPO[classificacao.incomeSubtype ?? ""] ?? "Outro"}`,
+        texto:
+          classificacao.incomeSubtype === null
+            ? "Renda variável"
+            : `Renda variável · ${NOME_DO_SUBTIPO[classificacao.incomeSubtype] ?? "Outro"}`,
         aviso: false,
       };
     case "reembolso":
@@ -47,6 +50,14 @@ export function textoDeEstado(classificacao: { option: IncomeOption; incomeSubty
     case "transferencia":
       return { texto: "Não é renda", aviso: false };
   }
+}
+
+// "Como conta" segue a escolha atual da tela (não a classificação salva): sem opção escolhida, "Escolha uma opção".
+export function estadoDaEscolha(
+  opcao: IncomeOption | null,
+  incomeSubtype: string | null,
+): { texto: string; aviso: boolean } {
+  return textoDeEstado(opcao === null ? null : { option: opcao, incomeSubtype });
 }
 
 // Impacto na renda do ciclo: "16.568,70 → 18.068,70". Sem mudança, nada a mostrar (a linha some).

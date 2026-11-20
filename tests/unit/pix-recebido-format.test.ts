@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  estadoDaEscolha,
   iniciais,
   rotuloDoDocumento,
   textoDaData,
@@ -29,6 +30,13 @@ describe("textos do Pix recebido", () => {
     );
     expect(textoDeEstado({ option: "reembolso", incomeSubtype: null }).texto).toBe("Fora dos cálculos");
     expect(textoDeEstado({ option: "transferencia", incomeSubtype: null }).texto).toBe("Não é renda");
+  });
+
+  it("'Como conta' segue a escolha atual da tela, não a classificação salva (rodada E2E)", () => {
+    expect(estadoDaEscolha(null, null)).toEqual({ texto: "Escolha uma opção", aviso: true });
+    expect(estadoDaEscolha("reembolso", null).texto).toBe("Fora dos cálculos");
+    expect(estadoDaEscolha("variavel", null).texto).toBe("Renda variável");
+    expect(estadoDaEscolha("variavel", "cashback").texto).toBe("Renda variável · Cashback");
   });
 
   it("o impacto só aparece quando muda, no formato 'antes → depois'", () => {
