@@ -176,11 +176,16 @@ export function paraDetalhe(linha: LinhaDoDetalhe): DetalheDaCompra {
       }
     : null;
   const origem =
-    linha.account_id !== null ? { institution: linha.account_bank, connectionLabel: linha.connection_label } : null;
+    linha.account_id !== null
+      ? { institution: linha.account_bank, connectionLabel: linha.connection_label }
+      : null;
   const pagamentoDeCartao = linha.movement === "pagamento_fatura";
   // "É pagamento de cartão" só em saída de conta, não ocultada, e sem cartão (a regra da TASK-0404, cenários 16 a 18).
   const podeMarcarPagamento =
-    linha.card_id === null && linha.hidden === 0 && linha.amount_cents < 0 && MOVIMENTOS_DE_SAIDA.includes(movimentoBase);
+    linha.card_id === null &&
+    linha.hidden === 0 &&
+    linha.amount_cents < 0 &&
+    MOVIMENTOS_DE_SAIDA.includes(movimentoBase);
 
   return {
     id: linha.id,

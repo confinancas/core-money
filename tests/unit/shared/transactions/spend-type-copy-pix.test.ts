@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { spendTypeCopy } from "../../../../src/shared/transactions/spend-type-copy";
 import { docKindDe, iniciaisDe } from "../../../../src/shared/transactions/counterparty";
+import { spendTypeCopy } from "../../../../src/shared/transactions/spend-type-copy";
 
 // Pix enviado (TASK-0404): textos do kind 'pix', Metas e Investimentos, docKind e iniciais do avatar.
 describe("spendTypeCopy (pix)", () => {
@@ -17,9 +17,9 @@ describe("spendTypeCopy (pix)", () => {
   });
 
   it("Investimentos em Pix tem a ajuda própria", () => {
-    expect(spendTypeCopy({ type: "investimentos", source: "regra", kind: "pix", categoryName: null }).help).toBe(
-      "Conta como dinheiro guardado. Pix para a corretora já entra aqui sozinho.",
-    );
+    expect(
+      spendTypeCopy({ type: "investimentos", source: "regra", kind: "pix", categoryName: null }).help,
+    ).toBe("Conta como dinheiro guardado. Pix para a corretora já entra aqui sozinho.");
   });
 
   it("categoria no Pix troca 'nesta compra' por 'neste Pix'", () => {

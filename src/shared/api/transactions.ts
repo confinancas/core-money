@@ -82,5 +82,8 @@ export type CorpoDoPatch = z.infer<typeof CorpoDoPatchSchema>;
 
 // PUT /api/transactions/:id/card-payment (TASK-0404): liga ou desliga "É pagamento de cartão".
 export const CorpoDoCardPaymentSchema = z.strictObject({ isCardPayment: z.boolean() });
-export const RespostaDoCardPaymentSchema = z.object({ isCardPayment: z.boolean(), alsoMarked: z.number().int() });
+export const RespostaDoCardPaymentSchema = z.object({
+  isCardPayment: z.boolean(),
+  alsoMarked: z.number().int(),
+});
 export type RespostaDoCardPayment = z.infer<typeof RespostaDoCardPaymentSchema>;

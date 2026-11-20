@@ -39,7 +39,13 @@ type LinhaDoPagamento = {
 
 export async function marcarPagamentoDeCartao(
   db: Db,
-  entrada: { householdId: string; memberId: string; transactionId: string; isCardPayment: boolean; now: Date },
+  entrada: {
+    householdId: string;
+    memberId: string;
+    transactionId: string;
+    isCardPayment: boolean;
+    now: Date;
+  },
 ): Promise<ResultadoDoCardPayment> {
   const { householdId, memberId, transactionId, isCardPayment } = entrada;
   const nowIso = entrada.now.toISOString();

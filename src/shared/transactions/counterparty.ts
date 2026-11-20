@@ -12,7 +12,10 @@ export function docKindDe(mascarado: string | null): "cpf" | "cnpj" | null {
 // Iniciais do avatar: a primeira letra da primeira palavra e da última (uma palavra só dá uma letra). Sem nome, null.
 export function iniciaisDe(nome: string | null): string | null {
   if (nome === null) return null;
-  const palavras = nome.trim().split(/\s+/).filter((p) => p !== "");
+  const palavras = nome
+    .trim()
+    .split(/\s+/)
+    .filter((p) => p !== "");
   if (palavras.length === 0) return null;
   const primeira = palavras[0]?.charAt(0) ?? "";
   const ultima = palavras.length > 1 ? (palavras[palavras.length - 1]?.charAt(0) ?? "") : "";

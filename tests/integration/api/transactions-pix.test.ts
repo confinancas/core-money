@@ -98,7 +98,9 @@ describe("PATCH cardWouldAccept (TASK-0404)", () => {
     expect(aceita?.v).toBe(1);
 
     const compra = await compraNoCartao(lar);
-    const recusa = await callApi(appDoLar(lar), "PATCH", `/api/transactions/${compra}`, { cardWouldAccept: true });
+    const recusa = await callApi(appDoLar(lar), "PATCH", `/api/transactions/${compra}`, {
+      cardWouldAccept: true,
+    });
     expect(recusa.status).toBe(422);
     expect(JSON.stringify(await recusa.json())).toContain("movimento_invalido");
   });

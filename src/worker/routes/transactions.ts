@@ -1,6 +1,10 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { CorpoDoCardPaymentSchema, CorpoDoPatchSchema, NOME_PROPRIO_MAXIMO } from "../../shared/api/transactions";
+import {
+  CorpoDoCardPaymentSchema,
+  CorpoDoPatchSchema,
+  NOME_PROPRIO_MAXIMO,
+} from "../../shared/api/transactions";
 import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
@@ -68,7 +72,8 @@ export function transacoesDetalheRoutes(
       isCardPayment: corpo.data.isCardPayment,
       now: agora(),
     });
-    if (resultado.tipo === "nao_encontrada") return apiError(c, 404, "not_found", "Transação não encontrada.");
+    if (resultado.tipo === "nao_encontrada")
+      return apiError(c, 404, "not_found", "Transação não encontrada.");
     if (resultado.tipo === "recusada") return apiError(c, 422, "movimento_invalido", resultado.mensagem);
     return c.json(resultado.resposta, 200);
   });
