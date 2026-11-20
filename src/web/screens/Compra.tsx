@@ -171,7 +171,7 @@ export function Compra() {
         variant="detail"
         title={titulo}
         back={{ to: voltarPara, label: "Voltar", aoClicar: voltar }}
-        eyebrow={
+        subtitle={
           emFila && fila.estado !== null && fila.estado.position !== null
             ? `${fila.estado.position} de ${fila.estado.total} para categorizar`
             : undefined

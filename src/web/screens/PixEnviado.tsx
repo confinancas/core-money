@@ -12,6 +12,7 @@ import {
 } from "../api/transactions";
 import { type Aba, destinoDeVoltar } from "../app/frame/aba";
 import { useRotaAtual } from "../app/rota-atual";
+import { EmptyState } from "../components/ui/empty-state";
 import { ErrorState } from "../components/ui/error-state";
 import { GreenTop } from "../components/ui/green-top";
 import { SkeletonCard } from "../components/ui/skeleton";
@@ -66,7 +67,7 @@ export function PixEnviado() {
         apiFetch<{
           matchLabel: string;
           rule: { setCategoryId: string | null; setSpendType: string | null } | null;
-        }>(`/api/rules/${encodeURIComponent(transactionId)}/categorization`),
+        }>(`/api/transactions/${encodeURIComponent(transactionId)}/categorization`),
       ]);
       if (esta !== partida.current) return;
       setDados(lida);
@@ -200,7 +201,7 @@ export function PixEnviado() {
       <GreenTop
         variant="detail"
         title={titulo}
-        eyebrow={subtitulo}
+        subtitle={subtitulo}
         back={{ to: emFila ? "/para-categorizar" : voltarPara, label: "Voltar", aoClicar: voltar }}
         overlap
       />
@@ -213,6 +214,11 @@ export function PixEnviado() {
       {estado === "falhou" && (
         <div className="mx-auto -mt-11 w-full max-w-[1120px] px-4 tablet:px-6">
           <ErrorState title="Não deu para abrir este Pix." onRetry={() => void carregar()} />
+        </div>
+      )}
+      {estado === "nao_existe" && (
+        <div className="mx-auto -mt-11 w-full max-w-[1120px] px-4 tablet:px-6">
+          <EmptyState title="Este Pix não existe mais." />
         </div>
       )}
       {estado === "pronta" && dados !== null && (
