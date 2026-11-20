@@ -329,7 +329,8 @@ test("cenário 26: sem a chave do Claude, a tela oferece colar a chave e não ac
   page,
 }) => {
   zeraChavesDaInstalacaoPronta();
-  semeiaFila(DUAS().map((linha) => ({ ...linha, sugestao: false })));
+  // As linhas têm sugestão gravada (ai_category_id): sem a chave, nenhuma aparece nem ganha ✓.
+  semeiaFila(DUAS());
   await abre(page);
   await expect(page.getByText("Sem IA: vocês escolhem cada um.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Colar a chave" })).toHaveAttribute(
@@ -388,4 +389,23 @@ test("B1: três algarismos nas abas, o segmentado cabe na pílula e não invade 
     larguraDaJanela,
   );
   expect(semRolagem).toBe(true);
+});
+
+// Rodada 2, notas do desktop: o cartão de progresso não ocupa a largura toda (cerca de 674 px, como o protótipo) e
+// alinha com o conteúdo; o texto do cartão da IA cabe em quatro linhas ou menos, em todas as larguras.
+test("notas: progresso alinhado com o conteúdo no desktop e texto da IA em até quatro linhas", async ({
+  page,
+}) => {
+  await abre(page);
+  const largura = page.viewportSize()?.width ?? 0;
+  const texto = await page.getByText("Confira as sugestões abaixo antes de aceitar.").boundingBox();
+  expect(texto).toBeTruthy();
+  expect(texto!.height).toBeLessThanOrEqual(80);
+  if (largura >= 1200) {
+    const progresso = await page.getByTestId("progresso").boundingBox();
+    const colunaDaEsquerda = await page.getByRole("radiogroup", { name: "Filtrar" }).boundingBox();
+    expect(progresso && colunaDaEsquerda).toBeTruthy();
+    expect(progresso!.width).toBeLessThanOrEqual(680);
+    expect(Math.abs(progresso!.x - colunaDaEsquerda!.x)).toBeLessThanOrEqual(12);
+  }
 });

@@ -184,27 +184,29 @@ export function ParaCategorizar() {
         overlap
       >
         {dados !== null && (
-          <div
-            className="rounded-[22px] border border-white/22 bg-white/14 px-4 py-3.5"
-            data-testid="progresso"
-          >
-            <div className="flex items-baseline justify-between gap-2.5">
-              <span className="text-[14px] font-extrabold">
-                {feitas} de {total ?? 0} categorizados
-              </span>
-              <span className="text-[12px] font-bold text-white/82">
-                {faltam === 0 ? "tudo certo" : `faltam ${faltam}`}
-              </span>
-            </div>
+          <div className="mx-auto w-full max-w-[1120px] px-6">
             <div
-              role="progressbar"
-              aria-label="Progresso"
-              aria-valuemin={0}
-              aria-valuemax={total ?? 0}
-              aria-valuenow={feitas}
-              className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/25"
+              className="rounded-[22px] border border-white/22 bg-white/14 px-4 py-3.5 desktop:max-w-[674px]"
+              data-testid="progresso"
             >
-              <div className="h-full rounded-full bg-white" style={{ width: `${percentual}%` }} />
+              <div className="flex items-baseline justify-between gap-2.5">
+                <span className="text-[14px] font-extrabold">
+                  {feitas} de {total ?? 0} categorizados
+                </span>
+                <span className="text-[12px] font-bold text-white/82">
+                  {faltam === 0 ? "tudo certo" : `faltam ${faltam}`}
+                </span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Progresso"
+                aria-valuemin={0}
+                aria-valuemax={total ?? 0}
+                aria-valuenow={feitas}
+                className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/25"
+              >
+                <div className="h-full rounded-full bg-white" style={{ width: `${percentual}%` }} />
+              </div>
             </div>
           </div>
         )}
