@@ -436,13 +436,13 @@ test("visita: sair para o Início e voltar começa uma visita nova", async ({ pa
   await expect(page.getByText(/Categorizados agora · 1/)).toBeVisible();
   await page.getByRole("link", { name: "Início" }).first().click();
   await expect(page).toHaveURL(/\/inicio$/);
+  // A URL troca antes de a tela trocar. Voltar antes de a fila sair da tela não é sair: a mesma tela continua, com a
+  // mesma visita (era a falha da primeira tentativa no CI). Só volta depois que a fila desmontou.
+  await expect(page.getByTestId("progresso")).toHaveCount(0);
   await page.goBack();
   await expect(page.getByRole("heading", { name: "Para categorizar" })).toBeVisible();
   // A fila carregou quando o filtro mostra a contagem atual (uma linha): só então a visita é conferida.
   await expect(page.getByRole("radio", { name: /^Todos 1$/ })).toBeVisible({ timeout: 15000 });
-  // expect.poll mostra o texto real do progresso se a visita não zerou (diagnóstico do CI).
-  await expect
-    .poll(async () => (await page.getByTestId("progresso").textContent()) ?? "", { timeout: 15000 })
-    .toContain("0 de 1 categorizados");
+  await expect(page.getByTestId("progresso")).toContainText("0 de 1 categorizados");
   await expect(page.getByText(/Categorizados agora/)).toHaveCount(0);
 });

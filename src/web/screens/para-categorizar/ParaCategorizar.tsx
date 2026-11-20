@@ -92,26 +92,12 @@ export function ParaCategorizar() {
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [total, setTotal] = useState<number | null>(() => lerVisita().total);
   const [confirmadas, setConfirmadas] = useState<Confirmada[]>(() => lerVisita().confirmadas);
-  // Depois de sair da fila por navegação, esta instância não grava mais: o React pode executar um efeito de gravação
-  // pendente depois do desmonte, e ele traria a visita de volta.
-  const visitaEncerrada = useRef(false);
   useEffect(() => {
-    if (!visitaEncerrada.current) gravarVisita({ confirmadas, total });
+    gravarVisita({ confirmadas, total });
     return () => {
       // A visita acaba quando a pessoa sai da fila por navegação: na limpeza, o caminho já é outro. Na remontagem por
       // largura (girar o celular), o caminho continua o da fila, e a visita fica.
-      // Na limpeza, a navegação pode ainda não ter trocado o caminho: confere de novo por um pouco. Na remontagem por
-      // largura o caminho continua o da fila, e a visita fica.
-      const inicio = Date.now();
-      const conferir = (): void => {
-        if (window.location.pathname !== CAMINHO_DA_FILA) {
-          visitaEncerrada.current = true;
-          apagarVisita();
-        } else if (Date.now() - inicio < 3000) {
-          window.setTimeout(conferir, 50);
-        }
-      };
-      conferir();
+      if (window.location.pathname !== CAMINHO_DA_FILA) apagarVisita();
     };
   }, [confirmadas, total]);
   const emCurso = useRef(false);
