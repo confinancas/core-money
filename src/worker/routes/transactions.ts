@@ -1,9 +1,10 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { CorpoDoPatchSchema, NOME_PROPRIO_MAXIMO } from "../../shared/api/transactions";
+import { CorpoDoCardPaymentSchema, CorpoDoPatchSchema, NOME_PROPRIO_MAXIMO } from "../../shared/api/transactions";
 import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
+import { marcarPagamentoDeCartao } from "../transactions/card-payment";
 import { getTransactionDetail, patchTransaction } from "../transactions/detail";
 
 // Compra (TASK-0403): GET /api/transactions/:id e PATCH /api/transactions/:id. Sessão obrigatória, e tudo do lar da
@@ -12,7 +13,10 @@ import { getTransactionDetail, patchTransaction } from "../transactions/detail";
 
 const dadosInvalidos = (c: Context<AppEnv>) => apiError(c, 400, "dados_invalidos", "Dados inválidos.");
 
-export function transacoesDetalheRoutes(resolveSession: SessionResolver): Hono<AppEnv> {
+export function transacoesDetalheRoutes(
+  resolveSession: SessionResolver,
+  agora: () => Date = () => new Date(),
+): Hono<AppEnv> {
   const rotas = new Hono<AppEnv>();
   rotas.use(requireHousehold(resolveSession));
 
@@ -44,6 +48,29 @@ export function transacoesDetalheRoutes(resolveSession: SessionResolver): Hono<A
       return apiError(c, 404, "not_found", "Transação não encontrada.");
     if (resultado.tipo === "recusada") return apiError(c, 422, resultado.codigo, resultado.mensagem);
     return c.json(resultado.detalhe, 200);
+  });
+
+  // "É pagamento de cartão" (TASK-0404): liga ou desliga; 422 fora de saída de conta.
+  rotas.put("/:id/card-payment", async (c) => {
+    const { householdId, memberId } = getSession(c);
+    let bruto: unknown;
+    try {
+      bruto = await c.req.json();
+    } catch {
+      return dadosInvalidos(c);
+    }
+    const corpo = CorpoDoCardPaymentSchema.safeParse(bruto);
+    if (!corpo.success) return dadosInvalidos(c);
+    const resultado = await marcarPagamentoDeCartao(c.var.db, {
+      householdId,
+      memberId,
+      transactionId: c.req.param("id"),
+      isCardPayment: corpo.data.isCardPayment,
+      now: agora(),
+    });
+    if (resultado.tipo === "nao_encontrada") return apiError(c, 404, "not_found", "Transação não encontrada.");
+    if (resultado.tipo === "recusada") return apiError(c, 422, "movimento_invalido", resultado.mensagem);
+    return c.json(resultado.resposta, 200);
   });
 
   return rotas;
