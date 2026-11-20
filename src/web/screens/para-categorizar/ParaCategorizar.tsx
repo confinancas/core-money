@@ -184,7 +184,7 @@ export function ParaCategorizar() {
         overlap
       >
         {dados !== null && (
-          <div className="mx-auto w-full max-w-[1120px] px-6">
+          <div className="mx-auto w-full max-w-[1120px] desktop:px-6">
             <div
               className="rounded-[22px] border border-white/22 bg-white/14 px-4 py-3.5 desktop:max-w-[674px]"
               data-testid="progresso"
