@@ -2,6 +2,7 @@
 // Todas exigem sessão e trabalham no lar da sessão: banco de outro lar responde 404, antes de qualquer efeito.
 // "Baixar agora" fica em sync/routes.ts (TASK-0205).
 import { Hono } from "hono";
+import { MAXIMO_DE_BANCOS_ATIVOS, MENSAGEM_LIMITE_DO_PLUGGY } from "../../shared/pluggy-api";
 import type { Db } from "../db/client";
 import type { AppEnv, Env } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
@@ -134,6 +135,14 @@ export function bankItemsRoutes(
     if (!banco) return apiError(c, 404, "banco_nao_encontrado", "Banco não encontrado.");
     if (banco.disconnected_at === null)
       return apiError(c, 409, "banco_conectado", "Este banco já está conectado.");
+    // Limite do Meu Pluggy gratuito (A1, Fable): os bancos ativos da conexão, contados antes de voltar este.
+    const ativos = await c.var.db.$client
+      .prepare("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL")
+      .bind(banco.connection_id)
+      .first<{ n: number }>();
+    if ((ativos?.n ?? 0) >= MAXIMO_DE_BANCOS_ATIVOS) {
+      return apiError(c, 409, "limite_meu_pluggy", MENSAGEM_LIMITE_DO_PLUGGY);
+    }
     await c.var.db.$client
       .prepare("UPDATE bank_items SET disconnected_at = NULL, status = 'ativo' WHERE id = ?")
       .bind(bankItemId)

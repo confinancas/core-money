@@ -461,3 +461,42 @@ describe("desconectar e conectar de novo (cenários 9 e 10)", () => {
     expect(resposta).toMatchObject({ status: 409, corpo: { error: "banco_conectado" } });
   });
 });
+
+describe("conectar de novo respeita o limite de 5 bancos ativos da conexão (A1, Fable)", () => {
+  it("cinco ativos, desconecta um, entra um novo (cinco de novo): conectar o primeiro de volta → 409 limite_meu_pluggy", async () => {
+    const lar = await semearBancoDoLar({ passkey: "cred-TEST-0206-limite" });
+    for (let i = 0; i < 4; i++) {
+      await env.DB.prepare(
+        `INSERT INTO bank_items (id, connection_id, institution_name, institution_color, consent_expires_at, last_sync_at,
+           status, disconnected_at, created_at) VALUES (?, ?, '[TEST] Banco extra', NULL, NULL, NULL, 'ativo', NULL, ?)`,
+      )
+        .bind(crypto.randomUUID(), lar.connectionId, AGORA)
+        .run();
+    }
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL", lar.connectionId),
+    ).toBe(5);
+    await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/disconnect`);
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL", lar.connectionId),
+    ).toBe(4);
+    await env.DB.prepare(
+      `INSERT INTO bank_items (id, connection_id, institution_name, institution_color, consent_expires_at, last_sync_at,
+         status, disconnected_at, created_at) VALUES (?, ?, '[TEST] Banco novo', NULL, NULL, NULL, 'ativo', NULL, ?)`,
+    )
+      .bind(crypto.randomUUID(), lar.connectionId, AGORA)
+      .run();
+
+    const resposta = await pedir(fetchPluggy(), "POST", `/api/bank-items/${lar.itemId}/reconnect`);
+    expect(resposta).toMatchObject({
+      status: 409,
+      corpo: { error: "limite_meu_pluggy", message: "O Meu Pluggy gratuito aceita até 5 bancos por conta." },
+    });
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE id = ? AND disconnected_at IS NOT NULL", lar.itemId),
+    ).toBe(1);
+    expect(
+      await contagem("SELECT COUNT(*) AS n FROM bank_items WHERE connection_id = ? AND disconnected_at IS NULL", lar.connectionId),
+    ).toBe(5);
+  });
+});
