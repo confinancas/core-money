@@ -122,7 +122,8 @@ export async function marcarPagamentoDeCartao(
       scope: escopo,
       matchValue: chave,
       setCustomName: null,
-      setCategoryId: null,
+      // A categoria que a regra já tinha segue na regra; a escrita (escritaDaRegra) ignora a categoria com movimento.
+      setCategoryId: ativa !== null && ativa.categoriaAtiva ? up.mesclada.setCategoryId : null,
       setSpendType: null,
       setMovement: "pagamento_fatura",
     };
