@@ -34,7 +34,15 @@ async function criarLarComConta(): Promise<{ householdId: string; accountId: str
     upsertAccountsStmts(
       db,
       itemId,
-      [{ id: accountId, kind: "corrente", name: "[TEST] Conta", balance_cents: 100000, overdraft_used_cents: 0 }],
+      [
+        {
+          id: accountId,
+          kind: "corrente",
+          name: "[TEST] Conta",
+          balance_cents: 100000,
+          overdraft_used_cents: 0,
+        },
+      ],
       AGORA,
     ),
   );
@@ -42,7 +50,10 @@ async function criarLarComConta(): Promise<{ householdId: string; accountId: str
 }
 
 // Linha de Pix enviado que está gravada como pagamento_fatura (movement_locked 0, sem categoria, sem tipo).
-async function gravarLinhaReclassificavel(householdId: string, accountId: string): Promise<{ id: string; externalId: string }> {
+async function gravarLinhaReclassificavel(
+  householdId: string,
+  accountId: string,
+): Promise<{ id: string; externalId: string }> {
   const id = crypto.randomUUID();
   const externalId = `[TEST] ext-${crypto.randomUUID()}`;
   await env.DB.prepare(
