@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { todayInSaoPaulo } from "../../src/shared/sao-paulo-date";
 import { executaSql } from "./helpers/db";
 import { semeiaSessaoDaInstalacaoPronta, signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta } from "./helpers/setup";
@@ -21,10 +22,12 @@ const LIMPEZA = [
   `DELETE FROM pluggy_connections WHERE label = '${ROTULO}'`,
 ].join("; ");
 
-// Data de hoje mais N dias, em AAAA-MM-DD (o dia da validade cai à meia-noite UTC, como no Pluggy).
+// Data de hoje mais N dias (o dia da validade cai à meia-noite UTC, como no Pluggy). Hoje é o dia de São Paulo, como na
+// tela: com o dia do UTC, das 21h à meia-noite de Brasília a tela contava um dia a mais ("Faltam 23 dias").
 const diaMaisDias = (dias: number): string => {
-  const data = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
-  return `${data.toISOString().slice(0, 10)}T00:00:00.000Z`;
+  const data = new Date(`${todayInSaoPaulo()}T00:00:00.000Z`);
+  data.setUTCDate(data.getUTCDate() + dias);
+  return data.toISOString();
 };
 
 const diaEMesDeIso = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
