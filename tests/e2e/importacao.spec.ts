@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { executaSql } from "./helpers/db";
+import { consultaSql, executaSql } from "./helpers/db";
 import { semeiaSessaoDaInstalacaoPronta, signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta } from "./helpers/setup";
 
@@ -103,11 +103,16 @@ test("cenário 1: a barra aparece no passo 4, chega a pronto, e a faixa some com
 });
 
 // Teto do dia atingido (60% de 100 mil escritas, orcamento.ts): a primeira fatia que lê o banco pausa a importação até a
-// virada, e a faixa e o passo 4 dizem que ela continua amanhã, no lugar do percentual. A linha de uso do dia é do teste
-// e sai no fim (a usage_daily é compartilhada entre as specs).
+// virada, e a faixa e o passo 4 dizem quando ela volta (hoje ou amanhã, às 21h), no lugar do percentual. A linha de uso do
+// dia é do teste e sai no fim (a usage_daily é compartilhada entre as specs).
 const LIMITE_DO_DIA = 60_000;
+// "hoje" ou "amanhã" conforme a hora em que a spec roda: a regra está na unidade (retomada-da-importacao.test.ts).
+const FRASE_DA_PAUSA = /^A importação continua (hoje|amanhã) às 21h\.$/;
+const EXPLICACAO_DO_TETO =
+  "Para o app caber no plano gratuito da Cloudflare, a importação usa até 60% das gravações do banco por dia. O resto fica para o uso de vocês.";
+const BOTAO_SEGUIR = "Seguir agora · tenho o plano pago";
 
-test("cenário 2: com o teto do dia atingido, a faixa e o passo 4 dizem que a importação continua amanhã", async ({
+test("cenário 2: com o teto do dia atingido, a faixa e o passo 4 dizem quando a importação volta, e oferecem seguir", async ({
   page,
 }) => {
   const dia = new Date().toISOString().slice(0, 10);
@@ -121,17 +126,45 @@ test("cenário 2: com o teto do dia atingido, a faixa e o passo 4 dizem que a im
     await conectaUmBanco(page);
 
     const passoQuatro = page.getByRole("region", { name: "Progresso do histórico" });
-    await expect(passoQuatro.getByText("A importação continua amanhã", { exact: true })).toBeVisible({
-      timeout: 60_000,
-    });
+    await expect(passoQuatro.getByText(FRASE_DA_PAUSA)).toBeVisible({ timeout: 60_000 });
+    await expect(passoQuatro.getByText(EXPLICACAO_DO_TETO)).toBeVisible();
+    await alvoDeNoMinimo44(passoQuatro.getByRole("button", { name: BOTAO_SEGUIR }));
     await expect(passoQuatro.getByRole("progressbar", { name: "Histórico" })).toHaveCount(0);
 
     const faixa = page.getByRole("region", { name: "Importação do histórico" });
-    await expect(faixa.getByText("A importação continua amanhã", { exact: true })).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(faixa.getByText(FRASE_DA_PAUSA)).toBeVisible({ timeout: 30_000 });
     await semRolagemHorizontal(page);
   } finally {
+    executaSql("pronta", `DELETE FROM usage_daily WHERE day = '${dia}'`);
+  }
+});
+
+// Seguir agora (TASK-0209, cenário 3): o botão liga o plano pago, a execução volta na hora, e a barra mostra o andamento
+// de novo. O plano do lar volta ao que era, e a linha de uso do dia sai, no fim (a instância pronta é compartilhada).
+test("cenário 3: 'Seguir agora' liga o plano pago e a barra do histórico volta", async ({ page }) => {
+  const dia = new Date().toISOString().slice(0, 10);
+  const planoAntes = Number(consultaSql("pronta", "SELECT paid_plan FROM households")[0]?.paid_plan ?? 0);
+  try {
+    executaSql(
+      "pronta",
+      `INSERT INTO usage_daily (day, requests, rows_read, rows_written, size_bytes) VALUES ('${dia}', 0, 0, ${LIMITE_DO_DIA}, 0) ON CONFLICT(day) DO UPDATE SET rows_written = excluded.rows_written`,
+    );
+    await signUpAndSignIn(page);
+    await page.goto(ROTA);
+    await conectaUmBanco(page);
+
+    const passoQuatro = page.getByRole("region", { name: "Progresso do histórico" });
+    await expect(passoQuatro.getByText(FRASE_DA_PAUSA)).toBeVisible({ timeout: 60_000 });
+    await passoQuatro.getByRole("button", { name: BOTAO_SEGUIR }).click();
+
+    await expect(passoQuatro.getByRole("progressbar", { name: "Histórico" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(passoQuatro.getByTestId("progresso-do-historico")).toBeVisible();
+    expect(Number(consultaSql("pronta", "SELECT paid_plan FROM households")[0]?.paid_plan)).toBe(1);
+    await semRolagemHorizontal(page);
+  } finally {
+    executaSql("pronta", `UPDATE households SET paid_plan = ${planoAntes}`);
     executaSql("pronta", `DELETE FROM usage_daily WHERE day = '${dia}'`);
   }
 });
