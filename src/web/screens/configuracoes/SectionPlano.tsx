@@ -47,7 +47,8 @@ export function SectionPlano() {
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="text-[15px] font-bold text-ink">Estou no plano pago</span>
             <span className="text-[13px] leading-normal text-ink-2">
-              Desliga os avisos de uso do plano gratuito. O app não descobre o plano sozinho.
+              Desliga os avisos de uso do plano gratuito e o teto diário da importação. O app não descobre o
+              plano sozinho.
             </span>
           </span>
           <Switch

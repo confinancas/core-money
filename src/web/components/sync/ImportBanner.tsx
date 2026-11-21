@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import type { SyncStatusResponse } from "../../../shared/sync-api";
 import { lerEstadoDaImportacao } from "../../api/sync";
+import { PausaDoTeto } from "./PausaDoTeto";
 
 // Faixa da importação do histórico (TASK-0204): em andamento, banco pronto ou banco que não terminou. Fica dentro do
 // AppFrame, no conteúdo (a moldura bare das telas de acesso não a monta). Consulta a cada 10 s, só com a aba visível.
@@ -56,22 +57,33 @@ export function ImportBanner() {
 
   const emAndamento = estado.importing[0];
   if (emAndamento) {
+    // Pausada pelo teto (TASK-0209): a frase de quando volta, e o botão "Seguir agora" no plano gratuito.
+    if (emAndamento.pausada && emAndamento.pausadaAte !== null) {
+      return (
+        <section
+          aria-label="Importação do histórico"
+          className="mx-auto flex w-full flex-col gap-3 border-b border-line bg-surface px-4 py-3 text-[14px]"
+        >
+          <p>Buscando o histórico do {emAndamento.institutionName}</p>
+          <PausaDoTeto
+            pausadaAte={emAndamento.pausadaAte}
+            paidPlan={estado.paidPlan}
+            aoSeguir={() => {
+              void lerEstadoDaImportacao()
+                .then(setEstado)
+                .catch(() => undefined);
+            }}
+          />
+        </section>
+      );
+    }
     return (
       <section
         aria-label="Importação do histórico"
         className="mx-auto flex w-full items-center gap-3 border-b border-line bg-surface px-4 py-3 text-[14px]"
       >
         <p className="flex-1">
-          {emAndamento.pausada ? (
-            <>
-              Buscando o histórico do {emAndamento.institutionName} ·{" "}
-              <span>A importação continua amanhã</span>
-            </>
-          ) : (
-            <>
-              Buscando o histórico do {emAndamento.institutionName} · {emAndamento.progressPct}%
-            </>
-          )}
+          Buscando o histórico do {emAndamento.institutionName} · {emAndamento.progressPct}%
         </p>
       </section>
     );

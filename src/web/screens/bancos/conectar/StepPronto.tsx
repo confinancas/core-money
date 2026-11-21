@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { SyncStatusResponse } from "../../../../shared/sync-api";
 import { lerEstadoDaImportacao } from "../../../api/sync";
 import { IconeCheck } from "../../../components/icons";
+import { PausaDoTeto } from "../../../components/sync/PausaDoTeto";
 import { textoDoPassoPronto } from "./view-model";
 
 type Props = {
@@ -13,11 +15,13 @@ type Props = {
   aoVerEmConfiguracoes: () => void;
 };
 
+type Andamento = { progressPct: number; pausada: boolean; pausadaAte: string | null; paidPlan: boolean };
+
 // Passo 4 (TASK-0203, painel de progresso na TASK-0204): a conta está conectada; enquanto o histórico é buscado, a barra
 // mostra o andamento (consulta /api/sync/status a cada 5 s, com a tela aberta). Pausada pelo teto diário, a barra dá
-// lugar à frase de que a importação continua amanhã.
+// lugar à frase de quando a importação volta, com o botão "Seguir agora" (TASK-0209).
 export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVerEmConfiguracoes }: Props) {
-  const [andamento, setAndamento] = useState<{ progressPct: number; pausada: boolean } | null>(null);
+  const [andamento, setAndamento] = useState<Andamento | null>(null);
   const chave = bancoIds.join(",");
   const progresso = andamento?.progressPct ?? null;
   const pausada = andamento?.pausada ?? false;
@@ -29,10 +33,7 @@ export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVer
       lerEstadoDaImportacao()
         .then((resposta) => {
           if (!ativo) return;
-          const emAndamento = resposta.importing.find((linha) => ids.includes(linha.bankItemId));
-          setAndamento(
-            emAndamento ? { progressPct: emAndamento.progressPct, pausada: emAndamento.pausada } : null,
-          );
+          setAndamento(achaAndamento(resposta, ids));
         })
         .catch(() => undefined);
     };
@@ -43,6 +44,14 @@ export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVer
       window.clearInterval(intervalo);
     };
   }, [chave]);
+
+  // Depois de "Seguir agora", relê o status na hora, sem esperar o intervalo.
+  const atualizar = () => {
+    const ids = chave.split(",").filter((id) => id !== "");
+    void lerEstadoDaImportacao()
+      .then((resposta) => setAndamento(achaAndamento(resposta, ids)))
+      .catch(() => undefined);
+  };
 
   return (
     <div className="flex flex-col items-center gap-5 text-center">
@@ -62,10 +71,12 @@ export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVer
             <span>Buscando o histórico</span>
             {!pausada && <span data-testid="progresso-do-historico">{progresso}%</span>}
           </div>
-          {pausada ? (
-            <p className="text-[14px] leading-normal text-ink-2" data-testid="pausa-do-historico">
-              A importação continua amanhã
-            </p>
+          {pausada && andamento?.pausadaAte ? (
+            <PausaDoTeto
+              pausadaAte={andamento.pausadaAte}
+              paidPlan={andamento.paidPlan}
+              aoSeguir={atualizar}
+            />
           ) : (
             <>
               <div
@@ -95,4 +106,17 @@ export function StepPronto({ rotulo, quantidade, bancoIds, aoIrParaInicio, aoVer
       </div>
     </div>
   );
+}
+
+// A execução em andamento de um dos bancos desta conexão, com o que o passo 4 mostra.
+function achaAndamento(resposta: SyncStatusResponse, ids: string[]): Andamento | null {
+  const emAndamento = resposta.importing.find((linha) => ids.includes(linha.bankItemId));
+  return emAndamento
+    ? {
+        progressPct: emAndamento.progressPct,
+        pausada: emAndamento.pausada,
+        pausadaAte: emAndamento.pausadaAte,
+        paidPlan: resposta.paidPlan,
+      }
+    : null;
 }

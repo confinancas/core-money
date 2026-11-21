@@ -25,7 +25,7 @@ let estado: SyncStatusResponse;
 let consultas: string[];
 
 function sincronizacaoCom(corpo: Partial<SyncStatusResponse>): SyncStatusResponse {
-  return { importing: [], recentlyFinished: [], lastSync: null, banks: [], ...corpo };
+  return { importing: [], recentlyFinished: [], lastSync: null, banks: [], paidPlan: false, ...corpo };
 }
 
 function terminada(
@@ -137,7 +137,7 @@ describe("faixa da importação: os estados", () => {
     expect(screen.queryByRole("link", { name: "Ver banco" })).toBeNull();
   });
 
-  it("importando e pausada pelo teto: diz que a importação continua amanhã, no lugar do percentual", async () => {
+  it("importando e pausada pelo teto: diz quando a importação volta, no lugar do percentual", async () => {
     estado = sincronizacaoCom({
       importing: [{ ...emAndamento(42), pausada: true, pausadaAte: "2026-11-11T00:00:00.000Z" }],
     });
@@ -147,8 +147,10 @@ describe("faixa da importação: os estados", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("A importação continua amanhã")).toBeInTheDocument();
-    expect(faixa()).toHaveTextContent("Buscando o histórico do Banco [TEST] · A importação continua amanhã");
+    // "hoje" ou "amanhã" conforme o relógio: a regra está provada na unidade pura (retomada-da-importacao.test.ts).
+    expect(await screen.findByText(/^A importação continua (hoje|amanhã) às 21h\.$/)).toBeInTheDocument();
+    expect(faixa()).toHaveTextContent("Buscando o histórico do Banco [TEST]");
+    expect(faixa()).toHaveTextContent("Seguir agora · tenho o plano pago");
     expect(screen.queryByText(/42%/)).toBeNull();
   });
 
