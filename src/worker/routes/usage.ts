@@ -12,9 +12,10 @@ import {
   usageDay,
 } from "../../shared/usage";
 import { households } from "../db/schema";
-import type { AppEnv } from "../env";
+import type { AppEnv, Env } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
+import { enviaRetomadas, pausadasDoLar, SQL_RETOMA_PAUSADAS } from "../sync/retomada";
 
 // Uma consulta: o lar (plano pago), o dia de hoje e o último tamanho medido (o maior que zero, o mais recente).
 const SQL_USO = `
@@ -69,7 +70,10 @@ export function usageRoutes(
   return rotas;
 }
 
-export function planoPagoRoutes(resolveSession: SessionResolver): Hono<AppEnv> {
+export function planoPagoRoutes(
+  resolveSession: SessionResolver,
+  agora: () => Date = () => new Date(),
+): Hono<AppEnv> {
   const rotas = new Hono<AppEnv>();
   rotas.use(requireHousehold(resolveSession));
 
@@ -84,10 +88,26 @@ export function planoPagoRoutes(resolveSession: SessionResolver): Hono<AppEnv> {
     const resultado = planoPago.safeParse(corpo);
     if (!resultado.success) return apiError(c, 400, "dados_invalidos", "Dados inválidos.");
 
-    await c.var.db
-      .update(households)
-      .set({ paidPlan: resultado.data.paidPlan })
-      .where(eq(households.id, householdId));
+    if (resultado.data.paidPlan) {
+      // Ligar o plano retoma as importações pausadas pelo teto (TASK-0209): o plano e o heartbeat vão no mesmo lote, e a
+      // próxima fatia de cada uma vai para a fila depois. Uma consulta a mais que o desligar, por consulta fixa.
+      const agoraIso = agora().toISOString();
+      const pausadas = await pausadasDoLar(c.var.db, householdId, agoraIso);
+      const d1 = c.var.db.$client;
+      const comandos = [d1.prepare("UPDATE households SET paid_plan = 1 WHERE id = ?").bind(householdId)];
+      if (pausadas.length > 0) {
+        comandos.push(
+          d1
+            .prepare(SQL_RETOMA_PAUSADAS)
+            .bind(agoraIso, JSON.stringify(pausadas.map((pausada) => pausada.id))),
+        );
+      }
+      await d1.batch(comandos);
+      await enviaRetomadas(c.env as Env, pausadas);
+    } else {
+      // Desligar não pausa nada: o teto volta a valer na próxima fatia.
+      await c.var.db.update(households).set({ paidPlan: false }).where(eq(households.id, householdId));
+    }
     return c.json({ paidPlan: resultado.data.paidPlan }, 200);
   });
 

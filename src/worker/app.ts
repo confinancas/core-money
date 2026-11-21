@@ -140,7 +140,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/", receiptsRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
   app.route("/usage", usageRoutes(resolverDaSessao, options.agora));
-  app.route("/settings/paid-plan", planoPagoRoutes(resolverDaSessao));
+  app.route("/settings/paid-plan", planoPagoRoutes(resolverDaSessao, options.agora));
   app.route(
     "/pluggy-connections",
     pluggyConnectionsRoutes(resolverDaSessao, { agora: options.agora, fetch: options.pluggyFetch }),

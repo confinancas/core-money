@@ -37,4 +37,6 @@ export type SyncStatusResponse = {
   recentlyFinished: ImportacaoTerminada[];
   lastSync: { at: string; banks: string[] } | null;
   banks: BancoDaSincronizacao[];
+  // Plano do lar (TASK-0209): no plano pago, a pausa pelo teto não tem o botão "Seguir agora".
+  paidPlan: boolean;
 };
