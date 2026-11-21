@@ -3,6 +3,7 @@ import { COUNTERPARTY_KEY_SQL, chaveVazia, type RuleScope } from "../../shared/r
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { Db } from "../db/client";
 import { type CandidataDeEntrada, casamentosDoExtrato, type RendaDoExtrato } from "../income/casamento-puro";
+import { classifyIncomeStmts, opcaoDoTipo } from "../income/classification";
 import { escritasDosCasamentos, SQL_RENDAS_DO_EXTRATO } from "../income/statement-match";
 import { applyRuleToTransactionStmt, type RegraParaAplicar } from "./apply";
 import { enqueuePendingStmt, markBackfillStmt } from "./queue";
@@ -48,6 +49,11 @@ type CasamentoDeRegra = {
   set_spend_type: string | null;
   set_movement: string | null;
   categoria_ativa: string | null;
+  // Regra de remetente (TASK-0903): a classificação da entrada e a renda fixa ativa (nula se não há ou está excluída).
+  set_income_kind: string | null;
+  set_income_subtype: string | null;
+  set_fixed_income_id: string | null;
+  renda_ativa: string | null;
 };
 
 // Escopo estabelecimento (compras e saídas de cartão e conta) e destinatário (Pix e TED enviados). Cada transação casa
@@ -57,7 +63,8 @@ type CasamentoDeRegra = {
 // para cada consulta (custo que cresce com a tabela). Leituras medidas: ~9 por transação, em lar de 400 e de 5.200.
 const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.id AS rule_id, r.scope AS scope,
     r.match_value AS match_value, r.set_custom_name AS set_custom_name, r.set_category_id AS set_category_id,
-    r.set_spend_type AS set_spend_type, r.set_movement AS set_movement, c.id AS categoria_ativa
+    r.set_spend_type AS set_spend_type, r.set_movement AS set_movement, c.id AS categoria_ativa,
+    NULL AS set_income_kind, NULL AS set_income_subtype, NULL AS set_fixed_income_id, NULL AS renda_ativa
   FROM json_each(?) AS j
   CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ? AND t.category_id IS NULL
     AND t.movement IN ('compra', 'estorno', 'debito', 'boleto')
@@ -67,13 +74,18 @@ const SQL_CASAMENTOS = `SELECT t.id AS transaction_id, t.card_id AS card_id, r.i
   UNION ALL
   SELECT t.id AS transaction_id, t.card_id AS card_id, r.id AS rule_id, r.scope AS scope,
     r.match_value AS match_value, r.set_custom_name AS set_custom_name, r.set_category_id AS set_category_id,
-    r.set_spend_type AS set_spend_type, r.set_movement AS set_movement, c.id AS categoria_ativa
+    r.set_spend_type AS set_spend_type, r.set_movement AS set_movement, c.id AS categoria_ativa,
+    r.set_income_kind AS set_income_kind, r.set_income_subtype AS set_income_subtype,
+    r.set_fixed_income_id AS set_fixed_income_id, f.id AS renda_ativa
   FROM json_each(?) AS j
   CROSS JOIN transactions AS t ON t.id = j.value AND t.household_id = ? AND t.category_id IS NULL
-    AND t.movement IN ('pix_enviado', 'ted_enviada')
+    AND (t.movement IN ('pix_enviado', 'ted_enviada')
+      OR (t.movement IN ('pix_recebido', 'ted_recebida') AND t.amount_cents > 0 AND t.income_kind IS NULL AND t.removed_at IS NULL))
   JOIN rules AS r ON r.household_id = t.household_id AND r.disabled_at IS NULL
-    AND r.scope = 'destinatario' AND r.match_value = ${COUNTERPARTY_KEY_SQL}
+    AND r.scope = (CASE WHEN t.movement IN ('pix_recebido', 'ted_recebida') THEN 'remetente' ELSE 'destinatario' END)
+    AND r.match_value = ${COUNTERPARTY_KEY_SQL}
   LEFT JOIN categories AS c ON c.id = r.set_category_id AND c.household_id = t.household_id AND c.archived_at IS NULL
+  LEFT JOIN fixed_incomes AS f ON f.id = r.set_fixed_income_id AND f.household_id = t.household_id AND f.archived_at IS NULL
 `;
 
 // As linhas dos ids recebidos: a chave primária, uma vez. Traz o que a fila e o histórico decidem (movimento, valor,
@@ -139,7 +151,42 @@ export async function processNewTransactions(
   const escritas: D1PreparedStatement[] = escritasDosCasamentos(db, householdId, casadas, now);
   const categorizadas = new Set<string>();
   const viraramPagamento = new Set<string>();
+  const porId = new Map(linhas.map((linha) => [linha.id, linha]));
   for (const casamento of casamentos) {
+    // Regra de remetente (TASK-0903): só entrada sem tipo, sem casamento pelo extrato (o extrato tem precedência), e
+    // parte do salário só com renda fixa ativa. A escrita é a da classificação, com categorized_by = 'regra'.
+    if (casamento.scope === "remetente") {
+      const linha = porId.get(casamento.transaction_id);
+      if (!linha || idsCasados.has(casamento.transaction_id) || !ehCandidataDeEntrada(linha)) continue;
+      const opcao = opcaoDoTipo(casamento.set_income_kind);
+      if (opcao === null) continue;
+      if (opcao === "salario" && casamento.renda_ativa === null) continue;
+      escritas.push(
+        ...classifyIncomeStmts(db, householdId, {
+          linha: {
+            id: linha.id,
+            amount_cents: linha.amount_cents,
+            local_date: linha.received_on,
+            cycle_key: linha.cycle_key,
+            income_kind: null,
+            fixed_income_id: null,
+            hidden_reason: null,
+          },
+          classificacao: {
+            option: opcao,
+            fixedIncomeId: opcao === "salario" ? casamento.set_fixed_income_id : null,
+            incomeSubtype: opcao === "variavel" ? casamento.set_income_subtype : null,
+          },
+          by: "regra",
+          confirmedBy: "regra",
+          ruleId: casamento.rule_id,
+          agora: now,
+          modo: "so_sem_classe",
+        }),
+      );
+      categorizadas.add(casamento.transaction_id);
+      continue;
+    }
     const categoriaAtiva = casamento.categoria_ativa !== null && casamento.set_category_id !== null;
     const regra: RegraParaAplicar = {
       id: casamento.rule_id,
@@ -163,7 +210,6 @@ export async function processNewTransactions(
     if (regra.setMovement === PAGAMENTO_DE_FATURA) viraramPagamento.add(casamento.transaction_id);
   }
 
-  const porId = new Map(linhas.map((linha) => [linha.id, linha]));
   const pending: string[] = [];
   const naFila: string[] = [];
   for (const id of ids) {

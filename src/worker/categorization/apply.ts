@@ -115,7 +115,7 @@ function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null 
     sets.push("movement_locked = 1");
     // O tipo padrão que a gravação põe numa saída (TASK-0204, B1-1) sai quando o movimento novo não tem tipo, e
     // quando a regra não grava tipo nem categoria (com categoria, a herança abaixo já regrava o tipo).
-    if (regra.setSpendType === null && regra.setCategoryId === null) {
+    if (regra.setSpendType === null && regra.setCategoryId === null && regra.scope !== "remetente") {
       const classe = classeDeTipoPadrao(regra.setMovement ?? "");
       const semTipo = "spend_type_source = 'padrao' AND NOT ((amount_cents < 0 AND ?) OR ?)";
       sets.push(`spend_type = CASE WHEN ${semTipo} THEN NULL ELSE spend_type END`);
@@ -129,7 +129,8 @@ function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null 
     params.push(regra.setCategoryId);
     // Sem tipo na regra, o tipo vem da categoria que ela grava (herança, na mesma instrução).
     if (regra.setSpendType === null) {
-      const herdado = tipoPelaCategoria(regra.setCategoryId);
+      // TASK-0903: regra de remetente grava categoria só em entrada, e entrada não tem tipo de gasto (soSaidas).
+      const herdado = tipoPelaCategoria(regra.setCategoryId, regra.scope === "remetente");
       sets.push(...herdado.sets);
       params.push(...herdado.params);
     }

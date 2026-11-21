@@ -64,7 +64,7 @@ export function acceptSuggestions(transactionIds: string[]): Promise<RespostaDoA
 }
 
 export function undoCategorization(
-  items: { transactionId: string; categoryId: string }[],
+  items: { transactionId: string; categoryId: string | null }[],
 ): Promise<RespostaDoDesfazer> {
   return apiFetch<RespostaDoDesfazer>("/api/categorization/undo", {
     method: "POST",

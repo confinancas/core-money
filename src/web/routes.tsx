@@ -27,6 +27,7 @@ import { TiposGasto } from "./screens/configuracoes/TiposGasto";
 import { Login } from "./screens/Login";
 import { NotificacoesPage } from "./screens/notificacoes/NotificacoesPage";
 import { ParaCategorizar } from "./screens/para-categorizar/ParaCategorizar";
+import { PixRecebido } from "./screens/pix-recebido/PixRecebido";
 import { Recuperar } from "./screens/Recuperar";
 import { RendaFixa } from "./screens/renda/RendaFixa";
 import { RequireSession } from "./session/RequireSession";
@@ -89,7 +90,7 @@ export const ROTAS: RotaDaTabela[] = [
     frame: "detail",
     tab: "renda",
     title: "Pix recebido",
-    element: provisoria,
+    element: <PixRecebido />,
   },
   { path: "/renda/fixa", frame: "detail", tab: "renda", title: "Renda fixa", element: <RendaFixa /> },
 

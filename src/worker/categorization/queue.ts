@@ -3,6 +3,7 @@
 // SQL usam o alias t da tabela transactions e o alias q da categorization_queue.
 import { NEEDS_CATEGORY_SQL, NEEDS_INCOME_SQL } from "../../shared/categorization";
 import type { Db } from "../db/client";
+import { historicoDaEntradaStmts } from "../income/classification-entradas";
 import { applyAiSuggestionStmt } from "./apply";
 import type { LinhaParaIA } from "./context";
 import type { GravavelDaIA } from "./output-schema";
@@ -146,6 +147,10 @@ export function gravarRespostaStmts(
           now: entrada.now,
         }),
       );
+    }
+    // Entrada de ciclo antigo com sugestão de renda (TASK-0903): classifica direto, sem fila.
+    if (g.aiIncomeKind !== null) {
+      comandos.push(...historicoDaEntradaStmts(db, entrada.householdId, item.id, entrada.now));
     }
     comandos.push(
       db.$client.prepare("DELETE FROM categorization_queue WHERE transaction_id = ?").bind(item.id),

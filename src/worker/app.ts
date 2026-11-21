@@ -15,6 +15,7 @@ import type { AppEnv } from "./env";
 import type { SessionResolver } from "./household/context";
 import { apiError } from "./http/errors";
 import { sameOrigin } from "./http/same-origin";
+import { classificacaoDeEntradaRoutes } from "./income/classification-routes";
 import { fixedIncomesRoutes } from "./income/fixed-incomes-routes";
 import { receiptsRoutes } from "./income/receipts-routes";
 import { membersRoutes } from "./members/routes";
@@ -131,6 +132,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/ai-rules-document", aiRulesDocumentRoutes(resolverDaSessao, options.agora));
   app.route("/categorization", statusRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
+  app.route("/transactions", classificacaoDeEntradaRoutes(resolverDaSessao, options.agora));
   app.route("/categorization", categorizacaoRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesDetalheRoutes(resolverDaSessao));
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
