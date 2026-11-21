@@ -64,6 +64,11 @@ describe("DetalheDaCompraSchema", () => {
       account: null,
       bill: null,
       cycle: null,
+      counterparty: null,
+      origin: null,
+      cardWouldAccept: false,
+      isCardPayment: false,
+      canMarkCardPayment: false,
     };
     const com = (confidence: string) =>
       DetalheDaCompraSchema.safeParse({

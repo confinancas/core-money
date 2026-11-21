@@ -26,6 +26,7 @@ import { Regras } from "./screens/configuracoes/regras/Regras";
 import { TiposGasto } from "./screens/configuracoes/TiposGasto";
 import { Login } from "./screens/Login";
 import { NotificacoesPage } from "./screens/notificacoes/NotificacoesPage";
+import { PixEnviado } from "./screens/PixEnviado";
 import { ParaCategorizar } from "./screens/para-categorizar/ParaCategorizar";
 import { Recuperar } from "./screens/Recuperar";
 import { RendaFixa } from "./screens/renda/RendaFixa";
@@ -79,7 +80,13 @@ export const ROTAS: RotaDaTabela[] = [
     title: "Para categorizar",
     element: <ParaCategorizar />,
   },
-  { path: "/pix/:transactionId", frame: "detail", tab: "inicio", title: "Pix enviado", element: provisoria },
+  {
+    path: "/pix/:transactionId",
+    frame: "detail",
+    tab: "inicio",
+    title: "Pix enviado",
+    element: <PixEnviado />,
+  },
 
   { path: "/cartoes/:cardId", frame: "detail", tab: "cartoes", title: "Cartão", element: <Cartao /> },
   { path: "/compras/:transactionId", frame: "detail", tab: "cartoes", title: "Compra", element: <Compra /> },

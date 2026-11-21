@@ -36,6 +36,11 @@ const BASE: DetalheDaCompra = {
   account: null,
   bill: { closesOn: "2026-11-03", dueOn: "2026-11-10" },
   cycle: { key: "2026-10", startsOn: "2026-10-11", endsOn: "2026-11-10" },
+  counterparty: null,
+  origin: null,
+  cardWouldAccept: false,
+  isCardPayment: false,
+  canMarkCardPayment: false,
 };
 
 const com = (extra: Partial<DetalheDaCompra>): DetalheDaCompra => ({ ...BASE, ...extra });
