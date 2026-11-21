@@ -91,15 +91,16 @@ export function eventosDaRequisicao(objetos) {
   for (const evento of objetos) {
     const requisicao = evento?.event?.request;
     if (typeof requisicao?.method !== "string" || typeof requisicao?.url !== "string") continue;
-    let pathname;
+    let url;
     try {
-      pathname = new URL(requisicao.url).pathname;
+      url = new URL(requisicao.url);
     } catch {
       continue;
     }
     eventos.push({
       method: requisicao.method,
-      pathname,
+      pathname: url.pathname,
+      search: url.search,
       ts: Number(evento.eventTimestamp ?? 0),
       cpu: evento.cpuTime,
     });
@@ -114,11 +115,18 @@ export function padraoDoCaminho(caminho) {
   return new RegExp(`^${escapado.split("\\{i\\}").join("\\d+").split("\\{id\\}").join("[^/]+")}$`);
 }
 
-// Os eventos da rota (mesmo método, caminho casando com o padrão), em ordem de chegada.
+// Os eventos da rota (mesmo método, caminho casando com o padrão), em ordem de chegada. Rota com consulta (`?`) casa
+// com o caminho e a consulta do evento, e assim `/fila` e `/fila?filtro=pix` são rotas separadas; rota sem consulta casa
+// só com o caminho, como antes.
 export function eventosDaRota(rota, eventos) {
   const padrao = padraoDoCaminho(rota.path);
+  const comConsulta = rota.path.includes("?");
   return eventos
-    .filter((evento) => evento.method === rota.method && padrao.test(evento.pathname))
+    .filter(
+      (evento) =>
+        evento.method === rota.method &&
+        padrao.test(comConsulta ? `${evento.pathname}${evento.search ?? ""}` : evento.pathname),
+    )
     .sort((a, b) => a.ts - b.ts);
 }
 
