@@ -89,6 +89,19 @@ test.describe("Pix recebido", () => {
   }, info) => {
     const id = `e2e-pix-reembolso-${info.project.name}`;
     semeiaPix(id, 90_000, "[TEST] Beltrana Pix");
+    // A instância pronta é compartilhada: outras specs cadastram rendas fixas nela. Este teste só precisa que o lar
+    // não tenha renda ativa; arquiva as que existem agora e desarquiva só esses ids no fim (não apaga nada).
+    const ativas = consultaSql(
+      "pronta",
+      `SELECT id FROM fixed_incomes WHERE household_id = ${q(LAR)} AND archived_at IS NULL`,
+    ).map((linha) => String(linha.id));
+    const lista = ativas.map((rendaId) => q(rendaId)).join(", ");
+    if (ativas.length > 0) {
+      executaSql(
+        "pronta",
+        `UPDATE fixed_incomes SET archived_at = ${q(new Date().toISOString())} WHERE id IN (${lista})`,
+      );
+    }
     try {
       await abreA(page, `/pix-recebido/${id}?voltar=/renda`);
       await page.getByRole("radio", { name: /Reembolso de terceiros/ }).check();
@@ -98,6 +111,9 @@ test.describe("Pix recebido", () => {
       await expect(page.getByText("Nenhuma renda fixa cadastrada.")).toBeVisible();
     } finally {
       limpaPix(id);
+      if (ativas.length > 0) {
+        executaSql("pronta", `UPDATE fixed_incomes SET archived_at = NULL WHERE id IN (${lista})`);
+      }
     }
   });
 
