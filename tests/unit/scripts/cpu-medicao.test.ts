@@ -206,7 +206,11 @@ describe("junção dos eventos e nova tentativa (evento perdido)", () => {
 
 describe("rota com consulta", () => {
   const GET_FILA: Rota = { name: "GET fila", method: "GET", path: "/api/categorization/queue" };
-  const GET_FILA_PIX: Rota = { name: "GET fila pix", method: "GET", path: "/api/categorization/queue?filtro=pix" };
+  const GET_FILA_PIX: Rota = {
+    name: "GET fila pix",
+    method: "GET",
+    path: "/api/categorization/queue?filtro=pix",
+  };
   const GET_RENDA: Rota = { name: "GET renda", method: "GET", path: "/api/cycle/income?cycleKey=2026-10" };
 
   it("a rota com consulta casa com o caminho e a consulta do evento", () => {
