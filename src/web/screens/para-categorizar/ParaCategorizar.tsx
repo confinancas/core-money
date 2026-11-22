@@ -23,6 +23,7 @@ import { GreenTop } from "../../components/ui/green-top";
 import { Segmented } from "../../components/ui/segmented";
 import { SkeletonCard } from "../../components/ui/skeleton";
 import { categoriaDaSugestao, QueueRow, textoDaSugestao } from "./QueueRow";
+import { gravarVisita, lerVisita } from "./visita";
 
 // Tela Para categorizar (TASK-0304). Celular e tablet: uma coluna, como o protótipo. Desktop: cartão da IA e filtros à
 // esquerda, lista à direita. Cada confirmação fica em "Categorizados agora" com o seu Desfazer, na visita.
@@ -45,41 +46,6 @@ type Confirmada = {
   iguais: number;
 };
 
-const CHAVE_DA_VISITA = "mm.para-categorizar.visita";
-const CAMINHO_DA_FILA = "/para-categorizar";
-
-type VisitaGuardada = { confirmadas: Confirmada[]; total: number | null };
-
-function lerVisita(): VisitaGuardada {
-  try {
-    const bruto = sessionStorage.getItem(CHAVE_DA_VISITA);
-    if (!bruto) return { confirmadas: [], total: null };
-    const v = JSON.parse(bruto) as Partial<VisitaGuardada>;
-    return {
-      confirmadas: Array.isArray(v.confirmadas) ? v.confirmadas : [],
-      total: typeof v.total === "number" ? v.total : null,
-    };
-  } catch {
-    return { confirmadas: [], total: null };
-  }
-}
-
-function apagarVisita(): void {
-  try {
-    sessionStorage.removeItem(CHAVE_DA_VISITA);
-  } catch {
-    // Sem armazenamento, não há o que apagar.
-  }
-}
-
-function gravarVisita(visita: VisitaGuardada): void {
-  try {
-    sessionStorage.setItem(CHAVE_DA_VISITA, JSON.stringify(visita));
-  } catch {
-    // Sem armazenamento: a visita vale só nesta montagem.
-  }
-}
-
 export function ParaCategorizar() {
   const features = useFeatures();
   const [filtro, setFiltro] = useState<FiltroDaFila>("todos");
@@ -90,15 +56,12 @@ export function ParaCategorizar() {
   const [falhouAcao, setFalhouAcao] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [carregandoMais, setCarregandoMais] = useState(false);
-  const [total, setTotal] = useState<number | null>(() => lerVisita().total);
-  const [confirmadas, setConfirmadas] = useState<Confirmada[]>(() => lerVisita().confirmadas);
+  const [total, setTotal] = useState<number | null>(() => lerVisita<Confirmada>().total);
+  const [confirmadas, setConfirmadas] = useState<Confirmada[]>(() => lerVisita<Confirmada>().confirmadas);
+  // A visita fica guardada para sobreviver à remontagem por largura (girar o celular). Quem a encerra ao sair da fila é a
+  // moldura (encerrarVisitaForaDaFila em Moldura.tsx); aqui só se grava, e só no caminho da fila (visita.ts).
   useEffect(() => {
-    gravarVisita({ confirmadas, total });
-    return () => {
-      // A visita acaba quando a pessoa sai da fila por navegação: na limpeza, o caminho já é outro. Na remontagem por
-      // largura (girar o celular), o caminho continua o da fila, e a visita fica.
-      if (window.location.pathname !== CAMINHO_DA_FILA) apagarVisita();
-    };
+    gravarVisita({ confirmadas, total }, window.location.pathname);
   }, [confirmadas, total]);
   const emCurso = useRef(false);
   const maisEmCurso = useRef(false);
