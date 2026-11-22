@@ -41,7 +41,7 @@ export type RespostaDaFila = {
 
 export type RespostaDoAceite = {
   accepted: { transactionId: string; categoryId: string | null; ruleId: string | null }[];
-  alsoResolved: { transactionId: string; categoryId: string; ruleId: string | null }[];
+  alsoResolved: { transactionId: string; categoryId: string | null; ruleId: string | null }[];
   skipped: string[];
 };
 
