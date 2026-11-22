@@ -204,6 +204,38 @@ describe("junção dos eventos e nova tentativa (evento perdido)", () => {
   });
 });
 
+describe("rota com consulta", () => {
+  const GET_FILA: Rota = { name: "GET fila", method: "GET", path: "/api/categorization/queue" };
+  const GET_FILA_PIX: Rota = {
+    name: "GET fila pix",
+    method: "GET",
+    path: "/api/categorization/queue?filtro=pix",
+  };
+  const GET_RENDA: Rota = { name: "GET renda", method: "GET", path: "/api/cycle/income?cycleKey=2026-10" };
+
+  it("a rota com consulta casa com o caminho e a consulta do evento", () => {
+    const objetos = rodadas(GET_RENDA, () => "/api/cycle/income?cycleKey=2026-10", 1000);
+    const resultado = mediaTail([GET_RENDA], textoDe(objetos));
+    expect(resultado[0].faltou).toBe(false);
+    expect(resultado[0].n).toBe(10);
+  });
+
+  it("a mesma rota com e sem consulta fica separada, cada uma com os seus eventos", () => {
+    const objetos = [
+      ...rodadas(GET_FILA, () => "/api/categorization/queue", 1000),
+      // A versão com filtro tem CPU de 50 ms: não pode subir a máxima da versão sem filtro.
+      ...Array.from({ length: 12 }, (_, i) =>
+        evento("GET", "/api/categorization/queue?filtro=pix", 2000 + i, 50),
+      ),
+    ];
+    const [semFiltro, comFiltro] = mediaTail([GET_FILA, GET_FILA_PIX], textoDe(objetos));
+    expect(semFiltro.n).toBe(10);
+    expect(semFiltro.maximaMs).toBe(12);
+    expect(comFiltro.n).toBe(10);
+    expect(comFiltro.medianaMs).toBe(50);
+  });
+});
+
 describe("eventosDoTail", () => {
   it("lê objetos concatenados, com ou sem quebra de linha, e deixa de fora o ilegível", () => {
     const texto = `${JSON.stringify(evento("GET", "/api/cards", 1, 2))}{nao e json}\n${JSON.stringify(evento("GET", "/api/cards", 2, 3))}`;
