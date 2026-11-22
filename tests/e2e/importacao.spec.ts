@@ -170,3 +170,34 @@ test("cenário 3: 'Seguir agora' liga o plano pago e a barra do histórico volta
     executaSql("pronta", `DELETE FROM usage_daily WHERE day = '${dia}'`);
   }
 });
+
+// Decisão de Gustavo (2026-11-22): no conectar a faixa não aparece (o passo 4 mostra o bloco); numa tela do app, a faixa
+// pausada tem o "X" (Fechar aviso), que a dispensa, e a dispensa dura depois de recarregar a página.
+test("cenário 4: a faixa não aparece no conectar, e o X a dispensa numa tela do app", async ({ page }) => {
+  const dia = new Date().toISOString().slice(0, 10);
+  try {
+    executaSql(
+      "pronta",
+      `INSERT INTO usage_daily (day, requests, rows_read, rows_written, size_bytes) VALUES ('${dia}', 0, 0, ${LIMITE_DO_DIA}, 0) ON CONFLICT(day) DO UPDATE SET rows_written = excluded.rows_written`,
+    );
+    await signUpAndSignIn(page);
+    await page.goto(ROTA);
+    await conectaUmBanco(page);
+
+    const passoQuatro = page.getByRole("region", { name: "Progresso do histórico" });
+    await expect(passoQuatro.getByText(FRASE_DA_PAUSA)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("region", { name: "Importação do histórico" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Ir para o início" }).click();
+    const faixa = page.getByRole("region", { name: "Importação do histórico" });
+    await expect(faixa.getByText(FRASE_DA_PAUSA)).toBeVisible({ timeout: 30_000 });
+    await alvoDeNoMinimo44(faixa.getByRole("button", { name: "Fechar aviso" }));
+    await faixa.getByRole("button", { name: "Fechar aviso" }).click();
+    await expect(faixa).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Importação do histórico" })).toHaveCount(0);
+  } finally {
+    executaSql("pronta", `DELETE FROM usage_daily WHERE day = '${dia}'`);
+  }
+});

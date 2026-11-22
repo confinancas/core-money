@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import type { SyncStatusResponse } from "../../../shared/sync-api";
 import { lerEstadoDaImportacao } from "../../api/sync";
 import { PausaDoTeto } from "./PausaDoTeto";
@@ -11,6 +11,26 @@ import { PausaDoTeto } from "./PausaDoTeto";
 const CHAVE_DAS_VISTAS = "mm.importacao.vistas";
 const MAXIMO_DE_VISTAS = 100;
 const INTERVALO_DE_CONSULTA_MS = 10_000;
+// Decisão de Gustavo (2026-11-22): no conectar a faixa não aparece (o passo 4 já mostra o bloco), e na pausa a faixa tem
+// um "X" que dispensa aquela pausa, guardada pelo pausadaAte (uma pausa nova, com outro pausadaAte, a faixa volta).
+const CAMINHO_DO_CONECTAR = "/configuracoes/bancos/conectar";
+const CHAVE_DA_PAUSA_DISPENSADA = "mm.importacao.pausaDispensada";
+
+function lerPausaDispensada(): string | null {
+  try {
+    return window.localStorage.getItem(CHAVE_DA_PAUSA_DISPENSADA);
+  } catch {
+    return null;
+  }
+}
+
+function gravarPausaDispensada(pausadaAte: string): void {
+  try {
+    window.localStorage.setItem(CHAVE_DA_PAUSA_DISPENSADA, pausadaAte);
+  } catch {
+    // Sem localStorage o "X" vale só nesta tela.
+  }
+}
 
 function lerVistas(): string[] {
   try {
@@ -33,6 +53,8 @@ function gravarVistas(vistas: string[]): void {
 export function ImportBanner() {
   const [estado, setEstado] = useState<SyncStatusResponse | null>(null);
   const [vistas, setVistas] = useState<string[]>(lerVistas);
+  const [pausaDispensada, setPausaDispensada] = useState<string | null>(lerPausaDispensada);
+  const { pathname } = useLocation();
 
   useEffect(() => {
     let ativo = true;
@@ -53,18 +75,35 @@ export function ImportBanner() {
     };
   }, []);
 
-  if (estado === null) return null;
+  // No conectar, o passo 4 já mostra o bloco da pausa: a faixa não aparece lá.
+  if (estado === null || pathname === CAMINHO_DO_CONECTAR) return null;
 
   const emAndamento = estado.importing[0];
   if (emAndamento) {
     // Pausada pelo teto (TASK-0209): a frase de quando volta, e o botão "Seguir agora" no plano gratuito.
     if (emAndamento.pausada && emAndamento.pausadaAte !== null) {
+      // Dispensada pelo "X" nesta mesma pausa (a pausa nova tem outro pausadaAte, e a faixa volta).
+      if (emAndamento.pausadaAte === pausaDispensada) return null;
+      const pausadaAte = emAndamento.pausadaAte;
       return (
         <section
           aria-label="Importação do histórico"
           className="mx-auto flex w-full flex-col gap-3 border-b border-line bg-surface px-4 py-3 text-[14px]"
         >
-          <p>Buscando o histórico do {emAndamento.institutionName}</p>
+          <div className="flex items-start gap-3">
+            <p className="flex-1">Buscando o histórico do {emAndamento.institutionName}</p>
+            <button
+              type="button"
+              aria-label="Fechar aviso"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center font-bold text-accent"
+              onClick={() => {
+                gravarPausaDispensada(pausadaAte);
+                setPausaDispensada(pausadaAte);
+              }}
+            >
+              ×
+            </button>
+          </div>
           <PausaDoTeto
             pausadaAte={emAndamento.pausadaAte}
             paidPlan={estado.paidPlan}

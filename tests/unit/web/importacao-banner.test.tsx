@@ -342,3 +342,77 @@ describe("faixa da importação: onde monta", () => {
     },
   );
 });
+
+// Decisão de Gustavo (2026-11-22): o "X" dispensa a pausa pelo pausadaAte; uma pausa nova (outro pausadaAte) volta; e no
+// conectar a faixa não aparece, porque o passo 4 já mostra o bloco.
+const CHAVE_DA_PAUSA = "mm.importacao.pausaDispensada";
+const PAUSA = "2026-11-11T00:00:00.000Z";
+const PAUSA_NOVA = "2026-11-12T00:00:00.000Z";
+
+function pausadaAte(pausa: string): SyncStatusResponse {
+  return sincronizacaoCom({ importing: [{ ...emAndamento(42), pausada: true, pausadaAte: pausa }] });
+}
+
+describe("faixa pausada: o X dispensa a pausa", () => {
+  it("o X fecha a faixa e guarda o pausadaAte no localStorage", async () => {
+    estado = pausadaAte(PAUSA);
+    const usuario = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ImportBanner />
+      </MemoryRouter>,
+    );
+
+    await usuario.click(await screen.findByRole("button", { name: "Fechar aviso" }));
+
+    expect(faixa()).toBeNull();
+    expect(localStorage.getItem(CHAVE_DA_PAUSA)).toBe(PAUSA);
+  });
+
+  it("uma pausa nova, com outro pausadaAte, mostra a faixa de novo", async () => {
+    localStorage.setItem(CHAVE_DA_PAUSA, PAUSA);
+    estado = pausadaAte(PAUSA_NOVA);
+    render(
+      <MemoryRouter>
+        <ImportBanner />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Fechar aviso" })).toBeInTheDocument();
+    expect(faixa()).not.toBeNull();
+  });
+
+  it("sem localStorage, o X some a faixa só nesta tela", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("sem armazenamento");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("sem armazenamento");
+    });
+    estado = pausadaAte(PAUSA);
+    const usuario = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ImportBanner />
+      </MemoryRouter>,
+    );
+
+    await usuario.click(await screen.findByRole("button", { name: "Fechar aviso" }));
+
+    expect(faixa()).toBeNull();
+  });
+
+  it("no conectar, a faixa não aparece mesmo com a pausa", async () => {
+    estado = pausadaAte(PAUSA);
+    render(
+      <MemoryRouter initialEntries={["/configuracoes/bancos/conectar"]}>
+        <ImportBanner />
+      </MemoryRouter>,
+    );
+
+    await esperarConsulta();
+    expect(consultas).toContain("/api/sync/status");
+    expect(faixa()).toBeNull();
+    expect(screen.queryByRole("button", { name: "Fechar aviso" })).toBeNull();
+  });
+});
