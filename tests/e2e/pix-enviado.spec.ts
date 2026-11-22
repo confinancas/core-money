@@ -288,7 +288,7 @@ test("N1: Pix sem contraparte e com categoria, em fila, salva e vai ao próximo"
   const { hoje, atual } = ciclo();
   const agora = new Date().toISOString();
   // Sem nome nem documento: o cartão do Lembrar não aparece, e o Salvar não pode pedir regra.
-  const semContraparte = `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, cycle_key, spend_type, spend_type_source, last_seen_at) VALUES ('e2e-px-n1', ${q(LAR)}, 'e2e-px-ext-n1', ${q(BANCO)}, ${q(CONTA)}, NULL, NULL, 'pix_enviado', ${q(`${hoje}T17:32:00.000Z`)}, ${q(hoje)}, -5000, 'PIX ENVIADO', NULL, NULL, NULL, ${q(atual.key)}, 'prazeres', 'padrao', ${q(agora)})`;
+  const semContraparte = `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, cycle_key, spend_type, spend_type_source, last_seen_at) VALUES ('e2e-px-n1', ${q(LAR)}, 'e2e-px-ext-n1', ${q(BANCO)}, ${q(CONTA)}, NULL, NULL, 'pix_enviado', ${q(`${hoje}T17:32:00.000Z`)}, ${q(hoje)}, -5000, 'TRANSF SEM NOME', NULL, NULL, NULL, ${q(atual.key)}, 'prazeres', 'padrao', ${q(agora)})`;
   preparar([semContraparte, pix("e2e-px-n2", -8000, "[TEST] DIARISTA", addDays(hoje, -1))]);
 
   await page.goto("/pix/e2e-px-n1?fila=1");
