@@ -49,7 +49,7 @@ export function Compra() {
   const [busca] = useSearchParams();
   // Modo fila (TASK-0404): ?fila=1 mostra "N de M" e o rodapé que leva ao próximo item. A compra já grava na hora.
   const emFila = busca.get("fila") === "1";
-  const fila = useQueueNavigation(transactionId, emFila);
+  const fila = useQueueNavigation(transactionId, emFila, dados?.localDate ?? null);
 
   // Cada carga tem um número: só a última ainda vale. Ao voltar de Escolher categoria, a tela monta de novo e relê.
   const carregar = useCallback(async () => {

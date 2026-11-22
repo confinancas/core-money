@@ -245,6 +245,41 @@ describe("Lembrar para os próximos Pix", () => {
   });
 });
 
+describe("Pix sem contraparte e com categoria, em fila (N1)", () => {
+  it("o Salvar não cria regra (o cartão do Lembrar não está na tela) e vai ao próximo", async () => {
+    cena = novaCena({
+      detalhe: {
+        ...PIX,
+        category: CATEGORIA,
+        categorizedBy: "pessoa",
+        counterparty: { name: null, docMasked: null, docKind: null, bank: null, pixKeyMasked: null },
+      },
+      categorizacao: { ...CATEGORIZACAO, scope: "destinatario", matchLabel: null },
+      itens: fila(["p4", "2026-11-07"]),
+      total: 1,
+    });
+    instalarFetch();
+    const roteador = montar(["/pix/p3?fila=1"]);
+    await screen.findByRole("button", { name: /Salvar e ir para o próximo/ });
+    expect(screen.queryByRole("switch", { name: /Lembrar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Salvar e ir para o próximo/ }));
+    await waitFor(() => expect(roteador.state.location.pathname).toBe("/pix/p4"));
+    expect(chamadasA("POST", "/api/rules")).toHaveLength(0);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("lê só a primeira página quando o item já saiu da fila (a página passa do lugar dele)", async () => {
+    cena = novaCena({
+      itens: fila(["p4", "2026-11-07"], ["p5", "2026-11-06"]),
+      total: 2,
+    });
+    instalarFetch();
+    montar(["/pix/p3?fila=1"]);
+    await screen.findByRole("button", { name: /Salvar e ir para o próximo/ });
+    expect(chamadasA("GET", "/api/categorization/queue")).toHaveLength(1);
+  });
+});
+
 describe("modo fila no Pix", () => {
   it("o item na fila: '1 de 8 para categorizar' e 'faltam 7'", async () => {
     cena = novaCena({

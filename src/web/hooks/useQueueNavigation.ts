@@ -22,6 +22,10 @@ export function nextInQueue(
   return items.find((item) => item.transactionId !== atual.id) ?? null;
 }
 
+// O item vem depois do atual na ordem da fila (data menor, ou igual com id menor).
+const vemDepois = (item: ItemDaFila, atual: { id: string; localDate: string }): boolean =>
+  item.localDate < atual.localDate || (item.localDate === atual.localDate && item.transactionId < atual.id);
+
 // Acrescenta ?fila=1 aos caminhos de detalhe que entram no modo fila (Pix, compra e Pix recebido). Outros ficam como estão.
 export function withQueueParam(detailPath: string): string {
   const ehDetalhe =
@@ -42,7 +46,7 @@ export type EstadoDaFila = {
 
 const MAXIMO_DE_PAGINAS = 4;
 
-export async function lerFila(transactionId: string): Promise<EstadoDaFila> {
+export async function lerFila(transactionId: string, localDate: string | null = null): Promise<EstadoDaFila> {
   const todos: ItemDaFila[] = [];
   let total = 0;
   let cursor: string | undefined;
@@ -63,6 +67,11 @@ export async function lerFila(transactionId: string): Promise<EstadoDaFila> {
       break;
     }
     if (resposta.nextCursor === null) break;
+    // O item já saiu da fila (a categoria grava na hora): se a página acabou além do lugar dele, ele não está nas
+    // próximas, e ler mais páginas seria à toa.
+    const ultima = todos[todos.length - 1];
+    if (localDate !== null && ultima !== undefined && vemDepois(ultima, { id: transactionId, localDate }))
+      break;
     cursor = resposta.nextCursor;
   }
   const faltam = posicao === null ? total : Math.max(total - 1, 0);
@@ -71,19 +80,20 @@ export async function lerFila(transactionId: string): Promise<EstadoDaFila> {
 
 // Hook da tela: lê a fila quando ativo; recarregar relê o contador (depois de uma mudança que tira o item da fila) e
 // proximoCaminho relê só a primeira página e diz para onde ir. Falha na leitura deixa o estado como estava.
-export function useQueueNavigation(transactionId: string, ativo: boolean) {
+export function useQueueNavigation(transactionId: string, ativo: boolean, localDate: string | null = null) {
   const [estado, setEstado] = useState<EstadoDaFila | null>(null);
 
   const recarregar = useCallback(async () => {
-    if (!ativo) return null;
+    // Espera o detalhe (o localDate do item) para saber até onde ler.
+    if (!ativo || localDate === null) return null;
     try {
-      const lido = await lerFila(transactionId);
+      const lido = await lerFila(transactionId, localDate);
       setEstado(lido);
       return lido;
     } catch {
       return null;
     }
-  }, [ativo, transactionId]);
+  }, [ativo, transactionId, localDate]);
 
   useEffect(() => {
     void recarregar();

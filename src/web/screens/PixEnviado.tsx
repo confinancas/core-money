@@ -54,9 +54,9 @@ export function PixEnviado() {
   const { aba } = useRotaAtual();
   const largura = useBreakpoint();
   const emFila = busca.get("fila") === "1";
-  const fila = useQueueNavigation(transactionId, emFila);
 
   const [dados, setDados] = useState<DetalheDaCompra | null>(null);
+  const fila = useQueueNavigation(transactionId, emFila, dados?.localDate ?? null);
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [estado, setEstado] = useState<"carregando" | "pronta" | "falhou" | "nao_existe">("carregando");
   const [erroDe, setErroDe] = useState<
@@ -65,6 +65,9 @@ export function PixEnviado() {
   const [lembrar, setLembrar] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const partida = useRef(0);
+  // O cartão do Lembrar só existe com destinatário (escopo e rótulo). Sem ele, o salvar não cria regra.
+  const podeLembrar =
+    previa?.scope === "destinatario" && previa.matchLabel !== null && previa.matchLabel !== "";
 
   const carregar = useCallback(async () => {
     const esta = ++partida.current;
@@ -165,6 +168,7 @@ export function PixEnviado() {
     try {
       const categoria = dados.category?.id ?? null;
       const precisaRegra =
+        podeLembrar &&
         lembrar &&
         categoria !== null &&
         (previa === null ||
@@ -295,23 +299,21 @@ export function PixEnviado() {
             ehPagamento ? null : (
               <>
                 {/* Sem destinatário (escopo diferente ou sem nome) não há o que lembrar: o cartão some. */}
-                {previa?.scope === "destinatario" &&
-                  previa.matchLabel !== null &&
-                  previa.matchLabel !== "" && (
-                    <RememberToggle
-                      ligada={lembrar && dados.category !== null}
-                      desabilitada={dados.category === null}
-                      matchLabel={previa.matchLabel}
-                      aviso={
-                        dados.category === null
-                          ? "Escolha a categoria para poder lembrar."
-                          : previa.temRegra
-                            ? `Os próximos Pix para ${previa.matchLabel} já seguem uma regra. Para desfazer, use Configurações › Regras.`
-                            : ""
-                      }
-                      aoMudar={setLembrar}
-                    />
-                  )}
+                {podeLembrar && previa !== null && previa.matchLabel !== null && (
+                  <RememberToggle
+                    ligada={lembrar && dados.category !== null}
+                    desabilitada={dados.category === null}
+                    matchLabel={previa.matchLabel}
+                    aviso={
+                      dados.category === null
+                        ? "Escolha a categoria para poder lembrar."
+                        : previa.temRegra
+                          ? `Os próximos Pix para ${previa.matchLabel} já seguem uma regra. Para desfazer, use Configurações › Regras.`
+                          : ""
+                    }
+                    aoMudar={setLembrar}
+                  />
+                )}
                 <CardWouldAcceptToggle
                   ligada={dados.cardWouldAccept}
                   erro={erroDe.aceita ?? null}
@@ -338,7 +340,7 @@ export function PixEnviado() {
             <div
               className={cn(
                 "flex flex-col gap-2",
-                largura === "celular" && "sticky bottom-24 z-10 rounded-[30px] bg-bg/95 py-2",
+                largura === "celular" && "sticky bottom-24 z-10 rounded-[30px] bg-bg py-2",
               )}
             >
               {erroDe.geral !== undefined && (
