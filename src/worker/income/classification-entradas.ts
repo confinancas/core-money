@@ -169,20 +169,24 @@ export function desfazerEntradaStmts(
   const regra = `(SELECT r.id FROM rules AS r WHERE r.household_id = ? AND r.scope = 'remetente'
     AND r.created_from = 'confirmacao' AND r.created_by = ? AND r.disabled_at IS NULL
     AND r.match_value = (SELECT ${COUNTERPARTY_KEY_SQL} FROM transactions AS t WHERE t.id = ? AND t.household_id = ?))`;
+  // Regra ativa do remetente, de qualquer origem: os iguais da confirmação estão ligados a ela, tenha ela sido criada
+  // agora ou antes ("lembrar", manual).
+  const regraAtiva = `(SELECT r.id FROM rules AS r WHERE r.household_id = ? AND r.scope = 'remetente'
+    AND r.disabled_at IS NULL
+    AND r.match_value = (SELECT ${COUNTERPARTY_KEY_SQL} FROM transactions AS t WHERE t.id = ? AND t.household_id = ?))`;
   const aindaDaPessoa = `EXISTS (SELECT 1 FROM transactions AS a WHERE a.id = ? AND a.household_id = ? AND a.categorized_by = ?)`;
   const limpa = `income_kind = NULL, income_subtype = NULL, fixed_income_id = NULL, categorized_at = NULL,
     categorized_by = NULL, rule_id = NULL,
     hidden = CASE WHEN hidden_reason = 'reembolso_terceiros' THEN 0 ELSE hidden END,
     hidden_reason = CASE WHEN hidden_reason = 'reembolso_terceiros' THEN NULL ELSE hidden_reason END`;
   // Os iguais desta confirmação: classificados pela regra dela, no mesmo instante da entrada desfeita.
-  const iguais = `SELECT t.id FROM transactions AS t WHERE t.household_id = ? AND t.rule_id = ${regra}
+  const iguais = `SELECT t.id FROM transactions AS t WHERE t.household_id = ? AND t.rule_id = ${regraAtiva}
     AND t.categorized_by = 'regra'
     AND t.categorized_at = (SELECT e.categorized_at FROM transactions AS e WHERE e.id = ? AND e.household_id = ?)
     AND ${aindaDaPessoa}`;
   const paramsDosIguais = [
     householdId,
     householdId,
-    memberId,
     transactionId,
     householdId,
     transactionId,
