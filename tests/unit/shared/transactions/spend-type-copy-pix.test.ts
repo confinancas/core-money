@@ -29,6 +29,25 @@ describe("spendTypeCopy (pix)", () => {
   });
 });
 
+describe("spendTypeCopy (pix): origens regra e padrao", () => {
+  it("regra no Pix diz 'neste Pix'; na compra, 'nesta compra'", () => {
+    expect(spendTypeCopy({ type: "conforto", source: "regra", kind: "pix", categoryName: null }).help).toBe(
+      "Veio de uma regra automática. Toque em outro para trocar só neste Pix.",
+    );
+    expect(
+      spendTypeCopy({ type: "conforto", source: "regra", kind: "compra", categoryName: null }).help,
+    ).toBe("Veio de uma regra automática. Toque em outro para trocar só nesta compra.");
+  });
+
+  it("padrão com categoria sem tipo próprio diz 'neste Pix'", () => {
+    expect(
+      spendTypeCopy({ type: "prazeres", source: "padrao", kind: "pix", categoryName: "Serviços" }).help,
+    ).toBe(
+      "Serviços não tem tipo próprio, então entrou como Prazeres, o padrão. Toque em outro para trocar só neste Pix.",
+    );
+  });
+});
+
 describe("docKindDe", () => {
   it("conta posições de dígito e • (pontuação não conta): 11 é CPF, 14 é CNPJ", () => {
     expect(docKindDe("•••.456.789-••")).toBe("cpf");

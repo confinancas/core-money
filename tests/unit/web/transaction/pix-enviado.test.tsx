@@ -290,7 +290,9 @@ describe("modo fila no Pix", () => {
     cena = novaCena({ itens: fila(["p3", "2026-11-08"]), total: 1 });
     instalarFetch();
     const roteador = montar(["/inicio", "/pix/p3?fila=1"], 1);
-    fireEvent.click(await screen.findByRole("link", { name: "Voltar" }));
+    const seta = await screen.findByRole("link", { name: "Voltar" });
+    expect(seta).toHaveAttribute("href", "/para-categorizar");
+    fireEvent.click(seta);
     await waitFor(() => expect(roteador.state.location.pathname).toBe("/para-categorizar"));
   });
 
@@ -411,7 +413,9 @@ describe("Compra", () => {
     });
     instalarFetch();
     const roteador = montar(["/inicio", "/compras/b1?fila=1"], 1);
-    fireEvent.click(await screen.findByRole("link", { name: "Voltar" }));
+    const seta = await screen.findByRole("link", { name: "Voltar" });
+    expect(seta).toHaveAttribute("href", "/para-categorizar");
+    fireEvent.click(seta);
     await waitFor(() => expect(roteador.state.location.pathname).toBe("/para-categorizar"));
   });
 
