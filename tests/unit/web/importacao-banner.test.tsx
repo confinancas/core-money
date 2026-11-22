@@ -154,6 +154,21 @@ describe("faixa da importação: os estados", () => {
     expect(screen.queryByText(/42%/)).toBeNull();
   });
 
+  it("pausada com o plano pago ligado: a frase fica, sem o botão", async () => {
+    estado = sincronizacaoCom({
+      importing: [{ ...emAndamento(42), pausada: true, pausadaAte: "2026-11-11T00:00:00.000Z" }],
+      paidPlan: true,
+    });
+    render(
+      <MemoryRouter>
+        <ImportBanner />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/^A importação continua (hoje|amanhã) às 21h\.$/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Seguir agora · tenho o plano pago" })).toBeNull();
+  });
+
   it("pronto: anuncia o término com OK, que grava o runId e tira a faixa", async () => {
     estado = sincronizacaoCom({ recentlyFinished: [terminada("ok", ha2Horas(), "run-ok")] });
     const usuario = userEvent.setup();

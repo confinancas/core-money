@@ -133,6 +133,8 @@ test("cenário 2: com o teto do dia atingido, a faixa e o passo 4 dizem quando a
 
     const faixa = page.getByRole("region", { name: "Importação do histórico" });
     await expect(faixa.getByText(FRASE_DA_PAUSA)).toBeVisible({ timeout: 30_000 });
+    await expect(faixa.getByText(EXPLICACAO_DO_TETO)).toBeVisible();
+    await alvoDeNoMinimo44(faixa.getByRole("button", { name: BOTAO_SEGUIR }));
     await semRolagemHorizontal(page);
   } finally {
     executaSql("pronta", `DELETE FROM usage_daily WHERE day = '${dia}'`);

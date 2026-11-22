@@ -87,4 +87,20 @@ describe("seção Plano da Cloudflare", () => {
     expect(screen.getByText("estimativa")).toBeInTheDocument();
     expect(screen.getByText(/0 MB de 500 MB/)).toBeInTheDocument();
   });
+
+  it("o switch diz que desliga o teto diário da importação, além dos avisos", () => {
+    render(
+      comValor({
+        uso: usoCom(false),
+        atualizar: async () => undefined,
+        definirPlanoPago: async () => undefined,
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "Desliga os avisos de uso do plano gratuito e o teto diário da importação. O app não descobre o plano sozinho.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
