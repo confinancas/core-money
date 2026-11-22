@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { cn } from "@/lib/utils";
 import type { DetalheDaCompra } from "../../../shared/api/transactions";
 import type { Aba } from "../../app/frame/aba";
@@ -21,7 +21,9 @@ export function CategoryCard({
   prefixoSemCategoria?: string;
 }) {
   const texto = textoDaCategoria(detalhe);
-  const voltar = `/compras/${encodeURIComponent(detalhe.id)}`;
+  // A volta é a tela atual com a busca (?fila=1 do modo fila), seja o Pix ou a compra.
+  const localizacao = useLocation();
+  const voltar = `${localizacao.pathname}${localizacao.search}`;
   const destino = `/categorias/escolher?${new URLSearchParams({ transacao: detalhe.id, voltar }).toString()}`;
 
   return (
