@@ -12,7 +12,12 @@ const q = (valor: string | number | null): string =>
   valor === null ? "NULL" : typeof valor === "number" ? String(valor) : `'${valor.replace(/'/g, "''")}'`;
 
 // Um Pix recebido de uma contraparte, no ciclo 2026-10, numa conta de teste.
-function semeiaPix(id: string, valor: number, contraparte: string): void {
+function semeiaPix(
+  id: string,
+  valor: number,
+  contraparte: string,
+  movimento: "pix_recebido" | "pix_enviado" = "pix_recebido",
+): void {
   const agora = "2026-10-20T15:00:00.000Z";
   executaSql(
     "pronta",
@@ -23,7 +28,7 @@ function semeiaPix(id: string, valor: number, contraparte: string): void {
       `INSERT OR IGNORE INTO pluggy_connections (id, household_id, label, created_at) VALUES ('e2e-pix-conexao', ${q(LAR)}, '[TEST] Conexão Pix', ${q(agora)})`,
       `INSERT OR IGNORE INTO bank_items (id, connection_id, institution_name, created_at) VALUES ('e2e-pix-banco', 'e2e-pix-conexao', '[TEST] Banco Pix', ${q(agora)})`,
       `INSERT OR IGNORE INTO accounts (id, bank_item_id, kind, name, balance_cents, overdraft_used_cents, balance_at) VALUES ('e2e-pix-conta', 'e2e-pix-banco', 'corrente', '[TEST] Conta Pix', 0, 0, ${q(agora)})`,
-      `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, movement, occurred_at, local_date, amount_cents, original_description, counterparty_name, counterparty_doc_masked, cycle_key, last_seen_at) VALUES (${q(id)}, ${q(LAR)}, ${q(`[TEST] ext-${id}`)}, 'e2e-pix-banco', 'e2e-pix-conta', 'pix_recebido', ${q("2026-10-20T15:00:00.000Z")}, '2026-10-20', ${valor}, ${q(`[TEST] Pix de ${contraparte}`)}, ${q(contraparte)}, '***.123.456-**', '2026-10', ${q(agora)})`,
+      `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, movement, occurred_at, local_date, amount_cents, original_description, counterparty_name, counterparty_doc_masked, cycle_key, last_seen_at) VALUES (${q(id)}, ${q(LAR)}, ${q(`[TEST] ext-${id}`)}, 'e2e-pix-banco', 'e2e-pix-conta', ${q(movimento)}, ${q("2026-10-20T15:00:00.000Z")}, '2026-10-20', ${valor}, ${q(`[TEST] Pix de ${contraparte}`)}, ${q(contraparte)}, '***.123.456-**', '2026-10', ${q(agora)})`,
     ].join("; "),
   );
 }
@@ -69,8 +74,14 @@ test.describe("Pix recebido", () => {
       await expect(page.getByRole("heading", { name: "Pix recebido" })).toBeVisible();
       await expect(page.getByText("Para classificar")).toBeVisible();
 
+      // Cenário 10: ?opcao=variavel abre com Renda variável marcada.
+      await expect(page.getByRole("radio", { name: /Renda variável/ })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
       await page.getByRole("button", { name: "Venda" }).click();
       await expect(page.getByText("→")).toBeVisible();
+      await expect(page.getByText("Renda de outubro")).toBeVisible();
 
       await page.getByRole("button", { name: "Salvar classificação" }).click();
       await page.waitForURL(/\/para-categorizar$/);
@@ -105,7 +116,7 @@ test.describe("Pix recebido", () => {
     try {
       await abreA(page, `/pix-recebido/${id}?voltar=/renda`);
       await page.getByRole("radio", { name: /Reembolso de terceiros/ }).check();
-      await expect(page.getByText("Fora dos cálculos")).toBeVisible();
+      await expect(page.getByText("Fora dos cálculos", { exact: true })).toBeVisible();
 
       await page.getByRole("radio", { name: /Parte do salário/ }).check();
       await expect(page.getByText("Nenhuma renda fixa cadastrada.")).toBeVisible();
@@ -114,6 +125,113 @@ test.describe("Pix recebido", () => {
       if (ativas.length > 0) {
         executaSql("pronta", `UPDATE fixed_incomes SET archived_at = NULL WHERE id IN (${lista})`);
       }
+    }
+  });
+
+  test("reembolso: o selo e o valor riscado seguem a escolha, e salvar oculta o Pix (cenário 3)", async ({
+    page,
+  }, info) => {
+    const id = `e2e-pix-riscado-${info.project.name}`;
+    semeiaPix(id, 120_000, "[TEST] Dona Reembolso");
+    try {
+      await abreA(page, `/pix-recebido/${id}?voltar=/renda`);
+      const valor = page.getByRole("img", { name: /^mais 1\.200,00$/ });
+      await expect(valor).toBeVisible();
+      await expect(page.getByText("Reembolso de terceiros · fora dos cálculos")).toHaveCount(0);
+      expect(await valor.evaluate((el) => getComputedStyle(el).textDecorationLine)).not.toBe("line-through");
+
+      await page.getByRole("radio", { name: /Reembolso de terceiros/ }).click();
+      await expect(page.getByText("Reembolso de terceiros · fora dos cálculos")).toBeVisible();
+      expect(await valor.evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe("line-through");
+
+      await page.getByRole("button", { name: "Salvar classificação" }).click();
+      await page.waitForURL(/\/renda$/);
+      const linha = lerPix(id);
+      expect(linha?.income_kind).toBe("reembolso");
+      expect(linha?.hidden).toBe(1);
+      expect(linha?.hidden_reason).toBe("reembolso_terceiros");
+    } finally {
+      limpaPix(id);
+    }
+  });
+
+  test("a sugestão da IA vem marcada, com a certeza por extenso, e nada é gravado antes de salvar (cenário 16)", async ({
+    page,
+  }, info) => {
+    const id = `e2e-pix-sugestao-${info.project.name}`;
+    semeiaPix(id, 80_000, "[TEST] Dona Sugestao");
+    executaSql(
+      "pronta",
+      `UPDATE transactions SET ai_income_kind = 'variavel', ai_income_subtype = 'cashback', ai_confidence = 'media' WHERE id = ${q(id)}`,
+    );
+    try {
+      await abreA(page, `/pix-recebido/${id}`);
+      await expect(page.getByRole("radio", { name: /Renda variável/ })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+      await expect(page.getByRole("button", { name: "Cashback" })).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByText("Sugestão da IA · média certeza")).toBeVisible();
+      expect(lerPix(id)?.income_kind).toBeNull();
+    } finally {
+      limpaPix(id);
+    }
+  });
+
+  test("um Pix enviado diz que não foi encontrado (cenário 12)", async ({ page }, info) => {
+    const id = `e2e-pix-enviado-${info.project.name}`;
+    semeiaPix(id, -50_000, "[TEST] Destino", "pix_enviado");
+    try {
+      await abreA(page, `/pix-recebido/${id}`);
+      await expect(page.getByText("Este Pix não foi encontrado.")).toBeVisible();
+    } finally {
+      limpaPix(id);
+    }
+  });
+
+  test("a tela segue o protótipo: topo verde e colunas por largura, com a barra de salvar no fluxo", async ({
+    page,
+  }, info) => {
+    const id = `e2e-pix-layout-${info.project.name}`;
+    semeiaPix(id, 150_000, "[TEST] Mariana Layout");
+    try {
+      await abreA(page, `/pix-recebido/${id}`);
+      await expect(page.getByRole("heading", { name: "Pix recebido" })).toBeVisible();
+      const topo = page.locator("header").first();
+      expect(await topo.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain("gradient");
+      await expect(page.getByText("PIX", { exact: true })).toBeVisible();
+
+      const destaque = await page.getByText("Pix de [TEST] Mariana Layout", { exact: true }).boundingBox();
+      const escolha = await page.getByRole("heading", { name: "Como conta" }).boundingBox();
+      const dados = await page.getByText("Descrição do banco", { exact: true }).boundingBox();
+      expect(destaque && escolha && dados).toBeTruthy();
+      const [xd, xe, xdados] = [destaque?.x ?? 0, escolha?.x ?? 0, dados?.x ?? 0];
+      const [ye, ydados] = [escolha?.y ?? 0, dados?.y ?? 0];
+      const largura = page.viewportSize()?.width ?? 0;
+      if (largura >= 1200) {
+        // Desktop: três colunas, da esquerda para a direita.
+        expect(xd).toBeLessThan(xe - 100);
+        expect(xe).toBeLessThan(xdados - 100);
+      } else if (largura >= 768) {
+        // Tablet: destaque e escolha à esquerda, dados à direita.
+        expect(Math.abs(xd - xe)).toBeLessThan(60);
+        expect(xdados).toBeGreaterThan(xe + 100);
+      } else {
+        // Celular: uma coluna.
+        expect(xdados).toBeLessThan(xe + 100);
+        expect(ydados).toBeGreaterThan(ye);
+      }
+
+      // A barra de salvar fica no fluxo (não fixa): não cobre o conteúdo.
+      const salvar = page.getByRole("button", { name: "Salvar classificação" });
+      expect(await salvar.evaluate((el) => getComputedStyle(el).position)).not.toBe("fixed");
+      const rolagemHorizontal = await page.evaluate(
+        (larg) => document.documentElement.scrollWidth > larg,
+        largura,
+      );
+      expect(rolagemHorizontal).toBe(false);
+    } finally {
+      limpaPix(id);
     }
   });
 

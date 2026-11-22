@@ -76,3 +76,53 @@ export function textoDaData(localDate: string, instanteIso: string): string {
   }).format(new Date(instanteIso));
   return `${dia}/${mes} às ${hora}`;
 }
+
+const CERTEZA: Record<string, string> = {
+  pouca: "pouca certeza",
+  media: "média certeza",
+  alta: "alta certeza",
+};
+
+// "Sugestão da IA · média certeza · motivo": a certeza por extenso (nunca o código cru) e o motivo, se houver.
+export function linhaDaSugestao(certeza: string | null, motivo: string | null): string {
+  const partes = [
+    "Sugestão da IA",
+    certeza === null ? null : (CERTEZA[certeza] ?? null),
+    motivo?.trim() || null,
+  ];
+  return partes.filter((parte): parte is string => parte !== null).join(" · ");
+}
+
+const MESES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+// Mês do ciclo por extenso, em minúsculas ("outubro"), a partir da chave AAAA-MM: "Renda de outubro".
+export function mesDoCiclo(chave: string): string {
+  return MESES[Number(chave.slice(5, 7)) - 1] ?? chave;
+}
+
+const diaEMes = (data: string): string => `${data.slice(8, 10)}/${data.slice(5, 7)}`;
+
+// "Outubro · 11/10 – 10/11": o mês do ciclo com inicial maiúscula e o intervalo.
+export function textoDoCiclo(chave: string, comeca: string, termina: string): string {
+  const mes = mesDoCiclo(chave);
+  return `${mes.charAt(0).toUpperCase()}${mes.slice(1)} · ${diaEMes(comeca)} – ${diaEMes(termina)}`;
+}
+
+// Caminho de volta: o ?voltar= quando vale dentro do app; senão o histórico, se houver; senão a Renda.
+export function destinoDaVolta(voltar: string | null, temHistorico: boolean): string | -1 {
+  if (voltar !== null) return voltar;
+  return temHistorico ? -1 : "/renda";
+}
