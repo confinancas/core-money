@@ -217,7 +217,9 @@ export function upsertBillsStmts(
 // Grava os movimentos do item sem duplicar: (bank_item_id, external_id) é a chave. Duas chamadas ao D1: a leitura
 // (os existentes, e o calendário do lar, no mesmo lote) e a gravação (ciclos que faltam, faturas sintéticas futuras e
 // os movimentos, nessa ordem, no mesmo lote). Devolve os ids inseridos e os atualizados, e chama afterIngest com eles.
-export async function ingestTransactions(
+// Etapa de gravação da fatia (TASK-0208): só os INSERTs e o last_seen_at. As etapas depois dela (afterIngest) ficam
+// em ingestTransactions, que compõe as duas na mesma ordem de antes.
+export async function gravarLinhasDaFatia(
   db: Db,
   entrada: IngestInput,
 ): Promise<{ insertedIds: string[]; updatedIds: string[]; atualizadasDaExecucao: string[] }> {
@@ -334,7 +336,6 @@ export async function ingestTransactions(
     });
   }
 
-  await afterIngest(db, { householdId, bankItemId, insertedIds, updatedIds, now });
   // Atualizadas que já estavam gravadas com a leitura desta execução (a mesma execução gravou antes, numa tentativa
   // anterior da fatia). A releitura diária de linhas de dias antes não entra.
   const atualizadasDaExecucao =
@@ -342,4 +343,20 @@ export async function ingestTransactions(
       ? []
       : updatedIds.filter((id) => (ultimaLeitura.get(id) ?? "") >= inicioDaExecucao);
   return { insertedIds, updatedIds, atualizadasDaExecucao };
+}
+
+// Gravação e as etapas depois dela, na ordem de sempre (afterIngest). A fatia (slice.ts) usa esta função.
+export async function ingestTransactions(
+  db: Db,
+  entrada: IngestInput,
+): Promise<{ insertedIds: string[]; updatedIds: string[]; atualizadasDaExecucao: string[] }> {
+  const gravado = await gravarLinhasDaFatia(db, entrada);
+  await afterIngest(db, {
+    householdId: entrada.householdId,
+    bankItemId: entrada.bankItemId,
+    insertedIds: gravado.insertedIds,
+    updatedIds: gravado.updatedIds,
+    now: entrada.now,
+  });
+  return gravado;
 }
