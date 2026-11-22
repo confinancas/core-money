@@ -48,6 +48,20 @@ const emGrupos = <T>(itens: T[], tamanho: number): T[][] => {
   return grupos;
 };
 
+// Candidatas de uma janela de ids (TASK-0208): as linhas dos ids e as do lar, na janela de datas, cujo valor absoluto é o de
+// alguma linha dos ids. Só elas podem parear com o lote (R2 e R3 pareiam por mesmo valor absoluto; as outras regras olham
+// a própria linha). Os ids entram num único parâmetro (json_each como laço de fora, com CROSS JOIN: sem ele o planejador
+// lê o lar inteiro). A janela de datas sai do índice (household_id, local_date); o filtro de valor corta o que volta ao
+// Worker, que é onde está a CPU (as linhas lidas pelo D1 seguem sendo as da janela, sem índice de valor). As linhas de
+// outro valor, longe do lote, não mudam por causa dele.
+export const SQL_CANDIDATAS_DA_JANELA = `WITH lote AS (
+    SELECT t.id AS id, t.local_date AS local_date, ABS(t.amount_cents) AS valor
+    FROM json_each(?) AS j CROSS JOIN transactions AS t ON t.id = j.value
+  )
+  SELECT ${COLUNAS} FROM transactions WHERE household_id = ? AND removed_at IS NULL
+    AND local_date BETWEEN date((SELECT MIN(local_date) FROM lote), ?) AND date((SELECT MAX(local_date) FROM lote), ?)
+    AND (id IN (SELECT id FROM lote) OR ABS(amount_cents) IN (SELECT valor FROM lote))`;
+
 function comandoDaJanela(db: Db, householdId: string, janela: Janela): D1PreparedStatement {
   if (janela.tipo === "faixa") {
     return db.$client
@@ -56,14 +70,9 @@ function comandoDaJanela(db: Db, householdId: string, janela: Janela): D1Prepare
       )
       .bind(householdId, janela.de, janela.ate);
   }
-  const marcas = janela.ids.map(() => "?").join(", ");
   return db.$client
-    .prepare(
-      `SELECT ${COLUNAS} FROM transactions WHERE household_id = ? AND removed_at IS NULL
-        AND local_date BETWEEN date((SELECT MIN(local_date) FROM transactions WHERE id IN (${marcas})), ?)
-        AND date((SELECT MAX(local_date) FROM transactions WHERE id IN (${marcas})), ?)`,
-    )
-    .bind(householdId, ...janela.ids, `-${MARGEM_LEITURA} days`, ...janela.ids, `+${MARGEM_LEITURA} days`);
+    .prepare(SQL_CANDIDATAS_DA_JANELA)
+    .bind(JSON.stringify(janela.ids), householdId, `-${MARGEM_LEITURA} days`, `+${MARGEM_LEITURA} days`);
 }
 
 type Leitura = {
