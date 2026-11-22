@@ -421,7 +421,7 @@ export function PixRecebido() {
                 key={linha.rotulo}
                 className="flex min-h-11 items-center justify-between gap-3 border-divider border-b py-2.5 text-[14px]"
               >
-                <span className="text-ink-3">{linha.rotulo}</span>
+                <span className="shrink-0 text-ink-3">{linha.rotulo}</span>
                 <span className="text-right font-semibold">{linha.valor}</span>
               </div>
             ))}
