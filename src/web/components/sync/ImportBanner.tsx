@@ -11,7 +11,7 @@ import { PausaDoTeto } from "./PausaDoTeto";
 const CHAVE_DAS_VISTAS = "mm.importacao.vistas";
 const MAXIMO_DE_VISTAS = 100;
 const INTERVALO_DE_CONSULTA_MS = 10_000;
-// Decisão de Gustavo (2026-11-22): no conectar a faixa não aparece (o passo 4 já mostra o bloco), e na pausa a faixa tem
+// Decisão do dono do projeto (2026-11-22): no conectar a faixa não aparece (o passo 4 já mostra o bloco), e na pausa a faixa tem
 // um "X" que dispensa aquela pausa, guardada pelo pausadaAte (uma pausa nova, com outro pausadaAte, a faixa volta).
 const CAMINHO_DO_CONECTAR = "/configuracoes/bancos/conectar";
 const CHAVE_DA_PAUSA_DISPENSADA = "mm.importacao.pausaDispensada";
