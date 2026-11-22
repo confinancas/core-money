@@ -144,7 +144,11 @@ const ordemDePar = (a: Pareavel, b: Pareavel): number => {
 
 // Pareamento guloso e determinístico: candidatos por (local_date, id); cada um pega o par de mesmo valor absoluto
 // com a menor distância em dias (empate: o de menor id); cada linha entra em no máximo um par.
-function parearGuloso<T extends Pareavel>(
+// Sem comparação par a par (TASK-0208): dentro de cada valor, as linhas ficam indexadas por dia, e cada candidato só
+// olha os dias da janela (de -maxDias a +maxDias), nunca o grupo inteiro. O resultado é o mesmo da comparação com todas
+// as linhas do grupo: o par escolhido é o de menor (distância, id) entre as livres da janela, e a ordem de visita não o muda.
+// Exportada para o teste de equivalência e o de custo.
+export function parearGuloso<T extends Pareavel>(
   candidatos: readonly T[],
   podePar: (a: T, b: T) => boolean,
   maxDias: number,
@@ -159,27 +163,48 @@ function parearGuloso<T extends Pareavel>(
 
   const pares: Array<[T, T]> = [];
   for (const grupo of porValor.values()) {
+    if (grupo.length < 2) continue;
     grupo.sort(ordemDePar);
-    const usados = new Set<string>();
+    // O dia de cada linha sai uma vez; o índice guarda as linhas livres de cada dia.
+    const diaDe = new Map<T, number>();
+    const porDia = new Map<number, T[]>();
+    for (const linha of grupo) {
+      const dia = diaNumero(linha.local_date);
+      diaDe.set(linha, dia);
+      const doDia = porDia.get(dia);
+      if (doDia) doDia.push(linha);
+      else porDia.set(dia, [linha]);
+    }
+    const usados = new Set<T>();
+    const tira = (linha: T): void => {
+      usados.add(linha);
+      const doDia = porDia.get(diaDe.get(linha) ?? 0);
+      const posicao = doDia ? doDia.indexOf(linha) : -1;
+      if (doDia && posicao >= 0) doDia.splice(posicao, 1);
+    };
     for (const a of grupo) {
-      if (usados.has(a.id)) continue;
+      if (usados.has(a)) continue;
+      const diaA = diaDe.get(a) ?? 0;
       let melhor: T | null = null;
       let melhorDistancia = Number.POSITIVE_INFINITY;
-      for (const b of grupo) {
-        if (b === a || usados.has(b.id)) continue;
-        const distancia = Math.abs(diaNumero(a.local_date) - diaNumero(b.local_date));
-        if (distancia > maxDias || !podePar(a, b)) continue;
-        if (
-          distancia < melhorDistancia ||
-          (distancia === melhorDistancia && melhor !== null && b.id < melhor.id)
-        ) {
-          melhor = b;
-          melhorDistancia = distancia;
+      for (let dia = diaA - maxDias; dia <= diaA + maxDias; dia++) {
+        const doDia = porDia.get(dia);
+        if (!doDia) continue;
+        const distancia = Math.abs(diaA - dia);
+        for (const b of doDia) {
+          if (b === a || !podePar(a, b)) continue;
+          if (
+            distancia < melhorDistancia ||
+            (distancia === melhorDistancia && melhor !== null && b.id < melhor.id)
+          ) {
+            melhor = b;
+            melhorDistancia = distancia;
+          }
         }
       }
       if (melhor !== null) {
-        usados.add(a.id);
-        usados.add(melhor.id);
+        tira(a);
+        tira(melhor);
         pares.push([a, melhor]);
       }
     }
