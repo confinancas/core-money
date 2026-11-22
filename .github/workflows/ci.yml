@@ -35,8 +35,15 @@ jobs:
       - run: npm run check:build
       - run: npm run test:integration
 
-  e2e:
+  # E2E dividido por largura (projetos do Playwright), em paralelo: cada job sobe a própria instância e roda um
+  # projeto. O job "e2e" abaixo junta os três, para o check exigido pela fila de merge continuar com o mesmo nome.
+  e2e-largura:
+    name: e2e (${{ matrix.projeto }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        projeto: [celular, tablet, desktop]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -47,13 +54,25 @@ jobs:
       # Se o espelho apt do runner falhar (já aconteceu duas vezes seguidas), instala só o Chromium:
       # a imagem ubuntu do GitHub já traz o Google Chrome e as bibliotecas de sistema que ele usa.
       - run: npx playwright install --with-deps chromium || npx playwright install chromium
-      - run: npm run test:e2e
+      - run: npm run test:e2e -- --project=${{ matrix.projeto }}
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.projeto }}
           path: playwright-report/
           if-no-files-found: ignore
+
+  e2e:
+    needs: e2e-largura
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: As três larguras passaram
+        run: |
+          if [ "${{ needs.e2e-largura.result }}" != "success" ]; then
+            echo "E2E falhou ou foi cancelado em alguma largura: ${{ needs.e2e-largura.result }}"
+            exit 1
+          fi
 
   app-fino:
     runs-on: ubuntu-latest
