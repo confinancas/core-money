@@ -21,9 +21,21 @@
       }
     },
     {
-      "name": "POST completa (fatia inteira de transações, 200 linhas, Meu Pluggy falso)",
+      "name": "POST completa-gravacao (mensagem de gravação real: LINHAS_POR_FATIA linhas lidas e gravadas, Meu Pluggy falso)",
       "method": "POST",
-      "path": "/api/dev/sync-slice/completa",
+      "path": "/api/dev/sync-slice/completa-gravacao",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "body": {
+        "rodada": "{i}",
+        "rows": 200
+      }
+    },
+    {
+      "name": "POST completa-pos (mensagem pós-gravação real: classificação, ciclo, pipeline e tipo das 100 linhas)",
+      "method": "POST",
+      "path": "/api/dev/sync-slice/completa-pos",
       "headers": {
         "cookie": "{sessao}"
       },

@@ -33,7 +33,8 @@ describe("medição por etapa da fatia (TASK-0208)", () => {
     }
     const ids = await chamar("ids", corpo, cabecalhos);
     expect(await ids.json()).toMatchObject({ ids: LINHAS });
-    expect((await chamar("completa", corpo, cabecalhos)).status).toBe(200);
+    expect((await chamar("completa-gravacao", corpo, cabecalhos)).status).toBe(200);
+    expect((await chamar("completa-pos", corpo, cabecalhos)).status).toBe(200);
   });
 
   it('a rodada em texto ("2", como o medidor troca {i}) vale o mesmo que o número', async () => {
@@ -69,14 +70,34 @@ describe("medição por etapa da fatia (TASK-0208)", () => {
     },
   );
 
-  it("a fatia inteira na repetição responde 409 etapa_ja_rodou", async () => {
+  it.each(["completa-gravacao", "completa-pos"])(
+    "%s: na repetição responde 409 etapa_ja_rodou",
+    async (rota) => {
+      const cabecalhos = await sessaoDeTeste();
+      const corpo = { rodada: 4, rows: LINHAS };
+      await chamar("preparo", corpo, cabecalhos);
+      await chamar("completa-gravacao", corpo, cabecalhos);
+      if (rota === "completa-pos") expect((await chamar("completa-pos", corpo, cabecalhos)).status).toBe(200);
+      const repetida = await chamar(rota, corpo, cabecalhos);
+      expect(repetida.status).toBe(409);
+      expect(await repetida.json()).toMatchObject({ error: "etapa_ja_rodou" });
+    },
+  );
+
+  it("completa-pos antes da gravação responde 409 mensagem_anterior_ausente, e cada mensagem faz o que é dela", async () => {
     const cabecalhos = await sessaoDeTeste();
-    const corpo = { rodada: 4, rows: LINHAS };
+    const corpo = { rodada: 8, rows: LINHAS };
     await chamar("preparo", corpo, cabecalhos);
-    expect((await chamar("completa", corpo, cabecalhos)).status).toBe(200);
-    const repetida = await chamar("completa", corpo, cabecalhos);
-    expect(repetida.status).toBe(409);
-    expect(await repetida.json()).toMatchObject({ error: "etapa_ja_rodou" });
+    const cedo = await chamar("completa-pos", corpo, cabecalhos);
+    expect(cedo.status).toBe(409);
+    expect(await cedo.json()).toMatchObject({ error: "mensagem_anterior_ausente" });
+
+    await chamar("completa-gravacao", corpo, cabecalhos);
+    const fila = async () =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM categorization_queue").first<{ n: number }>())?.n ?? 0;
+    expect(await fila()).toBe(0);
+    await chamar("completa-pos", corpo, cabecalhos);
+    expect(await fila()).toBeGreaterThan(0);
   });
 
   it("etapa sem preparo da rodada responde 404 preparo_ausente", async () => {

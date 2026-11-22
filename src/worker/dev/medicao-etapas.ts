@@ -287,21 +287,31 @@ export function registrarEtapasDeMedicao(rotas: Hono<AppEnv>): void {
     }),
   );
 
-  // A fatia inteira (runSyncSlice) sobre o run preparado, na mensagem seq 2. Repetida, a fila já andou: 409.
-  rotas.post("/sync-slice/completa", async (c) => {
-    const corpo = await lerCorpo(c);
-    if (corpo === null) return apiError(c, 400, "validacao", "Rodada e linhas (1 a 200) obrigatórias.");
-    const db = c.var.db;
-    const runId = await achaRun(db, chaveDaRodada(corpo));
-    if (runId === null) return apiError(c, 404, "preparo_ausente", "Rode o preparo desta rodada antes.");
-    const resultado = await runSyncSlice(
-      c.env,
-      { db, fetch: pluggyFalsoEmMemoria(corpo.rows) },
-      { runId, seq: 2, tentativa: 1 },
-      new Date().toISOString(),
-    );
-    if (resultado.tipo === "pulou")
-      return apiError(c, 409, "etapa_ja_rodou", "Esta fatia já rodou nesta rodada.");
-    return c.json({ etapa: "completa", rodada: corpo.rodada, tipo: resultado.tipo }, 200);
-  });
+  // As duas mensagens reais da fila (TASK-0208), cada uma inteira, sobre o run preparado: a de gravação é a seq 2 (fase
+  // transacoes) e a pós-gravação é a seq 3 (fase pos_gravacao). Repetida, a fila já andou: 409.
+  const mensagemInteira =
+    (nome: "completa-gravacao" | "completa-pos", seq: number) =>
+    async (c: Context<AppEnv>): Promise<Response> => {
+      const corpo = await lerCorpo(c);
+      if (corpo === null) return apiError(c, 400, "validacao", "Rodada e linhas (1 a 200) obrigatórias.");
+      const db = c.var.db;
+      const runId = await achaRun(db, chaveDaRodada(corpo));
+      if (runId === null) return apiError(c, 404, "preparo_ausente", "Rode o preparo desta rodada antes.");
+      const linha = await lerExecucao(db, runId);
+      const andamento = linha === null ? -1 : lerCursor(linha.cursor_json).seq;
+      if (andamento < seq) {
+        return apiError(c, 409, "mensagem_anterior_ausente", "Rode a mensagem anterior desta rodada antes.");
+      }
+      const resultado = await runSyncSlice(
+        c.env,
+        { db, fetch: pluggyFalsoEmMemoria(corpo.rows) },
+        { runId, seq, tentativa: 1 },
+        new Date().toISOString(),
+      );
+      if (resultado.tipo === "pulou")
+        return apiError(c, 409, "etapa_ja_rodou", "Esta mensagem já rodou nesta rodada.");
+      return c.json({ etapa: nome, rodada: corpo.rodada, tipo: resultado.tipo }, 200);
+    };
+  rotas.post("/sync-slice/completa-gravacao", mensagemInteira("completa-gravacao", 2));
+  rotas.post("/sync-slice/completa-pos", mensagemInteira("completa-pos", 3));
 }
