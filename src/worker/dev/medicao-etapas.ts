@@ -4,9 +4,7 @@
 // etapa roda sobre o estado que a anterior deixou para a mesma rodada. Uma etapa que já rodou nesta rodada responde 409
 // "etapa_ja_rodou" sem refazer nada (marcador "medicao" no cursor_json bruto da execução).
 import type { Context, Hono } from "hono";
-import { etapaCiclo, etapaClassificacao, etapaPipeline, etapaTipos } from "../bank/after-ingest";
 import { type ContaDaTransacao, mapTransaction } from "../bank/map";
-import { gravarLinhasDaFatia } from "../bank/repository";
 import type { Db } from "../db/client";
 import type { AppEnv, Env } from "../env";
 import { getSession } from "../household/context";
@@ -18,6 +16,10 @@ import { lerCursor, type SyncAccount, type SyncCursor } from "../sync/plan";
 import { type LinhaDaExecucao, lerExecucao, startRun } from "../sync/runs";
 import { faturasReaisDoCartao, runSyncSlice } from "../sync/slice";
 import { pluggyFalsoEmMemoria } from "./pluggy-fake-fetch";
+
+// Carregados sob demanda, como em slice.ts: o main do Worker chega aos testes antes dos vi.mock (CLAUDE.md).
+const gravacao = () => import("../bank/repository");
+const aposIngest = () => import("../bank/after-ingest");
 
 type Corpo = { rodada: number; rows: number };
 type Contexto = {
@@ -231,6 +233,7 @@ export function registrarEtapasDeMedicao(rotas: Hono<AppEnv>): void {
   rotas.post("/sync-slice/gravacao", (c) =>
     etapaDaCadeia(c, "gravacao", async (ctx) => {
       const linhas = await leituraDaFatia(ctx);
+      const { gravarLinhasDaFatia } = await gravacao();
       const gravado = await gravarLinhasDaFatia(ctx.db, {
         householdId: ctx.householdId,
         bankItemId: ctx.linha.bank_item_id,
@@ -255,7 +258,7 @@ export function registrarEtapasDeMedicao(rotas: Hono<AppEnv>): void {
   rotas.post("/sync-slice/classificacao", (c) =>
     etapaDaCadeia(c, "classificacao", async (ctx) => {
       const ids = await idsDoItem(ctx.db, ctx.linha.bank_item_id);
-      await etapaClassificacao(ctx.db, ctx.householdId, ids, ctx.agora.toISOString());
+      await (await aposIngest()).etapaClassificacao(ctx.db, ctx.householdId, ids, ctx.agora.toISOString());
       return { ids: ids.length };
     }),
   );
@@ -263,7 +266,7 @@ export function registrarEtapasDeMedicao(rotas: Hono<AppEnv>): void {
   rotas.post("/sync-slice/ciclo", (c) =>
     etapaDaCadeia(c, "ciclo", async (ctx) => {
       const ids = await idsDoItem(ctx.db, ctx.linha.bank_item_id);
-      await etapaCiclo(ctx.db, ctx.householdId, ids);
+      await (await aposIngest()).etapaCiclo(ctx.db, ctx.householdId, ids);
       return { ids: ids.length };
     }),
   );
@@ -271,7 +274,7 @@ export function registrarEtapasDeMedicao(rotas: Hono<AppEnv>): void {
   rotas.post("/sync-slice/pipeline", (c) =>
     etapaDaCadeia(c, "pipeline", async (ctx) => {
       const ids = await idsDoItem(ctx.db, ctx.linha.bank_item_id);
-      await etapaPipeline(ctx.db, ctx.householdId, ids, ctx.agora.toISOString());
+      await (await aposIngest()).etapaPipeline(ctx.db, ctx.householdId, ids, ctx.agora.toISOString());
       return { ids: ids.length };
     }),
   );
@@ -279,7 +282,7 @@ export function registrarEtapasDeMedicao(rotas: Hono<AppEnv>): void {
   rotas.post("/sync-slice/tipos", (c) =>
     etapaDaCadeia(c, "tipos", async (ctx) => {
       const ids = await idsDoItem(ctx.db, ctx.linha.bank_item_id);
-      await etapaTipos(ctx.db, ctx.householdId, ids);
+      await (await aposIngest()).etapaTipos(ctx.db, ctx.householdId, ids);
       return { ids: ids.length };
     }),
   );
