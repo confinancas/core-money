@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { pluggyFalsoEmMemoria } from "../../../src/worker/dev/pluggy-fake-fetch";
-import { escritasDeHoje } from "../../../src/worker/sync/orcamento";
+import { leituraDoTeto } from "../../../src/worker/sync/orcamento";
 import { startRun } from "../../../src/worker/sync/runs";
 import { runSyncSlice } from "../../../src/worker/sync/slice";
 import {
@@ -113,9 +113,40 @@ describe("teto diário de escritas: a importação para em 60% e volta na virada
     expect(await contaDeTransacoes(banco.itemId)).toBe(0);
   });
 
-  it("escritasDeHoje lê o dia UTC: zero sem linha, e a virada da meia-noite UTC troca o dia", async () => {
+  it("leituraDoTeto lê o dia UTC: zero sem linha, e a virada da meia-noite UTC troca o dia", async () => {
+    const banco = await semearBanco();
     await contadorDoDia("2026-11-10", 1_234);
-    expect(await escritasDeHoje(env.DB, new Date("2026-11-10T23:59:59.000Z"))).toBe(1_234);
-    expect(await escritasDeHoje(env.DB, new Date("2026-11-11T00:00:00.000Z"))).toBe(0);
+    expect(await leituraDoTeto(env.DB, banco.householdId, new Date("2026-11-10T23:59:59.000Z"))).toEqual({
+      escritas: 1_234,
+      paidPlan: false,
+    });
+    expect(await leituraDoTeto(env.DB, banco.householdId, new Date("2026-11-11T00:00:00.000Z"))).toEqual({
+      escritas: 0,
+      paidPlan: false,
+    });
+  });
+
+  it("com o plano pago do lar (TASK-0209), a leitura traz paidPlan e a fatia com 61% não pausa", async () => {
+    const banco = await semearBanco();
+    await env.DB.prepare("UPDATE households SET paid_plan = 1 WHERE id = ?").bind(banco.householdId).run();
+    expect(await leituraDoTeto(env.DB, banco.householdId, new Date(AGORA))).toEqual({
+      escritas: 0,
+      paidPlan: true,
+    });
+
+    const runId = (await startRun(db(), banco.itemId, "historico", AGORA)) as string;
+    await contadorDoDia(HOJE, 61_000);
+    const resultado = await runSyncSlice(
+      AMBIENTE,
+      { db: db(), fetch: pluggyFalsoEmMemoria(2) },
+      { runId, seq: 0, tentativa: 1 },
+      AGORA,
+    );
+    expect(resultado).toEqual({ tipo: "continua" });
+    expect((await cursorDaExecucao(runId)).seq).toBe(1);
+    const contas = await env.DB.prepare("SELECT COUNT(*) AS n FROM accounts WHERE bank_item_id = ?")
+      .bind(banco.itemId)
+      .first<{ n: number }>();
+    expect(contas?.n).toBeGreaterThan(0);
   });
 });

@@ -5,7 +5,7 @@ import type { AppEnv, Env } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
 import { enqueueSlice } from "./enqueue";
-import { estaPausada } from "./orcamento";
+import { estaPausadaPeloTeto } from "./orcamento";
 import { startRun } from "./runs";
 import { situacaoDoBanco } from "./situacao";
 
@@ -95,6 +95,11 @@ export function syncRoutes(
       .bind(householdId, householdId, desde)
       .all<LinhaDoStatus>();
     const linhas = resultado.results ?? [];
+    // Plano do lar (TASK-0209): uma leitura pela chave, fora de SQL_DO_STATUS, que os testes de plano de consulta leem.
+    const plano = await c.var.db.$client
+      .prepare("SELECT paid_plan FROM households WHERE id = ?")
+      .bind(householdId)
+      .first<{ paid_plan: number }>();
     const bancosLidos = await c.var.db.$client
       .prepare(SQL_BANCOS_DO_LAR)
       .bind(householdId)
@@ -127,11 +132,12 @@ export function syncRoutes(
       {
         lastSync,
         banks: bancos,
+        paidPlan: Number(plano?.paid_plan ?? 0) === 1,
         // Pausada pelo teto diário (orcamento.ts): a fatia encostou o heartbeat na virada, e a retomada é a virada.
         importing: linhas
           .filter((linha) => linha.finished_at === null)
           .map((linha) => {
-            const pausada = estaPausada(linha.heartbeat_at, instante);
+            const pausada = estaPausadaPeloTeto(linha.heartbeat_at, instante);
             return {
               bankItemId: linha.bank_item_id,
               institutionName: linha.institution_name,

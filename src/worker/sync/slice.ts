@@ -27,7 +27,7 @@ import { PluggyError } from "../pluggy/errors";
 import type { PluggyAccount, PluggyItem } from "../pluggy/types";
 import { applySpendTypesOnImport } from "../spend-types/derive";
 import { causaDoErro } from "../usage/d1-limit-errors";
-import { atingiuOTeto, escritasDeHoje } from "./orcamento";
+import { leituraDoTeto, pausaPeloTeto } from "./orcamento";
 import {
   DIAS_DA_CONCILIACAO,
   dailyWindows,
@@ -125,7 +125,7 @@ function ehFalhaPassageiraDoD1(erro: unknown): boolean {
   return FALHA_PASSAGEIRA_DO_D1.test(mensagem);
 }
 
-// Pausa até a virada do dia: o heartbeat vai para lá e o cron só reenfileira depois (estaPausada, orcamento.ts).
+// Pausa até a virada do dia: o heartbeat vai para lá e o cron só reenfileira depois (estaPausadaPeloTeto, orcamento.ts).
 function pausarStmt(db: Db, runId: string, ate: string): D1PreparedStatement {
   return db.$client
     .prepare("UPDATE sync_runs SET heartbeat_at = ? WHERE id = ? AND finished_at IS NULL")
@@ -583,7 +583,8 @@ export async function runSyncSlice(
     // do heartbeat. A conciliação só reclassifica 15 dias de linhas e fica no colchão dos 40%: não lê o contador.
     const trazDadosDoBanco =
       cursor.phase === "inicio" || cursor.phase === "faturas" || cursor.phase === "transacoes";
-    if (trazDadosDoBanco && atingiuOTeto(await escritasDeHoje(db.$client, agora))) {
+    // Só o plano gratuito tem teto (TASK-0209): no plano pago, a leitura do lar traz paidPlan e a fatia não pausa.
+    if (trazDadosDoBanco && pausaPeloTeto(await leituraDoTeto(db.$client, run.household_id, agora))) {
       await db.$client.batch([pausarStmt(db, run.id, resetsAt(agora))]);
       return { tipo: "pulou" };
     }
