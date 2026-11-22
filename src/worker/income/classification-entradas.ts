@@ -71,7 +71,7 @@ export function leituraDasEntradasStmts(
         `SELECT t.id AS id, t.movement AS movement, t.amount_cents AS amount_cents, t.occurred_at AS occurred_at,
           t.local_date AS local_date, t.cycle_key AS cycle_key, t.income_kind AS income_kind,
           t.income_subtype AS income_subtype, t.fixed_income_id AS fixed_income_id, t.hidden AS hidden,
-          t.hidden_reason AS hidden_reason, t.categorized_by AS categorized_by, t.categorized_at AS categorized_at, t.is_backfill AS is_backfill,
+          t.hidden_reason AS hidden_reason, t.removed_at AS removed_at, t.categorized_by AS categorized_by, t.categorized_at AS categorized_at, t.is_backfill AS is_backfill,
           t.original_description AS original_description, t.counterparty_name AS counterparty_name,
           t.counterparty_doc_masked AS counterparty_doc_masked, t.counterparty_bank AS counterparty_bank,
           t.pix_key_masked AS pix_key_masked, t.ai_income_kind AS ai_income_kind, t.ai_income_subtype AS ai_income_subtype,
@@ -107,7 +107,7 @@ export function aceiteDeEntradaStmts(
   db: Db,
   householdId: string,
   entrada: { linha: LinhaDaEntrada; classificacao: ClassificacaoDeEntrada; memberId: string; agora: string },
-): { comandos: D1PreparedStatement[]; indiceDosIguais: number } {
+): { comandos: D1PreparedStatement[]; indiceDosIguais: number; indiceDaRegra: number } {
   const { linha, classificacao, memberId, agora } = entrada;
   const comandos: D1PreparedStatement[] = classifyIncomeStmts(db, householdId, {
     linha,
@@ -119,7 +119,7 @@ export function aceiteDeEntradaStmts(
     modo: "so_sem_classe",
   });
   const chave = linha.contraparte_chave;
-  if (chaveVazia(chave)) return { comandos, indiceDosIguais: -1 };
+  if (chaveVazia(chave)) return { comandos, indiceDosIguais: -1, indiceDaRegra: -1 };
   comandos.push(
     db.$client
       .prepare(
@@ -143,19 +143,23 @@ export function aceiteDeEntradaStmts(
       .prepare(
         `UPDATE transactions SET rule_id = (SELECT r.id FROM rules AS r WHERE r.household_id = ? AND r.scope = 'remetente'
           AND r.match_value = ? AND r.disabled_at IS NULL)
-        WHERE id = ? AND household_id = ? AND categorized_by = ?`,
+        WHERE id = ? AND household_id = ? AND categorized_by = ? AND categorized_at = ?
+        RETURNING id, rule_id`,
       )
-      .bind(householdId, chave, linha.id, householdId, memberId),
+      .bind(householdId, chave, linha.id, householdId, memberId, agora),
   );
+  const indiceDaRegra = comandos.length - 1;
   const iguais = iguaisDaRegraStmts(db, householdId, { excludeId: linha.id, chave, classificacao, agora });
   const indiceDosIguais = comandos.length + iguais.indiceDosIguais;
   comandos.push(...iguais.comandos);
-  return { comandos, indiceDosIguais };
+  return { comandos, indiceDosIguais, indiceDaRegra };
 }
 
-// Desfazer de uma entrada aceita por esta pessoa: tira o recebimento, devolve a entrada à fila e tira a classificação dos
-// iguais que a regra dela classificou. A regra "confirmacao" criada por esta pessoa é desativada se nada mais a usa. Só
-// mexe no que ainda é desta pessoa (categorized_by). O índice é o do UPDATE que devolve a entrada desfeita.
+// Desfazer de uma entrada aceita por esta pessoa: tira o recebimento (de quem for: pela transação, sem olhar o
+// confirmed_by) e devolve a entrada à fila. Tira também a classificação dos iguais que a mesma confirmação resolveu
+// (regra desta confirmação e o mesmo categorized_at da entrada): o que a regra classificou depois, na importação, fica.
+// A regra "confirmacao" criada por esta pessoa é desativada se nada mais a usa. Só mexe no que ainda é desta pessoa
+// (categorized_by). O índice é o do UPDATE que devolve a entrada desfeita.
 export function desfazerEntradaStmts(
   db: Db,
   householdId: string,
@@ -170,43 +174,31 @@ export function desfazerEntradaStmts(
     categorized_by = NULL, rule_id = NULL,
     hidden = CASE WHEN hidden_reason = 'reembolso_terceiros' THEN 0 ELSE hidden END,
     hidden_reason = CASE WHEN hidden_reason = 'reembolso_terceiros' THEN NULL ELSE hidden_reason END`;
+  // Os iguais desta confirmação: classificados pela regra dela, no mesmo instante da entrada desfeita.
+  const iguais = `SELECT t.id FROM transactions AS t WHERE t.household_id = ? AND t.rule_id = ${regra}
+    AND t.categorized_by = 'regra'
+    AND t.categorized_at = (SELECT e.categorized_at FROM transactions AS e WHERE e.id = ? AND e.household_id = ?)
+    AND ${aindaDaPessoa}`;
+  const paramsDosIguais = [
+    householdId,
+    householdId,
+    memberId,
+    transactionId,
+    householdId,
+    transactionId,
+    householdId,
+    transactionId,
+    householdId,
+    memberId,
+  ];
   const comandos: D1PreparedStatement[] = [
     db.$client
-      .prepare(
-        `DELETE FROM fixed_income_receipts WHERE transaction_id = ? AND confirmed_by = ? AND ${aindaDaPessoa}`,
-      )
-      .bind(transactionId, memberId, transactionId, householdId, memberId),
+      .prepare(`DELETE FROM fixed_income_receipts WHERE transaction_id = ? AND ${aindaDaPessoa}`)
+      .bind(transactionId, transactionId, householdId, memberId),
     db.$client
-      .prepare(
-        `DELETE FROM fixed_income_receipts WHERE confirmed_by = 'regra' AND transaction_id IN (
-          SELECT t.id FROM transactions AS t WHERE t.household_id = ? AND t.rule_id = ${regra} AND t.categorized_by = 'regra'
-            AND ${aindaDaPessoa})`,
-      )
-      .bind(
-        householdId,
-        householdId,
-        memberId,
-        transactionId,
-        householdId,
-        transactionId,
-        householdId,
-        memberId,
-      ),
-    db.$client
-      .prepare(
-        `UPDATE transactions SET ${limpa} WHERE household_id = ? AND rule_id = ${regra} AND categorized_by = 'regra'
-          AND ${aindaDaPessoa}`,
-      )
-      .bind(
-        householdId,
-        householdId,
-        memberId,
-        transactionId,
-        householdId,
-        transactionId,
-        householdId,
-        memberId,
-      ),
+      .prepare(`DELETE FROM fixed_income_receipts WHERE transaction_id IN (${iguais})`)
+      .bind(...paramsDosIguais),
+    db.$client.prepare(`UPDATE transactions SET ${limpa} WHERE id IN (${iguais})`).bind(...paramsDosIguais),
   ];
   const indiceDaVolta = comandos.length;
   comandos.push(

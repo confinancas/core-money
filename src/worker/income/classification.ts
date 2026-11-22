@@ -11,7 +11,7 @@ import {
 import { COUNTERPARTY_KEY_SQL, chaveVazia, type RuleSet } from "../../shared/rule-match";
 import type { Db } from "../db/client";
 import { computeCycleIncome } from "./cycle-income";
-import { addTransactionReceiptStmts, removeTransactionReceiptStmt } from "./receipts";
+import { addTransactionReceiptStmts, clearTransactionReceiptsStmt } from "./receipts";
 
 // Classificação de uma entrada (TASK-0903): leitura, prévia e escrita. Cada rota faz 2 lotes ao D1 (db.$client.batch):
 // o primeiro lê a transação, as rendas ativas e a regra; o segundo é o cálculo da renda do ciclo (prévia e GET) ou as
@@ -32,6 +32,7 @@ export type LinhaDaEntrada = {
   fixed_income_id: string | null;
   hidden: number;
   hidden_reason: string | null;
+  removed_at: string | null;
   categorized_by: string | null;
   is_backfill: number;
   categorized_at: string | null;
@@ -76,7 +77,7 @@ const SQL_ENTRADA = `SELECT t.id AS id, t.movement AS movement, t.amount_cents A
     t.local_date AS local_date,
     t.cycle_key AS cycle_key, t.income_kind AS income_kind, t.income_subtype AS income_subtype,
     t.fixed_income_id AS fixed_income_id, t.hidden AS hidden, t.hidden_reason AS hidden_reason,
-    t.categorized_by AS categorized_by, t.is_backfill AS is_backfill, t.original_description AS original_description,
+    t.removed_at AS removed_at, t.categorized_by AS categorized_by, t.is_backfill AS is_backfill, t.original_description AS original_description,
     t.counterparty_name AS counterparty_name, t.counterparty_doc_masked AS counterparty_doc_masked,
     t.counterparty_bank AS counterparty_bank, t.pix_key_masked AS pix_key_masked,
     t.ai_income_kind AS ai_income_kind, t.ai_income_subtype AS ai_income_subtype, t.ai_fixed_income_id AS ai_fixed_income_id,
@@ -178,6 +179,23 @@ export function entradaDoCiclo(resposta: {
   };
 }
 
+// A entrada conta na renda do ciclo? Oculta por outro motivo que não o reembolso, ou removida, não conta hoje nem
+// contará depois da troca (a troca só tira a ocultação do reembolso): a contribuição é zero nos dois lados.
+export const contaNaRenda = (
+  linha: Pick<LinhaDaEntrada, "hidden" | "hidden_reason" | "removed_at">,
+): boolean =>
+  linha.removed_at === null && (linha.hidden === 0 || linha.hidden_reason === "reembolso_terceiros");
+
+// A renda do ciclo depois de a linha passar para a classificação nova.
+export function ajusteDaLinha(
+  base: EntradaDoCiclo,
+  linha: LinhaDaEntrada,
+  nova: ClassificacaoDeEntrada,
+): EntradaDoCiclo {
+  if (!contaNaRenda(linha)) return base;
+  return applyClassificationDelta(base, classificacaoDaLinha(linha), nova, linha.amount_cents);
+}
+
 // Prévia (2 lotes): a renda do ciclo antes e depois da troca. Sem ciclo, o impacto é zero (decisão de nível 1).
 export async function previewIncomeClassification(
   db: Db,
@@ -189,8 +207,7 @@ export async function previewIncomeClassification(
   const ciclo = await computeCycleIncome(db, householdId, linha.cycle_key);
   if (ciclo === null) return { cycleKey: linha.cycle_key, beforeCents: 0, afterCents: 0 };
   const base = entradaDoCiclo(ciclo);
-  const atual = classificacaoDaLinha(linha);
-  const depois = applyClassificationDelta(base, atual, nova, linha.amount_cents);
+  const depois = ajusteDaLinha(base, linha, nova);
   return {
     cycleKey: linha.cycle_key,
     beforeCents: summarizeCycleIncome(base.rendas, base.variavelCents).totalCents,
@@ -221,9 +238,9 @@ export function classifyIncomeStmts(
   const { linha, classificacao, agora } = entrada;
   const comandos: D1PreparedStatement[] = [];
   if (entrada.modo === "trocar") {
-    if (linha.fixed_income_id !== null && linha.income_kind === "parte_salario") {
-      comandos.push(...removeTransactionReceiptStmt(db, householdId, linha.fixed_income_id, linha.id));
-    }
+    // Sempre apaga o recebimento, sem olhar o que a leitura viu: duas gravações ao mesmo tempo (cenário 11) não deixam
+    // recebimento órfão, porque cada lote do D1 é atômico e o último a rodar decide.
+    comandos.push(clearTransactionReceiptsStmt(db, householdId, linha.id));
     comandos.push(
       db.$client
         .prepare(
@@ -255,7 +272,12 @@ export function classifyIncomeStmts(
     );
   }
   const reembolso = classificacao.option === "reembolso" ? 1 : 0;
-  const guarda = entrada.modo === "so_sem_classe" ? "AND (t.income_kind IS NULL OR t.income_kind = ?)" : "";
+  // so_sem_classe: só grava se ainda não há tipo, ou se o tipo é o parte_salario que o recebimento deste mesmo lote
+  // acabou de marcar (mesmo autor e mesmo instante). Um igual já resolvido por outra entrada do lote não é regravado.
+  const guarda =
+    entrada.modo === "so_sem_classe"
+      ? "AND (t.income_kind IS NULL OR (t.income_kind = ? AND t.categorized_by = ? AND t.categorized_at = ?))"
+      : "";
   comandos.push(
     db.$client
       .prepare(
@@ -276,7 +298,7 @@ export function classifyIncomeStmts(
         reembolso,
         linha.id,
         householdId,
-        ...(entrada.modo === "so_sem_classe" ? [kind] : []),
+        ...(entrada.modo === "so_sem_classe" ? [kind, entrada.by, agora] : []),
       ),
   );
   return comandos;
@@ -328,7 +350,7 @@ export function iguaisDaRegraStmts(
           hidden = CASE WHEN ? = 1 THEN 1 ELSE t.hidden END,
           hidden_reason = CASE WHEN ? = 1 THEN 'reembolso_terceiros' ELSE t.hidden_reason END
         WHERE ${cand}
-        RETURNING id`,
+        RETURNING id, rule_id`,
       )
       .bind(
         INCOME_OPTIONS[classificacao.option].incomeKind,

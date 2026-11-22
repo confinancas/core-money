@@ -225,26 +225,44 @@ export function categorizacaoRoutes(
       entradasParaAceitar.push({ linha, classificacao: sugestao });
     }
     const aceitasEntrada = new Set<string>();
-    const entradasAceitas: { transactionId: string; categoryId: null; ruleId: null }[] = [];
-    const iguaisDeEntrada: { transactionId: string; categoryId: null; ruleId: null }[] = [];
+    const entradasAceitas: { transactionId: string; categoryId: null; ruleId: string | null }[] = [];
+    const iguaisDeEntrada: { transactionId: string; categoryId: null; ruleId: string | null }[] = [];
     if (entradasParaAceitar.length > 0) {
       const comandos: D1PreparedStatement[] = [];
-      const indices: number[] = [];
+      const indices: { dosIguais: number; daRegra: number; id: string }[] = [];
       for (const { linha, classificacao } of entradasParaAceitar) {
         const aceite = aceiteDeEntradaStmts(db, householdId, { linha, classificacao, memberId, agora: now });
-        if (aceite.indiceDosIguais >= 0) indices.push(comandos.length + aceite.indiceDosIguais);
+        indices.push({
+          dosIguais: aceite.indiceDosIguais < 0 ? -1 : comandos.length + aceite.indiceDosIguais,
+          daRegra: aceite.indiceDaRegra < 0 ? -1 : comandos.length + aceite.indiceDaRegra,
+          id: linha.id,
+        });
         comandos.push(...aceite.comandos);
       }
       const resultadosDasEntradas = await db.$client.batch(comandos);
-      for (const { linha } of entradasParaAceitar) {
-        aceitasEntrada.add(linha.id);
-        entradasAceitas.push({ transactionId: linha.id, categoryId: null, ruleId: null });
-      }
-      for (const indice of indices) {
-        for (const igual of (resultadosDasEntradas[indice]?.results ?? []) as { id: string }[]) {
-          iguaisDeEntrada.push({ transactionId: igual.id, categoryId: null, ruleId: null });
+      // Um igual que outra entrada do mesmo lote já resolveu sai só em alsoResolved, nunca em accepted.
+      const resolvidasPorIguais = new Set<string>();
+      for (const { dosIguais } of indices) {
+        if (dosIguais < 0) continue;
+        for (const igual of (resultadosDasEntradas[dosIguais]?.results ?? []) as {
+          id: string;
+          rule_id: string | null;
+        }[]) {
+          resolvidasPorIguais.add(igual.id);
+          iguaisDeEntrada.push({ transactionId: igual.id, categoryId: null, ruleId: igual.rule_id });
         }
       }
+      for (const { daRegra, id } of indices) {
+        if (resolvidasPorIguais.has(id)) continue;
+        const regra = daRegra < 0 ? undefined : (resultadosDasEntradas[daRegra]?.results ?? [])[0];
+        aceitasEntrada.add(id);
+        entradasAceitas.push({
+          transactionId: id,
+          categoryId: null,
+          ruleId: (regra as { rule_id: string | null } | undefined)?.rule_id ?? null,
+        });
+      }
+      for (const id of resolvidasPorIguais) aceitasEntrada.add(id);
     }
 
     const aceitas = lista.filter((transactionId) => categoriaDeCadaAceite.has(transactionId));

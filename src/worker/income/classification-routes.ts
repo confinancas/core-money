@@ -2,7 +2,6 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
-  applyClassificationDelta,
   type ClassificacaoDeEntrada,
   INCOME_OPTIONS,
   INCOME_SUBTYPES,
@@ -14,6 +13,7 @@ import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
 import {
+  ajusteDaLinha,
   type Contexto,
   classificacaoDaLinha,
   classifyIncomeStmts,
@@ -41,15 +41,26 @@ const corpoDaPrevia = z.strictObject({
 });
 const corpoDaGravacao = corpoDaPrevia.extend({ remember: z.boolean() });
 
-async function lerCorpo<T>(c: Context<AppEnv>, schema: z.ZodType<T>): Promise<T | undefined> {
-  let corpo: unknown;
+// Lê o corpo de uma escolha. Sem opção válida, 422 com fields.option (a tela mostra junto da escolha); o resto que não
+// bate com o formato é 422 de validação.
+async function lerCorpo<T>(
+  c: Context<AppEnv>,
+  schema: z.ZodType<T>,
+): Promise<{ corpo: T } | { erro: Response }> {
+  let bruto: unknown;
   try {
-    corpo = await c.req.json();
+    bruto = await c.req.json();
   } catch {
-    return undefined;
+    bruto = undefined;
   }
-  const lido = schema.safeParse(corpo);
-  return lido.success ? lido.data : undefined;
+  const opcao =
+    typeof bruto === "object" && bruto !== null ? (bruto as { option?: unknown }).option : undefined;
+  if (typeof opcao !== "string" || !(OPCOES as readonly string[]).includes(opcao)) {
+    return { erro: apiError(c, 422, "validacao", undefined, { fields: { option: "Escolha uma opção." } }) };
+  }
+  const lido = schema.safeParse(bruto);
+  if (!lido.success) return { erro: apiError(c, 422, "validacao", "Dados inválidos.") };
+  return { corpo: lido.data };
 }
 
 // Valida a escolha contra a renda e o tipo. Devolve a classificação, ou os campos com erro (422).
@@ -126,8 +137,9 @@ export function classificacaoDeEntradaRoutes(
   rotas.post("/:id/income-classification/preview", async (c) => {
     const { householdId } = getSession(c);
     const id = c.req.param("id");
-    const corpo = await lerCorpo(c, corpoDaPrevia);
-    if (!corpo) return apiError(c, 422, "validacao", "Dados inválidos.");
+    const lido = await lerCorpo(c, corpoDaPrevia);
+    if ("erro" in lido) return lido.erro;
+    const corpo = lido.corpo;
     const contexto = await lerContexto(c.var.db, householdId, id);
     const linha = contexto.linha;
     if (linha === null) return apiError(c, 404, "nao_encontrada", "Este Pix não foi encontrado.");
@@ -142,8 +154,9 @@ export function classificacaoDeEntradaRoutes(
   rotas.put("/:id/income-classification", async (c) => {
     const { householdId, memberId } = getSession(c);
     const id = c.req.param("id");
-    const corpo = await lerCorpo(c, corpoDaGravacao);
-    if (!corpo) return apiError(c, 422, "validacao", "Dados inválidos.");
+    const lido = await lerCorpo(c, corpoDaGravacao);
+    if ("erro" in lido) return lido.erro;
+    const corpo = lido.corpo;
     const db = c.var.db;
     const contexto = await lerContexto(db, householdId, id);
     const linha: LinhaDaEntrada | null = contexto.linha;
@@ -167,12 +180,7 @@ export function classificacaoDeEntradaRoutes(
       ciclo === null
         ? 0
         : (() => {
-            const ajustado = applyClassificationDelta(
-              entradaDoCiclo(ciclo),
-              classificacaoDaLinha(linha),
-              nova,
-              linha.amount_cents,
-            );
+            const ajustado = ajusteDaLinha(entradaDoCiclo(ciclo), linha, nova);
             return summarizeCycleIncome(ajustado.rendas, ajustado.variavelCents).totalCents;
           })();
 
