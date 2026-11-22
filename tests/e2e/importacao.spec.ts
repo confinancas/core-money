@@ -89,6 +89,9 @@ test("cenário 1: a barra aparece no passo 4, chega a pronto, e a faixa some com
   expect(caixa?.height ?? 0).toBeGreaterThan(0);
   await semRolagemHorizontal(page);
 
+  // No conectar a faixa não aparece (decisão de Gustavo, 2026-11-22): a conferência da faixa é numa tela do app.
+  await page.getByRole("button", { name: "Ir para o início" }).click();
+
   // Quando termina, a faixa da moldura diz que o histórico está pronto. "OK" a tira da tela.
   const faixa = page.getByRole("region", { name: "Importação do histórico" });
   await expect(faixa.getByText(/Histórico do .+ pronto\./)).toBeVisible({ timeout: 120_000 });
@@ -131,6 +134,8 @@ test("cenário 2: com o teto do dia atingido, a faixa e o passo 4 dizem quando a
     await alvoDeNoMinimo44(passoQuatro.getByRole("button", { name: BOTAO_SEGUIR }));
     await expect(passoQuatro.getByRole("progressbar", { name: "Histórico" })).toHaveCount(0);
 
+    // No conectar a faixa não aparece: a conferência da faixa é numa tela do app.
+    await page.getByRole("button", { name: "Ir para o início" }).click();
     const faixa = page.getByRole("region", { name: "Importação do histórico" });
     await expect(faixa.getByText(FRASE_DA_PAUSA)).toBeVisible({ timeout: 30_000 });
     await expect(faixa.getByText(EXPLICACAO_DO_TETO)).toBeVisible();
