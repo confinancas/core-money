@@ -36,6 +36,14 @@ describe("medição por etapa da fatia (TASK-0208)", () => {
     expect((await chamar("completa", corpo, cabecalhos)).status).toBe(200);
   });
 
+  it('a rodada em texto ("2", como o medidor troca {i}) vale o mesmo que o número', async () => {
+    const cabecalhos = await sessaoDeTeste();
+    const resposta = await chamar("preparo", { rodada: "7", rows: LINHAS }, cabecalhos);
+    expect(resposta.status).toBe(200);
+    const existe = await env.DB.prepare("SELECT id FROM bank_items WHERE id = 'medicao-5-7'").first();
+    expect(existe).not.toBeNull();
+  });
+
   it("a gravação põe as linhas da rodada no banco", async () => {
     const cabecalhos = await sessaoDeTeste();
     const corpo = { rodada: 2, rows: LINHAS };

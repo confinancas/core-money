@@ -36,10 +36,10 @@ const chaveDaRodada = ({ rodada, rows }: Corpo): string => `medicao-${rows}-${ro
 
 async function lerCorpo(c: Context<AppEnv>): Promise<Corpo | null> {
   const corpo = (await c.req.json().catch(() => ({}))) as { rodada?: unknown; rows?: unknown };
-  const rodada =
-    typeof corpo.rodada === "number" && Number.isInteger(corpo.rodada) && corpo.rodada >= 1
-      ? corpo.rodada
-      : null;
+  // O medidor troca {i} por texto ("1"), então a rodada pode chegar como número em texto.
+  const bruta =
+    typeof corpo.rodada === "string" && /^\d+$/.test(corpo.rodada) ? Number(corpo.rodada) : corpo.rodada;
+  const rodada = typeof bruta === "number" && Number.isInteger(bruta) && bruta >= 1 ? bruta : null;
   const rows =
     typeof corpo.rows === "number" && Number.isInteger(corpo.rows) && corpo.rows >= 1 && corpo.rows <= 200
       ? corpo.rows
