@@ -385,11 +385,14 @@ export function regraDoRemetenteStmts(
 ): D1PreparedStatement[] {
   const { classificacao } = entrada;
   if (!entrada.lembrar) {
-    if (entrada.regraAtiva === null) return [];
+    // Desativa pela chave do remetente, não pelo id lido antes: uma gravação concorrente pode ter criado outra regra.
+    if (chaveVazia(entrada.chave)) return [];
     return [
       db.$client
-        .prepare("UPDATE rules SET disabled_at = ? WHERE id = ? AND household_id = ? AND disabled_at IS NULL")
-        .bind(entrada.agora, entrada.regraAtiva.id, householdId),
+        .prepare(
+          "UPDATE rules SET disabled_at = ? WHERE household_id = ? AND scope = 'remetente' AND match_value = ? AND disabled_at IS NULL",
+        )
+        .bind(entrada.agora, householdId, entrada.chave),
     ];
   }
   if (chaveVazia(entrada.chave)) throw new RangeError("Regra sem chave de casamento.");

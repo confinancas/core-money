@@ -2,12 +2,14 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/worker/app";
 import { processNewTransactions } from "../../src/worker/categorization/pipeline";
-import { classifyIncomeStmts } from "../../src/worker/income/classification";
+import { classifyIncomeStmts, regraDoRemetenteStmts } from "../../src/worker/income/classification";
 import { aquecerOPortao, semearPronto } from "./helpers/app";
 import {
   appDoLar,
+  CHAVE_FULANA,
   chamar,
   criarPix,
+  criarRegraDeRemetente,
   criarRenda,
   dbDeTeste,
   linhaDa,
@@ -276,5 +278,70 @@ describe("422 de opção (item 11)", () => {
       expect(previa.status).toBe(422);
       expect(previa.corpo.fields.option).toBe("Escolha uma opção.");
     }
+  });
+});
+
+describe("reconferência da Fable", () => {
+  it("o desfazer devolve o igual mesmo quando o remetente já tinha uma regra ativa de outra origem", async () => {
+    const lar = await criarLar();
+    await prepararCiclos(lar);
+    const arquivada = await criarRenda(lar, "[TEST] Salário antigo", 1_000_000, { arquivada: true });
+    const renda = await criarRenda(lar, "[TEST] Salário em dólar");
+    // Regra "lembrar" antiga, ligada a uma renda arquivada: não se aplica, e os Pix ficam na fila.
+    const antiga = await criarRegraDeRemetente(lar, CHAVE_FULANA, {
+      kind: "parte_salario",
+      rendaId: arquivada,
+      origem: "lembrar",
+    });
+    const a = await criarPix(lar, 100_000);
+    const b = await criarPix(lar, 150_000, "[TEST] Fulana", { dia: "2026-10-21" });
+    await sugerir(a, { kind: "parte_salario", rendaId: renda });
+    const app = appDoLar(lar);
+
+    const aceite = await chamar(app, "POST", "/api/categorization/accept", { transactionIds: [a] });
+    expect(aceite.corpo.alsoResolved.map((x: { transactionId: string }) => x.transactionId)).toEqual([b]);
+    expect((await linhaDa(b))?.rule_id).toBe(antiga);
+    expect((await chamar(app, "GET", url(a))).corpo.cycleIncomeCents).toBe(250_000);
+
+    await chamar(app, "POST", "/api/categorization/undo", {
+      items: [{ transactionId: a, categoryId: null }],
+    });
+
+    expect((await linhaDa(a))?.income_kind).toBeNull();
+    expect((await linhaDa(b))?.income_kind).toBeNull();
+    expect((await linhaDa(b))?.categorized_at).toBeNull();
+    expect(await recebimentosDa(b)).toHaveLength(0);
+    expect((await chamar(app, "GET", url(a))).corpo.cycleIncomeCents).toBe(0);
+  });
+
+  it("sem lembrar, a regra do remetente é desativada pela chave, mesmo com a leitura velha (sem regra lida)", async () => {
+    const lar = await criarLar();
+    await prepararCiclos(lar);
+    const pix = await criarPix(lar, 150_000);
+    const regra = await criarRegraDeRemetente(lar, CHAVE_FULANA, {
+      kind: "variavel",
+      subtipo: "venda",
+      origem: "lembrar",
+    });
+    const medidor = dbDeTeste();
+
+    // A gravação que leu antes de a regra existir não a viu (regraAtiva nulo), e mesmo assim a desativa.
+    await medidor.$client.batch(
+      regraDoRemetenteStmts(medidor, lar.householdId, {
+        chave: CHAVE_FULANA,
+        classificacao: { option: "reembolso", fixedIncomeId: null, incomeSubtype: null },
+        lembrar: false,
+        regraAtiva: null,
+        memberId: lar.memberId,
+        agora: AGORA,
+        id: crypto.randomUUID(),
+      }),
+    );
+
+    const depois = await env.DB.prepare("SELECT disabled_at FROM rules WHERE id = ?")
+      .bind(regra)
+      .first<{ disabled_at: string | null }>();
+    expect(depois?.disabled_at).not.toBeNull();
+    expect(pix).toBeTruthy();
   });
 });
