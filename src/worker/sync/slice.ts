@@ -36,6 +36,7 @@ import {
   JANELAS_DE_CONCILIACAO,
   lerCursor,
   MESES,
+  type PosGravacao,
   progressPct,
   type SyncAccount,
   type SyncCursor,
@@ -302,19 +303,10 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
   const contas = cursor.accounts;
   const conta = contas[cursor.a];
   const janela = conta?.windows[cursor.w];
-  const fimDasTransacoes = (proximo: SyncCursor, total: number, feitas: number): ResultadoDaFase => {
-    if (run.kind === "historico") {
-      proximo.phase = "conciliar";
-      proximo.w = 0;
-      return { proximo, total: total + JANELAS_DE_CONCILIACAO, feitas };
-    }
-    proximo.phase = "fim";
-    return { proximo, total, feitas };
-  };
   if (!conta || !janela) {
     // Sem conta nem janela: não há transações; na importação, a conciliação entra no total e começa na janela 0.
     const proximo: SyncCursor = { ...cursor, seq: dep.seq + 1 };
-    return fimDasTransacoes(proximo, run.slices_total, run.slices_done);
+    return fimDasTransacoes(run, proximo, run.slices_total, run.slices_done);
   }
 
   const client = await clientForConnection(
@@ -340,20 +332,14 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
           },
         };
   const trecho = pagina.results.slice(cursor.offset, cursor.offset + LINHAS_POR_FATIA);
-  const { ingestTransactions } = await gravacao();
-  const { insertedIds, atualizadasDaExecucao } = await ingestTransactions(db, {
+  const { gravarLinhasDaFatia } = await gravacao();
+  const { insertedIds, updatedIds, atualizadasDaExecucao } = await gravarLinhasDaFatia(db, {
     householdId: run.household_id,
     bankItemId: run.bank_item_id,
     rows: trecho.map((transacao) => mapTransaction(transacao, contaDaTransacao)),
     now: dep.nowIso,
     inicioDaExecucao: run.started_at,
   });
-  // Só as linhas que nasceram nesta execução completam regras e tipo (a repetição de uma fatia que a tentativa anterior
-  // deixou pela metade). A releitura diária de linhas de antes não volta à fila da IA nem tem o is_backfill regravado
-  // (TASK-0205, N9 e A3).
-  if (atualizadasDaExecucao.length > 0) {
-    await completarTipos(db, run.household_id, atualizadasDaExecucao, dep.nowIso);
-  }
 
   // Leituras da janela: só a primeira página de cada leitura conta (a fatia que relê a mesma página não soma de novo).
   const lidasAgora = cursor.lidas + (cursor.offset === 0 ? pagina.results.length : 0);
@@ -363,16 +349,67 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
     inserted: cursor.inserted + insertedIds.length,
     lidas: lidasAgora,
   };
-  if (pagina.results.length > cursor.offset + LINHAS_POR_FATIA) {
-    // Sobrou linha na página: a mesma página é relida na próxima fatia, a partir do offset.
-    proximo.offset = cursor.offset + LINHAS_POR_FATIA;
+  // Para onde o cursor anda depois da gravação: sobrou linha na página (a mesma página é relida a partir do offset), há
+  // próxima página, ou a janela acabou (os dois nulos).
+  const sobrou = pagina.results.length > cursor.offset + LINHAS_POR_FATIA;
+  const pos: PosGravacao = {
+    novas: insertedIds,
+    existentes: updatedIds,
+    daExecucao: atualizadasDaExecucao,
+    offsetDepois: sobrou ? cursor.offset + LINHAS_POR_FATIA : null,
+    paginaDepois: !sobrou && pagina.next ? pagina.next : null,
+  };
+  // Com linhas gravadas, a fatia acaba aqui: a próxima mensagem roda as etapas depois da gravação e só então anda
+  // (TASK-0208). Sem nenhuma linha, não há o que classificar: anda já, na mesma mensagem.
+  if (insertedIds.length + updatedIds.length > 0) {
+    proximo.phase = "pos_gravacao";
+    proximo.pos = pos;
     return { proximo, total: run.slices_total, feitas: run.slices_done };
   }
-  if (pagina.next) {
-    proximo.pageCursor = pagina.next;
+  return avancarDepoisDaGravacao(db, run, proximo, pos, dep);
+}
+
+// Fim das transações: na importação, a conciliação entra no total e começa na janela 0; na sincronização, vai para fim.
+function fimDasTransacoes(
+  run: LinhaDaExecucao,
+  proximo: SyncCursor,
+  total: number,
+  feitas: number,
+): ResultadoDaFase {
+  if (run.kind === "historico") {
+    proximo.phase = "conciliar";
+    proximo.w = 0;
+    return { proximo, total: total + JANELAS_DE_CONCILIACAO, feitas };
+  }
+  proximo.phase = "fim";
+  return { proximo, total, feitas };
+}
+
+// Anda o cursor depois da gravação (e das etapas, quando houve): mesma página, próxima página, ou fim da janela com a
+// próxima janela, a próxima conta ou o fim das transações. `proximo` já traz o seq novo e as leituras da janela.
+async function avancarDepoisDaGravacao(
+  db: Db,
+  run: LinhaDaExecucao,
+  proximo: SyncCursor,
+  pos: PosGravacao,
+  dep: Dependencias,
+): Promise<ResultadoDaFase> {
+  const contas = proximo.accounts;
+  const conta = contas[proximo.a];
+  const janela = conta?.windows[proximo.w];
+  proximo.pos = null;
+  proximo.phase = "transacoes";
+  if (pos.offsetDepois !== null) {
+    // Sobrou linha na página: a mesma página é relida na próxima fatia, a partir do offset.
+    proximo.offset = pos.offsetDepois;
+    return { proximo, total: run.slices_total, feitas: run.slices_done };
+  }
+  if (pos.paginaDepois !== null) {
+    proximo.pageCursor = pos.paginaDepois;
     proximo.offset = 0;
     return { proximo, total: run.slices_total, feitas: run.slices_done };
   }
+  if (!conta || !janela) return fimDasTransacoes(run, proximo, run.slices_total, run.slices_done);
   // Fim da janela: na sincronização, o que não voltou sai dos cálculos (guardas em vanished.ts). Depois, a próxima janela
   // da conta, ou a próxima conta.
   if (run.kind !== "historico") {
@@ -383,22 +420,47 @@ async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: Sy
     const sumicos = await marcarSumicos(
       db,
       { escopo, from: janela.from, to: janela.to, inicioDaExecucao: run.started_at, now: dep.nowIso },
-      lidasAgora,
+      proximo.lidas,
     );
-    proximo.conferir = cursor.conferir || sumicos.conferir;
+    proximo.conferir = proximo.conferir || sumicos.conferir;
   }
   proximo.lidas = 0;
   proximo.pageCursor = null;
   proximo.offset = 0;
-  if (cursor.w + 1 < conta.windows.length) {
-    proximo.w = cursor.w + 1;
+  if (proximo.w + 1 < conta.windows.length) {
+    proximo.w += 1;
     return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
   }
-  proximo.a = cursor.a + 1;
+  proximo.a += 1;
   proximo.w = 0;
   if (proximo.a < contas.length) return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
   // Fim das transações.
-  return fimDasTransacoes(proximo, run.slices_total, run.slices_done + 1);
+  return fimDasTransacoes(run, proximo, run.slices_total, run.slices_done + 1);
+}
+
+// Fase pos_gravacao (TASK-0208): a segunda mensagem da fatia. Roda as etapas depois da gravação (classificação, ciclo,
+// regras e tipo, na ordem do afterIngest) para os ids que a fase transacoes deixou no cursor, completa as linhas da
+// repetição e só então anda o cursor. Repetida, o seq a pula; a mensagem refeita depois de uma queda reaplica etapas
+// que são idempotentes.
+async function fasePosGravacao(db: Db, run: LinhaDaExecucao, cursor: SyncCursor, dep: Dependencias) {
+  const pos = cursor.pos;
+  if (pos === null) throw new Error("pos_gravacao sem ids no cursor");
+  const { afterIngest } = await import("../bank/after-ingest");
+  await afterIngest(db, {
+    householdId: run.household_id,
+    bankItemId: run.bank_item_id,
+    insertedIds: pos.novas,
+    updatedIds: pos.existentes,
+    now: dep.nowIso,
+  });
+  // Só as linhas que nasceram nesta execução completam regras e tipo (a repetição de uma fatia que a tentativa anterior
+  // deixou pela metade). A releitura diária de linhas de antes não volta à fila da IA nem tem o is_backfill regravado
+  // (TASK-0205, N9 e A3).
+  if (pos.daExecucao.length > 0) {
+    await completarTipos(db, run.household_id, pos.daExecucao, dep.nowIso);
+  }
+  const proximo: SyncCursor = { ...cursor, seq: dep.seq + 1 };
+  return avancarDepoisDaGravacao(db, run, proximo, pos, dep);
 }
 
 // Fase conciliar: uma janela de 15 dias por fatia, da de hoje (w = 0) para a mais antiga (w = 24). Cada janela
@@ -602,7 +664,9 @@ export async function runSyncSlice(
           ? await faseFaturas(db, env, run, cursor, dep)
           : cursor.phase === "transacoes"
             ? await faseTransacoes(db, env, run, cursor, dep)
-            : await faseConciliar(db, run, cursor, dep);
+            : cursor.phase === "pos_gravacao"
+              ? await fasePosGravacao(db, run, cursor, dep)
+              : await faseConciliar(db, run, cursor, dep);
 
     const gravou = await saveCursorStmt(db, {
       runId: run.id,

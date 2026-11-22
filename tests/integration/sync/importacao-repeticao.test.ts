@@ -124,18 +124,24 @@ describe("falha entre o INSERT e o afterIngest (TASK-0204, R6b)", () => {
       .run();
     const antes = await linhaDaEscolhida(escolhida);
 
-    // O INSERT da fatia passa e o afterIngest falha: a primeira tentativa repete.
+    // A mensagem de gravação (seq 2) passa e deixa os ids no cursor; o afterIngest falha na mensagem pós-gravação
+    // (seq 3), que repete (TASK-0208).
+    expect(
+      await runSyncSlice(AMBIENTE, { db: db(), fetch: BASE }, { runId, seq: 2, tentativa: 1 }, AGORA),
+    ).toEqual({
+      tipo: "continua",
+    });
     armadas.afterIngest = 1;
     const primeira = await runSyncSlice(
       AMBIENTE,
       { db: db(), fetch: BASE },
-      { runId, seq: 2, tentativa: 1 },
+      { runId, seq: 3, tentativa: 1 },
       AGORA,
     );
     expect(primeira).toEqual({ tipo: "repete", atrasoSegundos: 300 });
     expect(await contaDeTransacoes(banco.itemId)).toBe(2);
 
-    // A regra do casal para o estabelecimento da linha que a primeira tentativa inseriu. Sem afterIngest, ela não casou.
+    // A regra do casal para o estabelecimento da linha que a gravação inseriu. Sem o afterIngest, ela não casou.
     const inserida = `${banco.itemId}-corrente-${HOJE}-1`;
     const chave = await env.DB.prepare(
       "SELECT establishment_key AS chave FROM transactions WHERE external_id = ?",
@@ -150,7 +156,7 @@ describe("falha entre o INSERT e o afterIngest (TASK-0204, R6b)", () => {
       .bind(crypto.randomUUID(), banco.householdId, chave?.chave ?? "", banco.memberId, AGORA)
       .run();
 
-    const retomadas = await rodar(runId, BASE, 2, 2);
+    const retomadas = await rodar(runId, BASE, 3, 2);
     expect(retomadas.at(-1)?.resultado).toEqual({ tipo: "encerrou", status: "repetiu", codigo: null });
 
     // A linha inserida pela primeira tentativa recebe a regra na repetição; a escolhida pelo casal fica como ele deixou.
