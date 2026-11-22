@@ -24,6 +24,12 @@ describe("nextInQueue", () => {
     expect(nextInQueue(fila, { id: "zz", localDate: "2026-11-12" })?.transactionId).toBe("c");
   });
 
+  it("atual removido no meio da fila: devolve o primeiro depois dele, e não o topo", () => {
+    // O item 'a9' (09/11) já saiu da fila: o próximo é o primeiro depois dele, 'a'; nunca o 'c' do topo.
+    expect(nextInQueue(fila, { id: "a9", localDate: "2026-11-09" })?.transactionId).toBe("a");
+    expect(nextInQueue(fila, { id: "bz", localDate: "2026-11-09" })?.transactionId).toBe("b");
+  });
+
   it("mesma data com ids diferentes: o id menor vem depois", () => {
     const mesmaData = [item("d", "2026-11-10"), item("b", "2026-11-10"), item("a", "2026-11-10")];
     expect(nextInQueue(mesmaData, { id: "d", localDate: "2026-11-10" })?.transactionId).toBe("b");

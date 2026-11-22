@@ -14,6 +14,7 @@ import { instalarMatchMedia } from "../helpers/larguras";
 const DETALHE = {
   id: "abc",
   movement: "compra",
+  baseMovement: "compra",
   localDate: "2026-11-05",
   occurredAt: "2026-11-05T17:32:00Z",
   amountCents: -4500,
@@ -183,6 +184,7 @@ describe("seletor de categoria aberto direto (sem temHistorico)", () => {
     const pix = {
       ...DETALHE,
       movement: "pix_enviado",
+      baseMovement: "pix_enviado",
       card: null,
       counterparty: {
         name: "[TEST] JOAO",
@@ -206,7 +208,7 @@ describe("seletor de categoria aberto direto (sem temHistorico)", () => {
   });
 
   it("Pix fora da fila, aberto sem histórico: a seta vai ao Início", async () => {
-    falsa({ ...DETALHE, movement: "pix_enviado", card: null });
+    falsa({ ...DETALHE, movement: "pix_enviado", baseMovement: "pix_enviado", card: null });
     const roteador = montar([{ pathname: "/pix/abc", state: { temHistorico: false } }], 0);
     fireEvent.click(await screen.findByRole("link", { name: "Voltar" }));
     await waitFor(() => expect(roteador.state.location.pathname).toBe("/inicio"));
@@ -214,7 +216,7 @@ describe("seletor de categoria aberto direto (sem temHistorico)", () => {
 
   describe("link do cartão de categoria (TASK-0404)", () => {
     it("o voltar é o caminho atual com a busca, no Pix em fila e na compra", async () => {
-      falsa({ ...DETALHE, movement: "pix_enviado", card: null });
+      falsa({ ...DETALHE, movement: "pix_enviado", baseMovement: "pix_enviado", card: null });
       montar(["/pix/abc?fila=1"], 0);
       const link = await screen.findByRole("link", { name: /Categoria/ });
       const voltar = new URL(link.getAttribute("href") ?? "", "http://app.invalid").searchParams.get(

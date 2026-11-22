@@ -87,12 +87,6 @@ export async function marcarPagamentoDeCartao(
   let indiceDaAplicacao: number | null = null;
 
   if (isCardPayment) {
-    if (chaveVazia(chave)) {
-      return {
-        tipo: "recusada",
-        mensagem: "Esta transação não tem estabelecimento nem contraparte para lembrar.",
-      };
-    }
     // Sai do tipo padrao (origem "padrao"); escolhido e regra ficam como estao.
     comandos.push(
       db.$client
@@ -105,37 +99,40 @@ export async function marcarPagamentoDeCartao(
         )
         .bind(nowIso, memberId, transactionId, householdId),
     );
-    // Lembrar: a regra ganha set_movement (mescla: mantem a categoria que ja tinha).
-    const up = upsertRuleStmts(db, {
-      householdId,
-      scope: escopo,
-      matchValue: chave,
-      ativa,
-      nova: { ...SEM_EFEITO, setMovement: "pagamento_fatura" },
-      createdFrom: "lembrar",
-      createdBy: memberId,
-      now: nowIso,
-    });
-    comandos.push(...up.comandos);
-    const regra: RegraParaAplicar = {
-      id: up.id,
-      scope: escopo,
-      matchValue: chave,
-      setCustomName: null,
-      // A categoria que a regra já tinha segue na regra; a escrita (escritaDaRegra) ignora a categoria com movimento.
-      setCategoryId: ativa?.categoriaAtiva ? up.mesclada.setCategoryId : null,
-      setSpendType: null,
-      setMovement: "pagamento_fatura",
-    };
-    const aplicacao = applyRuleToPendingStmt(db, {
-      householdId,
-      rule: regra,
-      excludeTransactionId: transactionId,
-      now: nowIso,
-    });
-    if (aplicacao !== null) {
-      indiceDaAplicacao = comandos.length;
-      comandos.push(aplicacao);
+    // Sem estabelecimento nem contraparte não há regra para lembrar: só esta linha vira pagamento (alsoMarked 0).
+    if (!chaveVazia(chave)) {
+      // Lembrar: a regra ganha set_movement (mescla: mantem a categoria que ja tinha).
+      const up = upsertRuleStmts(db, {
+        householdId,
+        scope: escopo,
+        matchValue: chave,
+        ativa,
+        nova: { ...SEM_EFEITO, setMovement: "pagamento_fatura" },
+        createdFrom: "lembrar",
+        createdBy: memberId,
+        now: nowIso,
+      });
+      comandos.push(...up.comandos);
+      const regra: RegraParaAplicar = {
+        id: up.id,
+        scope: escopo,
+        matchValue: chave,
+        setCustomName: null,
+        // A categoria que a regra já tinha segue na regra; a escrita (escritaDaRegra) ignora a categoria com movimento.
+        setCategoryId: ativa?.categoriaAtiva ? up.mesclada.setCategoryId : null,
+        setSpendType: null,
+        setMovement: "pagamento_fatura",
+      };
+      const aplicacao = applyRuleToPendingStmt(db, {
+        householdId,
+        rule: regra,
+        excludeTransactionId: transactionId,
+        now: nowIso,
+      });
+      if (aplicacao !== null) {
+        indiceDaAplicacao = comandos.length;
+        comandos.push(aplicacao);
+      }
     }
   } else {
     // Desligar: a regra perde set_movement; sem mais nada (categoria, tipo, nome), fica desativada.

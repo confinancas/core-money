@@ -26,8 +26,11 @@ export function QueueFooter({
     );
   }
   return (
-    <Button full loading={salvando} onClick={aoClicar}>
-      Salvar e ir para o próximo <span className="text-[13px] font-normal">· faltam {fila.faltam}</span>
+    <Button full loading={salvando} onClick={aoClicar} className="whitespace-nowrap px-4">
+      Salvar e ir para o próximo
+      <span className="text-[12px] font-bold normal-case tracking-normal opacity-85">
+        · faltam {fila.faltam}
+      </span>
     </Button>
   );
 }

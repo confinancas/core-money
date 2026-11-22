@@ -18,6 +18,7 @@ import {
 const BASE: DetalheDaCompra = {
   id: "t1",
   movement: "compra",
+  baseMovement: "compra",
   localDate: "2026-11-10",
   occurredAt: "2026-11-10T17:32:00Z",
   amountCents: -4500,

@@ -3,14 +3,18 @@ import { Switch } from "../../components/ui/switch";
 
 // É pagamento de cartão (TASK-0404): tira a saída do gasto, porque as compras já contaram na fatura. Grava na hora; o erro
 // aparece sob este cartão. Ligado, a tela esconde categoria, tipo, conta fixa, Lembrar e aceitava cartão.
+// preposicao: "para" no Pix ("Os próximos para <destinatário>") e "de" na compra ("Os próximos de <estabelecimento>").
+// Sem matchLabel (Pix sem nome nem documento), a frase dos próximos some: só esta linha é marcada.
 export function CardPaymentToggle({
   ligada,
   matchLabel,
+  preposicao,
   erro,
   aoMudar,
 }: {
   ligada: boolean;
-  matchLabel: string;
+  matchLabel: string | null;
+  preposicao: "para" | "de";
   erro: string | null;
   aoMudar: (ligada: boolean) => void;
 }) {
@@ -19,8 +23,8 @@ export function CardPaymentToggle({
       <div className="min-w-0 flex-1">
         <h2 className="text-[15px] font-extrabold text-ink">É pagamento de cartão</h2>
         <p className="mt-1 text-[12px] leading-[1.5] text-ink-2">
-          Não conta como gasto: as compras já contaram na fatura. Os próximos para {matchLabel} entram assim
-          sozinhos.
+          Não conta como gasto: as compras já contaram na fatura.
+          {matchLabel !== null && ` Os próximos ${preposicao} ${matchLabel} entram assim sozinhos.`}
         </p>
         {erro !== null && (
           <p role="alert" className="mt-2 text-[13px] text-danger">

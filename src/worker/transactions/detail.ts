@@ -190,6 +190,7 @@ export function paraDetalhe(linha: LinhaDoDetalhe): DetalheDaCompra {
   return {
     id: linha.id,
     movement: linha.movement,
+    baseMovement: movimentoBase,
     localDate: linha.local_date,
     occurredAt: linha.occurred_at,
     amountCents: linha.amount_cents,
@@ -197,7 +198,7 @@ export function paraDetalhe(linha: LinhaDoDetalhe): DetalheDaCompra {
     customName: linha.custom_name,
     displayName: displayName({
       customName: linha.custom_name,
-      movement: linha.movement,
+      movement: movimentoBase,
       counterpartyName: linha.counterparty_name,
       originalDescription: linha.original_description,
     }),

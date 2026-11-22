@@ -47,6 +47,7 @@ describe("DetalheDaCompraSchema", () => {
     const base = {
       id: "t1",
       movement: "compra",
+      baseMovement: "compra",
       localDate: "2026-10-04",
       occurredAt: "2026-10-04T17:32:00Z",
       amountCents: -4500,

@@ -69,31 +69,41 @@ export async function lerFila(transactionId: string): Promise<EstadoDaFila> {
   return { total, position: posicao, faltam, itens: todos };
 }
 
-// Hook da tela: lê a fila quando ativo, e goNext releitura e leva ao próximo item (ou à fila vazia).
+// Hook da tela: lê a fila quando ativo; recarregar relê o contador (depois de uma mudança que tira o item da fila) e
+// proximoCaminho relê só a primeira página e diz para onde ir. Falha na leitura deixa o estado como estava.
 export function useQueueNavigation(transactionId: string, ativo: boolean) {
   const [estado, setEstado] = useState<EstadoDaFila | null>(null);
 
   const recarregar = useCallback(async () => {
     if (!ativo) return null;
-    const lido = await lerFila(transactionId);
-    setEstado(lido);
-    return lido;
+    try {
+      const lido = await lerFila(transactionId);
+      setEstado(lido);
+      return lido;
+    } catch {
+      return null;
+    }
   }, [ativo, transactionId]);
 
   useEffect(() => {
     void recarregar();
   }, [recarregar]);
 
-  // Devolve o caminho do próximo item. Quem chama navega; sem próximo, o caminho é a fila (estado vazio da 0304).
-  const proximoCaminho = useCallback(async (): Promise<string> => {
-    const lido = await lerFila(transactionId);
-    setEstado(lido);
-    const proximo = nextInQueue(lido.itens, {
-      id: transactionId,
-      localDate: lido.itens.find((i) => i.transactionId === transactionId)?.localDate ?? "",
-    });
-    return proximo ? withQueueParam(proximo.detailPath) : "/para-categorizar";
-  }, [transactionId]);
+  // Devolve o caminho do próximo item, que é o primeiro depois do atual na ordem da fila (localDate é o do detalhe: o
+  // item que já saiu da fila não está na lista). Quem chama navega; sem próximo, o caminho é a fila (estado vazio da 0304).
+  const proximoCaminho = useCallback(
+    async (localDate: string): Promise<string> => {
+      const pagina = await fetchQueue("todos");
+      const itens = pagina.items.map((linha) => ({
+        transactionId: linha.transactionId,
+        localDate: linha.localDate,
+        detailPath: linha.detailPath,
+      }));
+      const proximo = nextInQueue(itens, { id: transactionId, localDate });
+      return proximo ? withQueueParam(proximo.detailPath) : "/para-categorizar";
+    },
+    [transactionId],
+  );
 
   return { estado, recarregar, proximoCaminho };
 }

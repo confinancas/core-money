@@ -19,19 +19,22 @@ const MENSAGEM_DE_ERRO = "Não deu para salvar. Tente de novo.";
 const MENSAGEM_DA_REGRA = "O nome foi salvo, mas não deu para usar nas próximas. Tente de novo.";
 
 // avatar (só Pix): as iniciais de quem recebeu; sem nome (null), o ícone do Pix. linhaDaData troca a linha de data
-// quando a tela monta o texto (o Pix diz "saiu do <instituição>").
+// quando a tela monta o texto (o Pix diz "saiu do <instituição>"). kind "pix" troca o exemplo do campo e o texto da
+// chave ("Usar este nome nos próximos Pix para <destinatário>").
 export function TitleCard({
   detalhe,
   hoje,
   aoSalvarNome,
   avatar,
   linhaDaData,
+  kind = "compra",
 }: {
   detalhe: DetalheDaCompra;
   hoje: string;
   aoSalvarNome: (nome: string | null, comRegra: boolean) => Promise<ResultadoDoNome>;
   avatar?: { iniciais: string | null };
   linhaDaData?: string;
+  kind?: "compra" | "pix";
 }) {
   const original = detalhe.originalDescription;
   const [editando, setEditando] = useState(false);
@@ -61,6 +64,10 @@ export function TitleCard({
   const temChave =
     categorizacao !== null && categorizacao.scope !== null && (categorizacao.matchLabel ?? "") !== "";
   const nomeDaRegra = categorizacao?.rule?.setCustomName ?? null;
+  const textoDaChave =
+    kind === "pix"
+      ? `Usar este nome nos próximos Pix para ${categorizacao?.matchLabel ?? ""}`
+      : `Usar este nome nas próximas de ${categorizacao?.matchLabel ?? ""}`;
   const tamanho = rascunho.trim().length;
   const muitoLongo = tamanho > NOME_PROPRIO_MAXIMO;
 
@@ -122,7 +129,7 @@ export function TitleCard({
         >
           <TextField
             label="Nome que aparece para vocês"
-            placeholder={original}
+            placeholder={kind === "pix" ? "Ex.: Pedreiro da varanda" : original}
             value={rascunho}
             onChange={(evento) => setRascunho(evento.target.value)}
             hint={`Original do banco: ${original} · nunca é alterado`}
@@ -132,9 +139,7 @@ export function TitleCard({
           {temChave && categorizacao !== null && (
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-bold text-ink">
-                  Usar este nome nas próximas de {categorizacao.matchLabel}
-                </p>
+                <p className="text-[14px] font-bold text-ink">{textoDaChave}</p>
                 <p className="mt-0.5 text-[12px] leading-[1.45] text-ink-2">
                   Vale daqui para a frente e vira regra. Dá para desfazer em Configurações › Regras.
                 </p>
@@ -144,11 +149,7 @@ export function TitleCard({
                   </p>
                 )}
               </div>
-              <Switch
-                checked={chave}
-                onCheckedChange={setChave}
-                label={`Usar este nome nas próximas de ${categorizacao.matchLabel}`}
-              />
+              <Switch checked={chave} onCheckedChange={setChave} label={textoDaChave} />
             </div>
           )}
 

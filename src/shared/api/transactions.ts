@@ -20,6 +20,8 @@ export const CONFIANCAS_DA_IA = ["pouca", "média", "alta"] as const;
 export const DetalheDaCompraSchema = z.object({
   id: z.string(),
   movement: z.string(),
+  // O movimento de antes de virar pagamento de cartão (ou o próprio movimento): título e pílula seguem a base.
+  baseMovement: z.string(),
   localDate: z.string(),
   occurredAt: z.string(),
   amountCents: z.number().int(),

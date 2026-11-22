@@ -22,6 +22,7 @@ import { CardPaymentToggle } from "./transaction/CardPaymentToggle";
 import { CategoryCard } from "./transaction/CategoryCard";
 import { DetailRows } from "./transaction/DetailRows";
 import { HideToggle } from "./transaction/HideToggle";
+import { PaymentNotice } from "./transaction/PaymentNotice";
 import { QueueFooter } from "./transaction/QueueFooter";
 import { SpendTypePicker } from "./transaction/SpendTypePicker";
 import { type ResultadoDoNome, TitleCard } from "./transaction/TitleCard";
@@ -109,13 +110,16 @@ export function Compra() {
     try {
       await marcarPagamentoDeCartao(transactionId, ligada);
       await carregar();
+      // O item entrou ou saiu da fila: o subtítulo e o "faltam" se refazem.
+      await fila.recarregar();
     } catch {
       setErros({ cartao: "Não deu para salvar. Tente de novo." });
     }
   }
 
   async function irParaProximo() {
-    navegar(await fila.proximoCaminho());
+    if (dados === null) return;
+    navegar(await fila.proximoCaminho(dados.localDate));
   }
 
   function escolherTipo(tipo: SpendType) {
@@ -158,19 +162,21 @@ export function Compra() {
   const temHistorico =
     typeof marcaDeHistorico === "boolean" ? marcaDeHistorico : localizacao.key !== "default";
   function voltar() {
-    if (temHistorico) navegar(-1);
+    if (emFila) navegar("/para-categorizar");
+    else if (temHistorico) navegar(-1);
     else navegar(voltarPara);
   }
 
   const hoje = todayInSaoPaulo(new Date());
-  const titulo = dados === null ? "Compra" : tituloDaCompra(dados.movement);
+  // O título segue a base do movimento: um boleto marcado como pagamento de cartão continua "Boleto".
+  const titulo = dados === null ? "Compra" : tituloDaCompra(dados.baseMovement);
 
   return (
     <section className="flex min-h-dvh flex-col bg-bg">
       <GreenTop
         variant="detail"
         title={titulo}
-        back={{ to: voltarPara, label: "Voltar", aoClicar: voltar }}
+        back={{ to: emFila ? "/para-categorizar" : voltarPara, label: "Voltar", aoClicar: voltar }}
         subtitle={
           emFila && fila.estado !== null && fila.estado.position !== null
             ? `${fila.estado.position} de ${fila.estado.total} para categorizar`
@@ -248,7 +254,11 @@ function Corpo({
       </div>
 
       <div className="flex min-w-0 flex-col gap-5 tablet:col-start-1 tablet:row-start-2 desktop:col-start-2 desktop:row-start-1">
-        <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />
+        {dados.isCardPayment ? (
+          <PaymentNotice />
+        ) : (
+          <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />
+        )}
         {temTipoDeGasto(dados) && (
           <SpendTypePicker detalhe={dados} erro={erros.tipo ?? null} aoEscolher={aoEscolherTipo} />
         )}
@@ -260,6 +270,7 @@ function Corpo({
           <CardPaymentToggle
             ligada={dados.isCardPayment}
             matchLabel={rotuloDoPagamento(matchLabel, dados.displayName)}
+            preposicao="de"
             erro={erros.cartao ?? null}
             aoMudar={aoAlternarPagamento}
           />
