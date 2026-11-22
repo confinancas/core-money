@@ -118,6 +118,15 @@ describe("lerCursor", () => {
       lidas: 0,
       conferir: false,
       instavelNoPluggy: false,
+      pos: null,
+    });
+  });
+
+  it("guarda e devolve o que a gravação deixa para a pós-gravação (TASK-0208)", () => {
+    const pos = { novas: ["a"], existentes: ["b"], daExecucao: [], offsetDepois: 100, paginaDepois: null };
+    expect(lerCursor(JSON.stringify({ seq: 3, phase: "pos_gravacao", pos }))).toMatchObject({
+      phase: "pos_gravacao",
+      pos,
     });
   });
 });
