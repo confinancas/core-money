@@ -2,7 +2,7 @@
 // contagem da TASK-0109, dia UTC) chegam a FRACAO_DO_LIMITE_DE_ESCRITAS do limite do plano gratuito, para sobrar espaço
 // ao uso do app. A execução pausada fica com o heartbeat na próxima virada do dia (00:00 UTC, 21h em Brasília), e o cron
 // só a reenfileira depois dele.
-import { FREE_LIMITS, usageDay } from "../../shared/usage";
+import { FREE_LIMITS, resetsAt, usageDay } from "../../shared/usage";
 
 // Fração do limite diário de escritas (100 mil no plano gratuito). 60%, confirmado em 2026-11-21.
 export const FRACAO_DO_LIMITE_DE_ESCRITAS = 0.6;
@@ -50,4 +50,11 @@ export function pausaPeloTeto(leitura: LeituraDoTeto, limite: number = FREE_LIMI
 // Pausada quando o heartbeat ainda está no futuro (a execução só volta depois dele). Sem heartbeat, não está pausada.
 export function estaPausada(heartbeatAt: string | null, agora: Date): boolean {
   return heartbeatAt !== null && Date.parse(heartbeatAt) > agora.getTime();
+}
+
+// Pausada pelo teto (TASK-0209): o heartbeat é exatamente a próxima virada do dia, que é o que a fatia grava ao pausar.
+// A espera de uma nova tentativa (5 min, 30 min, 2 h) também tem heartbeat no futuro, mas não é o teto: por isso não basta
+// `estaPausada`.
+export function estaPausadaPeloTeto(heartbeatAt: string | null, agora: Date): boolean {
+  return heartbeatAt !== null && heartbeatAt === resetsAt(agora);
 }

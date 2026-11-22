@@ -91,15 +91,17 @@ export function planoPagoRoutes(
     if (resultado.data.paidPlan) {
       // Ligar o plano retoma as importações pausadas pelo teto (TASK-0209): o plano e o heartbeat vão no mesmo lote, e a
       // próxima fatia de cada uma vai para a fila depois. Uma consulta a mais que o desligar, por consulta fixa.
-      const agoraIso = agora().toISOString();
-      const pausadas = await pausadasDoLar(c.var.db, householdId, agoraIso);
+      const instante = agora();
+      const agoraIso = instante.toISOString();
+      const viradaIso = resetsAt(instante);
+      const pausadas = await pausadasDoLar(c.var.db, householdId, viradaIso);
       const d1 = c.var.db.$client;
       const comandos = [d1.prepare("UPDATE households SET paid_plan = 1 WHERE id = ?").bind(householdId)];
       if (pausadas.length > 0) {
         comandos.push(
           d1
             .prepare(SQL_RETOMA_PAUSADAS)
-            .bind(agoraIso, JSON.stringify(pausadas.map((pausada) => pausada.id))),
+            .bind(agoraIso, JSON.stringify(pausadas.map((pausada) => pausada.id)), viradaIso),
         );
       }
       await d1.batch(comandos);

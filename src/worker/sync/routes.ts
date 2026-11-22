@@ -5,7 +5,7 @@ import type { AppEnv, Env } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
 import { enqueueSlice } from "./enqueue";
-import { estaPausada } from "./orcamento";
+import { estaPausadaPeloTeto } from "./orcamento";
 import { startRun } from "./runs";
 import { situacaoDoBanco } from "./situacao";
 
@@ -137,7 +137,7 @@ export function syncRoutes(
         importing: linhas
           .filter((linha) => linha.finished_at === null)
           .map((linha) => {
-            const pausada = estaPausada(linha.heartbeat_at, instante);
+            const pausada = estaPausadaPeloTeto(linha.heartbeat_at, instante);
             return {
               bankItemId: linha.bank_item_id,
               institutionName: linha.institution_name,

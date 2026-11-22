@@ -5,22 +5,24 @@ import type { Db } from "../db/client";
 import type { Env } from "../env";
 import { enqueueSlice } from "./enqueue";
 
-// Execuções abertas e pausadas do lar (heartbeat no futuro). O lar vem da sessão, pela conexão do banco; uma consulta.
+// Execuções pausadas pelo teto do lar: o heartbeat é a virada (?2, resetsAt), que é o que a fatia grava ao pausar. Uma
+// espera de nova tentativa tem outro heartbeat e fica de fora. O lar vem da sessão, pela conexão do banco; uma consulta.
 export const SQL_PAUSADAS_DO_LAR = `SELECT r.id, r.cursor_json FROM sync_runs r
   JOIN bank_items b ON b.id = r.bank_item_id
   JOIN pluggy_connections p ON p.id = b.connection_id
-  WHERE p.household_id = ?1 AND b.disconnected_at IS NULL AND r.finished_at IS NULL AND r.heartbeat_at > ?2`;
+  WHERE p.household_id = ?1 AND b.disconnected_at IS NULL AND r.finished_at IS NULL AND r.heartbeat_at = ?2`;
 
-// Põe o heartbeat em agora só nas execuções que a consulta acima viu pausadas; a guarda repete a condição dela.
+// Põe o heartbeat em agora (?1) só nas execuções que a consulta acima viu pausadas (?2 = ids, ?3 = a virada); a guarda
+// repete a condição da consulta.
 export const SQL_RETOMA_PAUSADAS = `UPDATE sync_runs SET heartbeat_at = ?1
-  WHERE id IN (SELECT value FROM json_each(?2)) AND finished_at IS NULL AND heartbeat_at > ?1`;
+  WHERE id IN (SELECT value FROM json_each(?2)) AND finished_at IS NULL AND heartbeat_at = ?3`;
 
 export type PausadaDoLar = { id: string; seq: number };
 
-export async function pausadasDoLar(db: Db, householdId: string, agoraIso: string): Promise<PausadaDoLar[]> {
+export async function pausadasDoLar(db: Db, householdId: string, viradaIso: string): Promise<PausadaDoLar[]> {
   const linhas = await db.$client
     .prepare(SQL_PAUSADAS_DO_LAR)
-    .bind(householdId, agoraIso)
+    .bind(householdId, viradaIso)
     .all<{ id: string; cursor_json: string | null }>();
   return (linhas.results ?? []).map((linha) => ({
     id: linha.id,

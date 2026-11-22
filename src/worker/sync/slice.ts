@@ -125,7 +125,7 @@ function ehFalhaPassageiraDoD1(erro: unknown): boolean {
   return FALHA_PASSAGEIRA_DO_D1.test(mensagem);
 }
 
-// Pausa até a virada do dia: o heartbeat vai para lá e o cron só reenfileira depois (estaPausada, orcamento.ts).
+// Pausa até a virada do dia: o heartbeat vai para lá e o cron só reenfileira depois (estaPausadaPeloTeto, orcamento.ts).
 function pausarStmt(db: Db, runId: string, ate: string): D1PreparedStatement {
   return db.$client
     .prepare("UPDATE sync_runs SET heartbeat_at = ? WHERE id = ? AND finished_at IS NULL")
