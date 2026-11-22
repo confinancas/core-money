@@ -212,6 +212,14 @@ describe("Lembrar para os próximos Pix", () => {
     montar(["/pix/p3"]);
     await screen.findByRole("heading", { name: "Esse lugar aceitava cartão" });
     expect(screen.queryByRole("switch", { name: /Lembrar/ })).toBeNull();
+    cleanup();
+
+    // Escopo que não é o do destinatário, mesmo com rótulo: o cartão some.
+    cena = novaCena({ categorizacao: { ...CATEGORIZACAO, scope: "estabelecimento" } });
+    instalarFetch();
+    montar(["/pix/p3"]);
+    await screen.findByRole("heading", { name: "Esse lugar aceitava cartão" });
+    expect(screen.queryByRole("switch", { name: /Lembrar/ })).toBeNull();
   });
 
   it("Salvar com Lembrar ligado grava a regra 'lembrar' e não chama a regra com a chave desligada", async () => {

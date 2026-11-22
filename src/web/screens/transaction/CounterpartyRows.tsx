@@ -32,7 +32,7 @@ export function CounterpartyRows({ detalhe }: { detalhe: DetalheDaCompra }) {
           key={linha.rotulo}
           className="flex min-h-11 items-center justify-between gap-3 border-divider border-b py-2 last:border-b-0"
         >
-          <span className="text-[13px] text-ink-2">{linha.rotulo}</span>
+          <span className="shrink-0 whitespace-nowrap text-[13px] text-ink-2">{linha.rotulo}</span>
           <span className="text-right text-[13px] font-semibold text-ink">{linha.valor}</span>
         </div>
       ))}

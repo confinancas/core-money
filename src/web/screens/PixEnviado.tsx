@@ -395,11 +395,15 @@ function Corpo({
           <div className={coluna}>
             {tipo}
             {linhas}
+            {chaves === null && rodape}
           </div>
-          <div className={coluna}>
-            {chaves}
-            {rodape}
-          </div>
+          {/* Com o pagamento ligado não há chaves: o botão desce para a coluna dos dados, longe da faixa verde. */}
+          {chaves === null ? null : (
+            <div className={coluna}>
+              {chaves}
+              {rodape}
+            </div>
+          )}
         </>
       )}
       {largura === "tablet" && (

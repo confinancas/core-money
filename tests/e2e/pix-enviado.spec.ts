@@ -32,7 +32,7 @@ function ciclo() {
 function pix(id: string, valor: number, nome: string, dia: string): string {
   const { atual } = ciclo();
   const agora = new Date().toISOString();
-  return `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, counterparty_bank, pix_key_masked, cycle_key, last_seen_at) VALUES (${q(id)}, ${q(LAR)}, ${q(`e2e-px-ext-${id}`)}, ${q(BANCO)}, ${q(CONTA)}, NULL, NULL, 'pix_enviado', ${q(`${dia}T17:32:00.000Z`)}, ${q(dia)}, ${q(valor)}, ${q(`PIX ENVIADO ${nome}`)}, NULL, ${q(nome)}, ${q("•••.456.789-••")}, ${q("Banco do Brasil")}, ${q("Celular (11) 9••••-4821")}, ${q(atual.key)}, ${q(agora)})`;
+  return `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, card_id, bill_id, movement, occurred_at, local_date, amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, counterparty_bank, pix_key_masked, cycle_key, spend_type, spend_type_source, last_seen_at) VALUES (${q(id)}, ${q(LAR)}, ${q(`e2e-px-ext-${id}`)}, ${q(BANCO)}, ${q(CONTA)}, NULL, NULL, 'pix_enviado', ${q(`${dia}T17:32:00.000Z`)}, ${q(dia)}, ${q(valor)}, ${q(`PIX ENVIADO ${nome}`)}, NULL, ${q(nome)}, ${q("•••.456.789-••")}, ${q("Banco do Brasil")}, ${q("Celular (11) 9••••-4821")}, ${q(atual.key)}, 'prazeres', 'padrao', ${q(agora)})`;
 }
 
 // Uma compra no cartão, sem categoria (a fila tem compras de cartão).
@@ -326,11 +326,22 @@ function consultaPendentes(): string[] {
 const PASTA_DAS_CAPTURAS = process.env.MM_CAPTURAS_0404;
 test("captura da janela", async ({ page }) => {
   test.skip(!PASTA_DAS_CAPTURAS, "sem MM_CAPTURAS_0404");
-  preparar(tresPix());
+  const { hoje } = ciclo();
+  preparar([...tresPix(), compra("e2e-px-c9", -4500, addDays(hoje, -3))]);
   const largura = page.viewportSize()?.width ?? 0;
+  const tira = (nome: string) => page.screenshot({ path: `${PASTA_DAS_CAPTURAS}/${nome}-${largura}.png` });
   await page.goto("/pix/e2e-px-1?fila=1");
   await esperaPix(page);
   await expect(page.getByText("[TEST] JOAO P SILVA").first()).toBeVisible();
-  await expect(page.getByText("1 de 3 para categorizar")).toBeVisible();
-  await page.screenshot({ path: `${PASTA_DAS_CAPTURAS}/pix-enviado-${largura}.png` });
+  await expect(page.getByText("1 de 4 para categorizar")).toBeVisible();
+  await tira("pix-fila");
+
+  await page.getByRole("switch", { name: "É pagamento de cartão" }).click();
+  await expect(page.getByText("Pagamento de cartão · não conta como gasto")).toBeVisible();
+  await tira("pix-pagamento-ligado");
+
+  await page.goto("/compras/e2e-px-c9?fila=1");
+  await esperaCompra(page);
+  await expect(page.getByText(/\d de \d para categorizar/)).toBeVisible();
+  await tira("compra-fila");
 });
