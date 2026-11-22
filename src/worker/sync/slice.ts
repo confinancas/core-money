@@ -1,5 +1,5 @@
 // Uma fatia da importação (TASK-0204): uma fase ou um trecho de página por execução da fila. Cada fatia respeita o
-// orçamento do plano gratuito (até 4 chamadas ao Pluggy e 200 linhas gravadas) e grava o cursor com seq + 1.
+// orçamento do plano gratuito (até 4 chamadas ao Pluggy e LINHAS_POR_FATIA linhas gravadas) e grava o cursor com seq + 1.
 
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import { resetsAt } from "../../shared/usage";
@@ -57,8 +57,9 @@ import { marcarSumicos } from "./vanished";
 // mocks do afterIngest, e o repositório não pode ficar preso à versão real do módulo por essa ordem.
 const gravacao = () => import("../bank/repository");
 
-// Linhas gravadas por fatia de transações; a página grande entra em várias fatias.
-export const LINHAS_POR_FATIA = 200;
+// Linhas gravadas por fatia de transações; a página grande entra em várias fatias. Um número só: cada mensagem da fila
+// (a de gravação e a pós-gravação, TASK-0208) tem de ficar abaixo de 10 ms de CPU, e é a medição que o escolhe.
+export const LINHAS_POR_FATIA = 100;
 // Cartões por fatia de faturas.
 export const CARTOES_POR_FATIA = 3;
 // Atrasos da repetição, em segundos, nas tentativas 1, 2 e 3. Na quarta falha, o banco fica instável.
@@ -296,7 +297,7 @@ async function faseFaturas(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncC
   return { proximo, total: run.slices_total, feitas: run.slices_done + 1 };
 }
 
-// Fase transacoes: um trecho de até 200 linhas por fatia. Fim de janela conta como fatia feita. Na sincronização (diaria e
+// Fase transacoes: um trecho de até LINHAS_POR_FATIA linhas por fatia. Fim de janela conta como fatia feita. Na sincronização (diaria e
 // manual), fim de janela também confere o que sumiu do banco (TASK-0205); e o fim das janelas vai para fim, sem conciliar
 // os 12 meses (quem concilia a janela de hoje é o afterRun).
 async function faseTransacoes(db: Db, env: Env, run: LinhaDaExecucao, cursor: SyncCursor, dep: Dependencias) {
