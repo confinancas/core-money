@@ -1,6 +1,6 @@
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { Db } from "../db/client";
-import { temTipoPadrao } from "../spend-types/derive";
+import { applyDefaultSpendTypeStmt, temTipoPadrao } from "../spend-types/derive";
 import {
   type ContextoClassificacao,
   classify,
@@ -140,15 +140,22 @@ async function classificarEGravar(
   const porId = new Map(leitura.pool.map((linha) => [linha.id, linha]));
 
   const comandos: D1PreparedStatement[] = [];
+  const idsAtualizados: string[] = [];
   for (const decisao of decisoes) {
     const linha = porId.get(decisao.id);
     if (!linha || !escrevivel(linha) || estaProtegida(linha)) continue;
     const valores = atualizacaoDe(linha, decisao, agora);
     if (valores === null) continue;
     comandos.push(db.$client.prepare(SQL_ATUALIZA_LINHA).bind(...valores, linha.id, householdId));
+    idsAtualizados.push(linha.id);
+  }
+  // Passo 4 (TASK-0404): a linha atualizada que virou saída, sem origem de tipo, recebe o padrão no mesmo lote. Só casa
+  // as que ainda estão sem origem e são saída (applyDefaultSpendTypeStmt); as demais ficam como estão.
+  if (idsAtualizados.length > 0) {
+    comandos.push(applyDefaultSpendTypeStmt(db, householdId, idsAtualizados));
   }
   if (comandos.length > 0) await db.$client.batch(comandos);
-  return comandos.length;
+  return idsAtualizados.length;
 }
 
 // Passo 1 do afterIngest: classifica as linhas gravadas e atualizadas e as candidatas a par em até 5 dias.

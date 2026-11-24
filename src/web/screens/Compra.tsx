@@ -1,29 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { CorpoDoPatch, DetalheDaCompra } from "../../shared/api/transactions";
 import { todayInSaoPaulo } from "../../shared/sao-paulo-date";
 import type { SpendType } from "../../shared/spend-types";
-import { criarRegraDoNome, fetchTransaction, patchTransaction } from "../api/transactions";
+import {
+  criarRegraDoNome,
+  fetchMatchLabel,
+  fetchTransaction,
+  marcarPagamentoDeCartao,
+  patchTransaction,
+} from "../api/transactions";
 import { type Aba, destinoDeVoltar } from "../app/frame/aba";
 import { useRotaAtual } from "../app/rota-atual";
 import { EmptyState } from "../components/ui/empty-state";
 import { ErrorState } from "../components/ui/error-state";
 import { GreenTop } from "../components/ui/green-top";
 import { SkeletonCard } from "../components/ui/skeleton";
+import { useQueueNavigation } from "../hooks/useQueueNavigation";
 import { ApiError } from "../lib/api";
+import { CardPaymentToggle } from "./transaction/CardPaymentToggle";
 import { CategoryCard } from "./transaction/CategoryCard";
 import { DetailRows } from "./transaction/DetailRows";
 import { HideToggle } from "./transaction/HideToggle";
+import { PaymentNotice } from "./transaction/PaymentNotice";
+import { QueueFooter } from "./transaction/QueueFooter";
 import { SpendTypePicker } from "./transaction/SpendTypePicker";
 import { type ResultadoDoNome, TitleCard } from "./transaction/TitleCard";
-import { podeOcultar, temTipoDeGasto, tituloDaCompra } from "./transaction/view-model";
+import { podeOcultar, rotuloDoPagamento, temTipoDeGasto, tituloDaCompra } from "./transaction/view-model";
 
 // Compra (TASK-0403): o detalhe de uma compra do cartão, ou de uma saída da conta (débito, boleto, outra). Nome próprio,
 // categoria, tipo e ocultar. Cada mudança grava na hora, com atualização otimista; se o servidor recusa ou cai, o
 // controle volta ao anterior e o aviso aparece sob o cartão afetado. Celular: uma coluna; tablet: título e categoria à
 // esquerda, linhas e ocultar à direita; desktop: três colunas (título | categoria e tipo | linhas e ocultar).
 
-type CampoComErro = "nome" | "tipo" | "ocultar";
+type CampoComErro = "nome" | "tipo" | "ocultar" | "cartao";
 type Estado = "carregando" | "pronta" | "falhou" | "nao_existe";
 
 export function Compra() {
@@ -34,7 +44,12 @@ export function Compra() {
   const [dados, setDados] = useState<DetalheDaCompra | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
   const [erros, setErros] = useState<Partial<Record<CampoComErro, string>>>({});
+  const [matchLabel, setMatchLabel] = useState<string | null>(null);
   const partida = useRef(0);
+  const [busca] = useSearchParams();
+  // Modo fila (TASK-0404): ?fila=1 mostra "N de M" e o rodapé que leva ao próximo item. A compra já grava na hora.
+  const emFila = busca.get("fila") === "1";
+  const fila = useQueueNavigation(transactionId, emFila, dados?.localDate ?? null);
 
   // Cada carga tem um número: só a última ainda vale. Ao voltar de Escolher categoria, a tela monta de novo e relê.
   const carregar = useCallback(async () => {
@@ -44,6 +59,12 @@ export function Compra() {
       const lida = await fetchTransaction(transactionId);
       if (esta !== partida.current) return;
       setDados(lida);
+      // O rótulo do destinatário vem da categorização (TASK-0302); se falhar, o texto usa o nome da compra.
+      void fetchMatchLabel(transactionId)
+        .then((rotulo) => {
+          if (esta === partida.current) setMatchLabel(rotulo);
+        })
+        .catch(() => undefined);
       setEstado("pronta");
     } catch (erro) {
       if (esta !== partida.current) return;
@@ -82,6 +103,23 @@ export function Compra() {
       if (campo !== "nome") setErros({ [campo]: "Não deu para salvar. Tente de novo." });
       return false;
     }
+  }
+
+  // "É pagamento de cartão" em débito, boleto ou outra saída (TASK-0404): liga ou desliga, e relê o detalhe.
+  async function alternarPagamento(ligada: boolean) {
+    try {
+      await marcarPagamentoDeCartao(transactionId, ligada);
+      await carregar();
+      // O item entrou ou saiu da fila: o subtítulo e o "faltam" se refazem.
+      await fila.recarregar();
+    } catch {
+      setErros({ cartao: "Não deu para salvar. Tente de novo." });
+    }
+  }
+
+  async function irParaProximo() {
+    if (dados === null) return;
+    navegar(await fila.proximoCaminho(dados.localDate));
   }
 
   function escolherTipo(tipo: SpendType) {
@@ -124,19 +162,26 @@ export function Compra() {
   const temHistorico =
     typeof marcaDeHistorico === "boolean" ? marcaDeHistorico : localizacao.key !== "default";
   function voltar() {
-    if (temHistorico) navegar(-1);
+    if (emFila) navegar("/para-categorizar");
+    else if (temHistorico) navegar(-1);
     else navegar(voltarPara);
   }
 
   const hoje = todayInSaoPaulo(new Date());
-  const titulo = dados === null ? "Compra" : tituloDaCompra(dados.movement);
+  // O título segue a base do movimento: um boleto marcado como pagamento de cartão continua "Boleto".
+  const titulo = dados === null ? "Compra" : tituloDaCompra(dados.baseMovement);
 
   return (
     <section className="flex min-h-dvh flex-col bg-bg">
       <GreenTop
         variant="detail"
         title={titulo}
-        back={{ to: voltarPara, label: "Voltar", aoClicar: voltar }}
+        back={{ to: emFila ? "/para-categorizar" : voltarPara, label: "Voltar", aoClicar: voltar }}
+        subtitle={
+          emFila && fila.estado !== null && fila.estado.position !== null
+            ? `${fila.estado.position} de ${fila.estado.total} para categorizar`
+            : undefined
+        }
         overlap
       />
 
@@ -165,6 +210,10 @@ export function Compra() {
           aoEscolherTipo={escolherTipo}
           aoAlternarOcultar={alternarOcultar}
           aoSalvarNome={salvarNome}
+          matchLabel={matchLabel}
+          aoAlternarPagamento={alternarPagamento}
+          fila={emFila ? fila.estado : null}
+          aoProximo={() => void irParaProximo()}
         />
       )}
     </section>
@@ -180,6 +229,10 @@ function Corpo({
   aoEscolherTipo,
   aoAlternarOcultar,
   aoSalvarNome,
+  aoAlternarPagamento,
+  fila,
+  aoProximo,
+  matchLabel,
 }: {
   dados: DetalheDaCompra;
   aba: Aba | null;
@@ -189,6 +242,10 @@ function Corpo({
   aoEscolherTipo: (tipo: SpendType) => void;
   aoAlternarOcultar: (oculta: boolean) => void;
   aoSalvarNome: (nome: string | null, comRegra: boolean) => Promise<ResultadoDoNome>;
+  aoAlternarPagamento: (ligada: boolean) => void;
+  matchLabel: string | null;
+  fila: { faltam: number; position: number | null; total: number } | null;
+  aoProximo: () => void;
 }) {
   return (
     <div className="mx-auto -mt-11 grid w-full max-w-[1120px] items-start gap-5 px-4 pb-8 tablet:grid-cols-2 tablet:px-6 desktop:grid-cols-3">
@@ -197,7 +254,11 @@ function Corpo({
       </div>
 
       <div className="flex min-w-0 flex-col gap-5 tablet:col-start-1 tablet:row-start-2 desktop:col-start-2 desktop:row-start-1">
-        <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />
+        {dados.isCardPayment ? (
+          <PaymentNotice />
+        ) : (
+          <CategoryCard detalhe={dados} aba={aba} temHistorico={temHistorico} />
+        )}
         {temTipoDeGasto(dados) && (
           <SpendTypePicker detalhe={dados} erro={erros.tipo ?? null} aoEscolher={aoEscolherTipo} />
         )}
@@ -205,8 +266,24 @@ function Corpo({
 
       <div className="flex min-w-0 flex-col gap-5 tablet:col-start-2 tablet:row-span-2 tablet:row-start-1 desktop:col-start-3 desktop:row-span-1 desktop:row-start-1">
         <DetailRows detalhe={dados} />
+        {dados.canMarkCardPayment && (
+          <CardPaymentToggle
+            ligada={dados.isCardPayment}
+            matchLabel={rotuloDoPagamento(matchLabel, dados.displayName)}
+            preposicao="de"
+            erro={erros.cartao ?? null}
+            aoMudar={aoAlternarPagamento}
+          />
+        )}
         {podeOcultar(dados) && (
           <HideToggle hidden={dados.hidden} erro={erros.ocultar ?? null} aoMudar={aoAlternarOcultar} />
+        )}
+        {fila !== null && (
+          <QueueFooter
+            fila={{ faltam: fila.faltam, ultimo: fila.faltam === 0 }}
+            salvando={false}
+            aoClicar={aoProximo}
+          />
         )}
       </div>
     </div>

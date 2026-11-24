@@ -159,10 +159,11 @@ export function EscolherCategoria() {
   }
 
   // Aberto pela compra (com transacao): a volta troca esta entrada pela tela da compra (replace), e não empilha outra.
-  // O temHistorico da compra segue no estado, para a seta dela saber se há para onde voltar (TASK-0403, F2).
+  // O temHistorico da compra segue no estado, para a seta dela saber se há para onde voltar (TASK-0403, F2). Sem a marca
+  // (link direto, outra aba ou endereço digitado), não há para onde voltar: a seta vai à aba de origem (TASK-0404).
   const estadoDaCompra = (() => {
     const temHistorico = (localizacao.state as { temHistorico?: unknown } | null)?.temHistorico;
-    return typeof temHistorico === "boolean" ? { temHistorico } : {};
+    return { temHistorico: typeof temHistorico === "boolean" ? temHistorico : false };
   })();
   const abertoPelaCompra = transacao !== null && voltar !== null;
 

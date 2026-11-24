@@ -141,7 +141,8 @@ export function transacoesRoutes(
     const transacao = contexto.transacao;
     if (!transacao) return apiError(c, 404, "nao_encontrada");
 
-    const escopo = ruleScopeForMovement(transacao.movement);
+    // Um Pix marcado como pagamento de cartão segue com o escopo e o rótulo do destinatário (a base do movimento).
+    const escopo = ruleScopeForMovement(transacao.movementOriginal ?? transacao.movement);
     const regra =
       escopo === "estabelecimento"
         ? contexto.regraEstabelecimento

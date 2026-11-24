@@ -47,6 +47,7 @@ describe("DetalheDaCompraSchema", () => {
     const base = {
       id: "t1",
       movement: "compra",
+      baseMovement: "compra",
       localDate: "2026-10-04",
       occurredAt: "2026-10-04T17:32:00Z",
       amountCents: -4500,
@@ -64,6 +65,11 @@ describe("DetalheDaCompraSchema", () => {
       account: null,
       bill: null,
       cycle: null,
+      counterparty: null,
+      origin: null,
+      cardWouldAccept: false,
+      isCardPayment: false,
+      canMarkCardPayment: false,
     };
     const com = (confidence: string) =>
       DetalheDaCompraSchema.safeParse({

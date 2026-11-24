@@ -1,6 +1,7 @@
 import type { CorpoDoPatch, DetalheDaCompra } from "../../shared/api/transactions";
 import { addDays, addMonthsClamped } from "../../shared/cycle";
 import type { SpendType } from "../../shared/spend-types";
+import { docKindDe } from "../../shared/transactions/counterparty";
 import { displayName } from "../../shared/transactions/display-name";
 import type { Db } from "../db/client";
 import { assertSpendTypeAllowed } from "../spend-types/resolve";
@@ -11,7 +12,7 @@ import { assertSpendTypeAllowed } from "../spend-types/resolve";
 
 // Saída (TASK-0802, movimentosComTipo): um movimento de saída com valor negativo, ou o estorno. Tipo de gasto e ocultar
 // só valem para saída. Movimento de saída com valor positivo (o "outro" de cashback) é entrada: 422, como as outras.
-const MOVIMENTOS_DE_SAIDA: readonly string[] = [
+export const MOVIMENTOS_DE_SAIDA: readonly string[] = [
   "compra",
   "pix_enviado",
   "ted_enviada",
@@ -19,6 +20,9 @@ const MOVIMENTOS_DE_SAIDA: readonly string[] = [
   "boleto",
   "outro",
 ];
+
+// Pix enviado e TED: a origem do movimento (COALESCE com movement_original, para o pagamento de cartão que veio de um Pix).
+export const MOVIMENTOS_PIX: readonly string[] = ["pix_enviado", "ted_enviada"];
 
 function ehSaida(linha: { movement: string; amountCents: number }): boolean {
   return (
@@ -30,7 +34,10 @@ function ehSaida(linha: { movement: string; amountCents: number }): boolean {
 // início do lar. O lar entra no WHERE e em cada junção, e a transação removida não aparece.
 const SQL_DETALHE = `SELECT t.id AS id, t.movement AS movement, t.local_date AS local_date, t.occurred_at AS occurred_at,
     t.amount_cents AS amount_cents, t.original_description AS original_description, t.custom_name AS custom_name,
-    t.counterparty_name AS counterparty_name, t.category_id AS category_id, cat.name AS category_name,
+    t.counterparty_name AS counterparty_name, t.counterparty_doc_masked AS counterparty_doc_masked,
+    t.counterparty_bank AS counterparty_bank, t.pix_key_masked AS pix_key_masked,
+    t.movement_original AS movement_original, t.card_would_accept AS card_would_accept,
+    pc.label AS connection_label, t.category_id AS category_id, cat.name AS category_name,
     pai.name AS category_parent_name, t.categorized_by AS categorized_by, t.ai_category_id AS ai_category_id,
     sug.name AS ai_category_name, t.ai_confidence AS ai_confidence, t.spend_type AS spend_type,
     t.spend_type_source AS spend_type_source, t.hidden AS hidden, t.hidden_reason AS hidden_reason,
@@ -49,6 +56,7 @@ const SQL_DETALHE = `SELECT t.id AS id, t.movement AS movement, t.local_date AS 
     LEFT JOIN bank_items AS cbi ON cbi.id = c.bank_item_id
     LEFT JOIN accounts AS a ON a.id = t.account_id
     LEFT JOIN bank_items AS abi ON abi.id = a.bank_item_id
+    LEFT JOIN pluggy_connections AS pc ON pc.id = abi.connection_id
     LEFT JOIN bills AS b ON b.id = t.bill_id
     LEFT JOIN cycles AS k ON k.household_id = t.household_id AND k.key = t.cycle_key
   WHERE t.id = ? AND t.household_id = ? AND t.removed_at IS NULL`;
@@ -62,6 +70,12 @@ type LinhaDoDetalhe = {
   original_description: string;
   custom_name: string | null;
   counterparty_name: string | null;
+  counterparty_doc_masked: string | null;
+  counterparty_bank: string | null;
+  pix_key_masked: string | null;
+  movement_original: string | null;
+  card_would_accept: number;
+  connection_label: string | null;
   category_id: string | null;
   category_name: string | null;
   category_parent_name: string | null;
@@ -149,9 +163,34 @@ export function paraDetalhe(linha: LinhaDoDetalhe): DetalheDaCompra {
   const fatura =
     linha.bill_closes_on !== null ? { closesOn: linha.bill_closes_on, dueOn: linha.bill_due_on } : null;
 
+  // A base do movimento: o que era antes de virar pagamento de cartão (ou o próprio movimento).
+  const movimentoBase = linha.movement_original ?? linha.movement;
+  const ehPix = MOVIMENTOS_PIX.includes(movimentoBase);
+  const contraparte = ehPix
+    ? {
+        name: linha.counterparty_name,
+        docMasked: linha.counterparty_doc_masked,
+        docKind: docKindDe(linha.counterparty_doc_masked),
+        bank: linha.counterparty_bank,
+        pixKeyMasked: linha.pix_key_masked,
+      }
+    : null;
+  const origem =
+    linha.account_id !== null
+      ? { institution: linha.account_bank, connectionLabel: linha.connection_label }
+      : null;
+  const pagamentoDeCartao = linha.movement === "pagamento_fatura";
+  // "É pagamento de cartão" só em saída de conta, não ocultada, e sem cartão (a regra da TASK-0404, cenários 16 a 18).
+  const podeMarcarPagamento =
+    linha.card_id === null &&
+    linha.hidden === 0 &&
+    linha.amount_cents < 0 &&
+    MOVIMENTOS_DE_SAIDA.includes(movimentoBase);
+
   return {
     id: linha.id,
     movement: linha.movement,
+    baseMovement: movimentoBase,
     localDate: linha.local_date,
     occurredAt: linha.occurred_at,
     amountCents: linha.amount_cents,
@@ -159,7 +198,7 @@ export function paraDetalhe(linha: LinhaDoDetalhe): DetalheDaCompra {
     customName: linha.custom_name,
     displayName: displayName({
       customName: linha.custom_name,
-      movement: linha.movement,
+      movement: movimentoBase,
       counterpartyName: linha.counterparty_name,
       originalDescription: linha.original_description,
     }),
@@ -175,6 +214,11 @@ export function paraDetalhe(linha: LinhaDoDetalhe): DetalheDaCompra {
     account: conta,
     bill: fatura,
     cycle: cicloDaLinha(linha),
+    counterparty: contraparte,
+    origin: origem,
+    cardWouldAccept: linha.card_would_accept === 1,
+    isCardPayment: pagamentoDeCartao,
+    canMarkCardPayment: podeMarcarPagamento,
   };
 }
 
@@ -252,6 +296,19 @@ export async function patchTransaction(
     }
     sets.push("hidden = ?", "hidden_reason = ?");
     valores.push(corpo.hidden ? 1 : 0, corpo.hidden ? "gasto_terceiros" : null);
+  }
+
+  if (corpo.cardWouldAccept !== undefined) {
+    // "Esse lugar aceitava cartão" só vale para Pix e TED (o relatório de Pix, TASK-1003): outro movimento, 422.
+    if (atual.counterparty === null) {
+      return {
+        tipo: "recusada",
+        codigo: "movimento_invalido",
+        mensagem: "Só Pix e TED têm a opção de aceitar cartão.",
+      };
+    }
+    sets.push("card_would_accept = ?");
+    valores.push(corpo.cardWouldAccept ? 1 : 0);
   }
 
   // O schema exige ao menos um campo, então sets nunca fica vazio aqui. A descrição original não está entre as colunas.

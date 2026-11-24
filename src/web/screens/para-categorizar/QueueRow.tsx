@@ -4,6 +4,7 @@ import { linhaDeDetalhe, textoDaSugestaoDeEntrada } from "../../../shared/para-c
 import type { LinhaDaFila } from "../../api/categorization";
 import { IconeCaixa, IconeCartao, IconeCheck } from "../../components/icons";
 import { Money } from "../../components/ui/money";
+import { withQueueParam } from "../../hooks/useQueueNavigation";
 
 // Uma linha da fila (TASK-0304): ícone por tipo, título e valor, linha de detalhe, sugestão (ou "Sem sugestão") e o ✓
 // quando há sugestão de saída. A linha inteira leva ao detalhe. Os textos seguem o protótipo ParaCategorizar.dc.html.
@@ -100,7 +101,7 @@ export function QueueRow({ linha, hoje, iaAtiva, ocupado, aoConfirmar }: Props) 
   return (
     <li className="flex items-center gap-3 border-b border-divider py-3.5 last:border-b-0">
       <Link
-        to={linha.detailPath}
+        to={withQueueParam(linha.detailPath)}
         className="flex min-h-11 min-w-0 flex-1 items-start gap-3 text-ink no-underline"
       >
         <IconeDaLinha tipo={linha.kind} />

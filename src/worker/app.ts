@@ -134,7 +134,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", classificacaoDeEntradaRoutes(resolverDaSessao, options.agora));
   app.route("/categorization", categorizacaoRoutes(resolverDaSessao, options.agora));
-  app.route("/transactions", transacoesDetalheRoutes(resolverDaSessao));
+  app.route("/transactions", transacoesDetalheRoutes(resolverDaSessao, options.agora));
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/fixed-incomes", fixedIncomesRoutes(resolverDaSessao, options.agora));
@@ -142,7 +142,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/", receiptsRoutes(resolverDaSessao, options.agora));
   app.route("/automatic-rules", regrasAutomaticasRoutes(resolverDaSessao, options.agora));
   app.route("/usage", usageRoutes(resolverDaSessao, options.agora));
-  app.route("/settings/paid-plan", planoPagoRoutes(resolverDaSessao));
+  app.route("/settings/paid-plan", planoPagoRoutes(resolverDaSessao, options.agora));
   app.route(
     "/pluggy-connections",
     pluggyConnectionsRoutes(resolverDaSessao, { agora: options.agora, fetch: options.pluggyFetch }),

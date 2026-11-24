@@ -16,6 +16,8 @@ import type { Db } from "../db/client";
 export type TransacaoDoContexto = {
   id: string;
   movement: string;
+  // A base do movimento (movement_original), quando a linha virou outro movimento (pagamento de cartão); senão null.
+  movementOriginal: string | null;
   cardId: string | null;
   categoryId: string | null;
   aiCategoryId: string | null;
@@ -51,6 +53,7 @@ export type ContextoDeCategorizacao = {
 type LinhaTransacao = {
   id: string;
   movement: string;
+  movement_original: string | null;
   card_id: string | null;
   category_id: string | null;
   ai_category_id: string | null;
@@ -79,7 +82,7 @@ type LinhaRegra = {
   categoria_ativa: number;
 };
 
-const SQL_TRANSACAO = `SELECT t.id, t.movement, t.card_id, t.category_id, t.ai_category_id, t.custom_name, t.spend_type,
+const SQL_TRANSACAO = `SELECT t.id, t.movement, t.movement_original, t.card_id, t.category_id, t.ai_category_id, t.custom_name, t.spend_type,
   t.establishment_key, ${COUNTERPARTY_KEY_SQL} AS contraparte_chave, TRIM(t.original_description) AS descricao,
   t.counterparty_name
   FROM transactions AS t WHERE t.id = ? AND t.household_id = ?`;
@@ -148,6 +151,7 @@ export async function getRuleContextForTransaction(
       ? {
           id: linha.id,
           movement: linha.movement,
+          movementOriginal: linha.movement_original,
           cardId: linha.card_id,
           categoryId: linha.category_id,
           aiCategoryId: linha.ai_category_id,

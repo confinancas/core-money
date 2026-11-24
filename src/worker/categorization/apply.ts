@@ -92,8 +92,10 @@ function tipoDaRegraNaLinha(tipo: string, categoriaId: string | null): Escrita {
 function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null {
   const sets: string[] = [];
   const params: unknown[] = [];
-  const gravaCategoria = regra.setCategoryId !== null;
   const gravaMovimento = regra.setMovement !== null;
+  // TASK-0404 (decisão 2): com movimento, a regra não grava categoria. A categoria da regra fica guardada para quando o
+  // movimento for desligado; o movimento vale sozinho nas linhas que ele casa.
+  const gravaCategoria = regra.setCategoryId !== null && !gravaMovimento;
   const marca = gravaCategoria || gravaMovimento;
 
   if (regra.setCustomName !== null) {
@@ -101,7 +103,7 @@ function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null 
     params.push(regra.setCustomName);
   }
   if (regra.setSpendType !== null) {
-    const tipo = tipoDaRegraNaLinha(regra.setSpendType, regra.setCategoryId);
+    const tipo = tipoDaRegraNaLinha(regra.setSpendType, gravaCategoria ? regra.setCategoryId : null);
     sets.push(...tipo.sets);
     params.push(...tipo.params);
   }
@@ -115,7 +117,7 @@ function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null 
     sets.push("movement_locked = 1");
     // O tipo padrão que a gravação põe numa saída (TASK-0204, B1-1) sai quando o movimento novo não tem tipo, e
     // quando a regra não grava tipo nem categoria (com categoria, a herança abaixo já regrava o tipo).
-    if (regra.setSpendType === null && regra.setCategoryId === null && regra.scope !== "remetente") {
+    if (regra.setSpendType === null && !gravaCategoria && regra.scope !== "remetente") {
       const classe = classeDeTipoPadrao(regra.setMovement ?? "");
       const semTipo = "spend_type_source = 'padrao' AND NOT ((amount_cents < 0 AND ?) OR ?)";
       sets.push(`spend_type = CASE WHEN ${semTipo} THEN NULL ELSE spend_type END`);
@@ -124,7 +126,7 @@ function escritaDaRegra(regra: RegraParaAplicar, agora: string): Escrita | null 
       params.push(classe.saida, classe.estorno);
     }
   }
-  if (regra.setCategoryId !== null) {
+  if (gravaCategoria && regra.setCategoryId !== null) {
     sets.push("category_id = ?");
     params.push(regra.setCategoryId);
     // Sem tipo na regra, o tipo vem da categoria que ela grava (herança, na mesma instrução).

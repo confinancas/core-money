@@ -317,7 +317,8 @@ test("cenário 6: linha sem sugestão mostra o aviso, sem ✓, e leva ao detalhe
   await expect(page.getByText("Sem sugestão · toque para escolher")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Confirmar/ })).toHaveCount(0);
   await page.getByText("[TEST] Pix sem sugestão").click();
-  await expect(page).toHaveURL(/\/pix\/e2e-pc-sem$/);
+  // A linha da fila leva com ?fila=1 (TASK-0404, withQueueParam).
+  await expect(page).toHaveURL(/\/pix\/e2e-pc-sem\?fila=1$/);
 });
 
 test("cenário 12: sem pendentes, a tela diz que está tudo categorizado", async ({ page }) => {
