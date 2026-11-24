@@ -30,3 +30,18 @@ export function criarRegraDoNome(transacaoId: string, nome: string): Promise<unk
     createdFrom: "lembrar",
   });
 }
+
+// "É pagamento de cartão" (TASK-0404): liga ou desliga; a resposta traz quantos iguais entraram junto (alsoMarked).
+export function marcarPagamentoDeCartao(transacaoId: string, isCardPayment: boolean): Promise<unknown> {
+  return apiEnviar<unknown>(`/api/transactions/${encodeURIComponent(transacaoId)}/card-payment`, "PUT", {
+    isCardPayment,
+  });
+}
+
+// Rótulo do destinatário para o texto "Os próximos de <matchLabel>" (TASK-0404): vem do GET de categorização (TASK-0302).
+export async function fetchMatchLabel(transacaoId: string): Promise<string | null> {
+  const resposta = await apiFetch<{ matchLabel: string }>(
+    `/api/transactions/${encodeURIComponent(transacaoId)}/categorization`,
+  );
+  return resposta.matchLabel;
+}

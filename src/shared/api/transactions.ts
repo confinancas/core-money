@@ -20,6 +20,8 @@ export const CONFIANCAS_DA_IA = ["pouca", "média", "alta"] as const;
 export const DetalheDaCompraSchema = z.object({
   id: z.string(),
   movement: z.string(),
+  // O movimento de antes de virar pagamento de cartão (ou o próprio movimento): título e pílula seguem a base.
+  baseMovement: z.string(),
   localDate: z.string(),
   occurredAt: z.string(),
   amountCents: z.number().int(),
@@ -44,6 +46,21 @@ export const DetalheDaCompraSchema = z.object({
   account: z.object({ id: z.string(), label: z.string() }).nullable(),
   bill: z.object({ closesOn: z.string(), dueOn: z.string().nullable() }).nullable(),
   cycle: z.object({ key: z.string(), startsOn: z.string(), endsOn: z.string() }).nullable(),
+  // Pix enviado e TED (TASK-0404): só nesses movimentos a contraparte vem preenchida; nos outros, null.
+  counterparty: z
+    .object({
+      name: z.string().nullable(),
+      docMasked: z.string().nullable(),
+      docKind: z.enum(["cpf", "cnpj"]).nullable(),
+      bank: z.string().nullable(),
+      pixKeyMasked: z.string().nullable(),
+    })
+    .nullable(),
+  // De onde saiu o Pix: a instituição e o rótulo da conexão (o "Saiu de" da tela). Separado de account, que é o da compra.
+  origin: z.object({ institution: z.string().nullable(), connectionLabel: z.string().nullable() }).nullable(),
+  cardWouldAccept: z.boolean(),
+  isCardPayment: z.boolean(),
+  canMarkCardPayment: z.boolean(),
 });
 
 export type DetalheDaCompra = z.infer<typeof DetalheDaCompraSchema>;
@@ -59,7 +76,16 @@ export const CorpoDoPatchSchema = z
       .optional(),
     spendType: z.enum(TIPOS_DE_GASTO).optional(),
     hidden: z.boolean().optional(),
+    cardWouldAccept: z.boolean().optional(),
   })
   .refine((corpo) => Object.keys(corpo).length > 0);
 
 export type CorpoDoPatch = z.infer<typeof CorpoDoPatchSchema>;
+
+// PUT /api/transactions/:id/card-payment (TASK-0404): liga ou desliga "É pagamento de cartão".
+export const CorpoDoCardPaymentSchema = z.strictObject({ isCardPayment: z.boolean() });
+export const RespostaDoCardPaymentSchema = z.object({
+  isCardPayment: z.boolean(),
+  alsoMarked: z.number().int(),
+});
+export type RespostaDoCardPayment = z.infer<typeof RespostaDoCardPaymentSchema>;

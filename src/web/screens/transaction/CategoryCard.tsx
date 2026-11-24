@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { cn } from "@/lib/utils";
 import type { DetalheDaCompra } from "../../../shared/api/transactions";
 import type { Aba } from "../../app/frame/aba";
@@ -8,17 +8,22 @@ import { textoDaCategoria } from "./view-model";
 // Cartão da categoria (TASK-0403): leva ao seletor com a compra, e volta para cá. Sem categoria, fundo verde-claro e
 // "revisar" em laranja, como no protótipo. Com categoria, fundo branco e "Toque para trocar".
 // O seletor entra com replace: a compra sai do histórico enquanto ele está aberto, e volta no lugar dela (F2).
+// prefixoSemCategoria (Pix, TASK-0404): "Pix não diz o que foi. " antes da sugestão ou de "Toque para escolher".
 export function CategoryCard({
   detalhe,
   aba,
   temHistorico,
+  prefixoSemCategoria,
 }: {
   detalhe: DetalheDaCompra;
   aba: Aba | null;
   temHistorico: boolean;
+  prefixoSemCategoria?: string;
 }) {
   const texto = textoDaCategoria(detalhe);
-  const voltar = `/compras/${encodeURIComponent(detalhe.id)}`;
+  // A volta é a tela atual com a busca (?fila=1 do modo fila), seja o Pix ou a compra.
+  const localizacao = useLocation();
+  const voltar = `${localizacao.pathname}${localizacao.search}`;
   const destino = `/categorias/escolher?${new URLSearchParams({ transacao: detalhe.id, voltar }).toString()}`;
 
   return (
@@ -39,7 +44,11 @@ export function CategoryCard({
         <span className={cn("break-words text-[19px] font-extrabold", texto.semCategoria && "text-warn")}>
           {texto.nome}
         </span>
-        <span className="text-[12px] text-ink-3">{texto.sub}</span>
+        <span className="text-[12px] text-ink-3">
+          {texto.semCategoria && prefixoSemCategoria !== undefined
+            ? `${prefixoSemCategoria}${texto.sub}`
+            : texto.sub}
+        </span>
       </span>
       <IconeSetaDireita size={20} className="shrink-0 text-primary" />
     </Link>

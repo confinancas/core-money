@@ -132,7 +132,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnv> {
   app.route("/categorization", statusRoutes(resolverDaSessao, options.agora));
   app.route("/transactions", transacoesRoutes(resolverDaSessao, options.agora));
   app.route("/categorization", categorizacaoRoutes(resolverDaSessao, options.agora));
-  app.route("/transactions", transacoesDetalheRoutes(resolverDaSessao));
+  app.route("/transactions", transacoesDetalheRoutes(resolverDaSessao, options.agora));
   app.route("/cards", cartoesRoutes(resolverDaSessao, options.agora));
   app.route("/spend-types", tiposDeGastoRoutes(resolverDaSessao, options.agora));
   app.route("/fixed-incomes", fixedIncomesRoutes(resolverDaSessao, options.agora));

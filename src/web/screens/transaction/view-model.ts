@@ -152,3 +152,7 @@ export function textoDaCategoria(detalhe: DetalheDaCompra): {
         : `Sugestão da IA: ${sugestao.name}`;
   return { nome: "Sem categoria · revisar", sub, semCategoria: true };
 }
+
+// Rótulo do destinatário no pagamento de cartão (TASK-0404): o matchLabel da categorização; sem ele, o nome da compra.
+export const rotuloDoPagamento = (matchLabel: string | null, nome: string): string =>
+  matchLabel !== null && matchLabel.trim() !== "" ? matchLabel : nome;

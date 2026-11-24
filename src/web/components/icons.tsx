@@ -208,3 +208,15 @@ export function IconeSetaDireita(props: Props) {
     </Svg>
   );
 }
+
+// Marca do Pix, simplificada (quatro losangos): o avatar de quem recebeu sem nome (TASK-0404).
+export function IconePix(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="m8 6 4-4 4 4-4 4Z" />
+      <path d="m16 8 4 4-4 4-4-4Z" />
+      <path d="m8 10 4 4-4 4-4-4Z" />
+      <path d="m12 14 4 4-4 4-4-4Z" />
+    </Svg>
+  );
+}
