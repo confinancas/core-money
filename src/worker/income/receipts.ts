@@ -81,6 +81,21 @@ export function removeTransactionReceiptStmt(
   ];
 }
 
+// Apaga todo recebimento da transação (de qualquer renda), conferindo o lar pela própria transação. Entra sempre no
+// lote da troca de classificação (TASK-0903): o estado lido antes pode já ter mudado, e o lote atômico do D1 decide.
+export function clearTransactionReceiptsStmt(
+  db: Db,
+  householdId: string,
+  transactionId: string,
+): D1PreparedStatement {
+  return db.$client
+    .prepare(
+      `DELETE FROM fixed_income_receipts WHERE transaction_id = ?
+         AND EXISTS (SELECT 1 FROM transactions AS t WHERE t.id = ? AND t.household_id = ?)`,
+    )
+    .bind(transactionId, transactionId, householdId);
+}
+
 export type ResultadoDoLancamento = "criado" | "ja_confirmada" | "nao_encontrada";
 
 // Recebimento lançado à mão. Numa renda "manual", ou num recebimento de 0,00 ("Ficou tudo em dólar"), não se confirma

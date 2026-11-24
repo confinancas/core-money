@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { executaSql } from "./helpers/db";
+import { consultaSql, executaSql } from "./helpers/db";
 import { LAR_DA_INSTALACAO_PRONTA, signUpAndSignIn } from "./helpers/sessao";
 import { semearInstalacaoPronta, zeraChavesDaInstalacaoPronta } from "./helpers/setup";
 
@@ -32,7 +32,13 @@ type Linha = {
 // Insere o cenário: banco, conta, cartão e categoria de teste, e as linhas dadas (sem categoria, pendentes).
 function semeiaFila(linhas: Linha[]): void {
   const agora = new Date().toISOString();
-  executaSql("pronta", "DELETE FROM transactions WHERE id LIKE 'e2e-pc-%'");
+  executaSql(
+    "pronta",
+    [
+      "DELETE FROM fixed_income_receipts WHERE transaction_id LIKE 'e2e-pc-%'",
+      "DELETE FROM transactions WHERE id LIKE 'e2e-pc-%'",
+    ].join(";\n"),
+  );
   executaSql("pronta", `DELETE FROM rules WHERE household_id = ${q(LAR)} AND match_value LIKE 'TEST E2E%'`);
   executaSql(
     "pronta",
@@ -56,6 +62,30 @@ function semeiaFila(linhas: Linha[]): void {
          NULL, ${linha.sugestao === false ? "NULL" : q(CATEGORIA_IA)}, ${q(agora)})`,
     );
   }
+}
+
+type Entrada = { id: string; nome: string; valor: number; renda?: boolean };
+
+// Entradas (Pix recebido) com sugestão de renda, no ciclo 2026-10: parte do salário (renda fixa de teste) ou renda variável
+// (Venda). Um comando só, porque cada executaSql sobe o wrangler.
+function semeiaEntradas(entradas: Entrada[]): void {
+  const agora = new Date().toISOString();
+  const comandos = [
+    `INSERT OR IGNORE INTO cycles (household_id, key, starts_on, ends_on) VALUES (${q(LAR)}, '2026-10', '2026-10-11', '2026-11-10')`,
+    `INSERT OR IGNORE INTO fixed_incomes (id, household_id, name, currency, amount_cents, usual_day, arrival, statement_text, kept_usd_is_investment, archived_at) VALUES ('e2e-pc-renda', ${q(LAR)}, '[TEST] Salário em dólar E2E', 'BRL', 1000000, 5, 'manual', NULL, 0, NULL)`,
+  ];
+  for (const e of entradas) {
+    comandos.push(
+      `INSERT INTO transactions (id, household_id, external_id, bank_item_id, account_id, movement, occurred_at, local_date,
+         amount_cents, original_description, establishment_key, counterparty_name, counterparty_doc_masked, cycle_key,
+         ai_income_kind, ai_income_subtype, ai_fixed_income_id, ai_confidence, ai_reason, last_seen_at)
+       VALUES (${q(e.id)}, ${q(LAR)}, ${q(`[TEST] ext-${e.id}`)}, ${q(BANCO)}, ${q(CONTA)}, 'pix_recebido', ${q(agora)},
+         '2026-10-20', ${e.valor}, ${q(e.nome)}, ${q(`TEST E2E ${e.id}`)}, ${q(e.nome)}, '***.123.456-**', '2026-10',
+         ${e.renda ? "'parte_salario'" : "'variavel'"}, ${e.renda ? "NULL" : "'venda'"},
+         ${e.renda ? "'e2e-pc-renda'" : "NULL"}, 'media', NULL, ${q(agora)})`,
+    );
+  }
+  executaSql("pronta", comandos.join(";\n"));
 }
 
 const DUAS = (): Linha[] => [
@@ -92,8 +122,11 @@ function liberaFila(): void {
   executaSql(
     "pronta",
     [
+      "DELETE FROM fixed_income_receipts WHERE transaction_id LIKE 'e2e-pc-%' OR fixed_income_id = 'e2e-pc-renda'",
       "DELETE FROM transactions WHERE id LIKE 'e2e-pc-%'",
       `DELETE FROM rules WHERE household_id = ${q(LAR)} AND match_value LIKE 'TEST E2E%'`,
+      `DELETE FROM rules WHERE household_id = ${q(LAR)} AND scope = 'remetente' AND match_value LIKE '%PAGADORA E2E PC%'`,
+      "DELETE FROM fixed_incomes WHERE id = 'e2e-pc-renda'",
       `DELETE FROM cards WHERE id = ${q(CARTAO)}`,
       `DELETE FROM accounts WHERE id = ${q(CONTA)}`,
       `DELETE FROM categories WHERE id = ${q(CATEGORIA_IA)}`,
@@ -324,6 +357,62 @@ test("cenário 20: desfazer a confirmação devolve as iguais à fila", async ({
   await page.getByRole("button", { name: "Desfazer", exact: true }).click();
   await expect(page.getByText("0 de 3 categorizados")).toBeVisible();
   await expect(page.getByText("faltam 3")).toBeVisible();
+});
+
+test("cenário 17: o ✓ de uma entrada confirma como parte do salário, e o Desfazer devolve tudo", async ({
+  page,
+}) => {
+  semeiaFila([]);
+  semeiaEntradas([{ id: "e2e-pc-ent-1", nome: "[TEST] Pagadora E2E PC", valor: 150_000, renda: true }]);
+  await abre(page);
+  await expect(page.getByText(/Parte do salário · \[TEST\] Salário em dólar E2E/)).toBeVisible();
+
+  await page.getByRole("button", { name: /^Confirmar Parte do salário.* para .*Pagadora E2E PC/ }).click();
+  await expect(page.getByText("1 de 1 categorizados")).toBeVisible();
+  const confirmada = consultaSql(
+    "pronta",
+    "SELECT t.income_kind AS kind, t.fixed_income_id AS renda, (SELECT COUNT(*) FROM fixed_income_receipts WHERE transaction_id = t.id) AS recebimentos, (SELECT COUNT(*) FROM rules WHERE scope = 'remetente' AND disabled_at IS NULL AND match_value LIKE '%PAGADORA E2E PC%') AS regras FROM transactions AS t WHERE t.id = 'e2e-pc-ent-1'",
+  )[0];
+  expect(confirmada).toMatchObject({
+    kind: "parte_salario",
+    renda: "e2e-pc-renda",
+    recebimentos: 1,
+    regras: 1,
+  });
+
+  await page.getByRole("button", { name: "Desfazer", exact: true }).click();
+  await expect(page.getByText("0 de 1 categorizados")).toBeVisible();
+  await expect(page.getByText(/Pagadora E2E PC/).first()).toBeVisible();
+  const desfeita = consultaSql(
+    "pronta",
+    "SELECT t.income_kind AS kind, (SELECT COUNT(*) FROM fixed_income_receipts WHERE transaction_id = t.id) AS recebimentos, (SELECT COUNT(*) FROM rules WHERE scope = 'remetente' AND disabled_at IS NULL AND match_value LIKE '%PAGADORA E2E PC%') AS regras FROM transactions AS t WHERE t.id = 'e2e-pc-ent-1'",
+  )[0];
+  expect(desfeita).toMatchObject({ kind: null, recebimentos: 0, regras: 0 });
+});
+
+test("cenário 18: Aceitar com 25 entradas confirma 20, e as outras 5 continuam na lista", async ({
+  page,
+}) => {
+  semeiaFila([]);
+  semeiaEntradas(
+    Array.from({ length: 25 }, (_, i) => ({
+      id: `e2e-pc-ent-${String(i).padStart(2, "0")}`,
+      nome: `[TEST] Pagadora E2E PC ${i}`,
+      valor: 10_000 + i,
+    })),
+  );
+  await abre(page);
+  await expect(page.getByText("faltam 25")).toBeVisible();
+
+  await page.getByRole("button", { name: "Aceitar", exact: true }).click();
+  await expect(page.getByText("20 de 25 categorizados")).toBeVisible();
+  await expect(page.getByText("faltam 5")).toBeVisible();
+  await expect(page.getByTestId("lista").getByRole("listitem")).toHaveCount(5);
+  const contagem = consultaSql(
+    "pronta",
+    "SELECT COUNT(*) AS total FROM transactions WHERE id LIKE 'e2e-pc-ent-%' AND income_kind = 'variavel'",
+  )[0];
+  expect(contagem?.total).toBe(20);
 });
 
 test("cenário 26: sem a chave do Claude, a tela oferece colar a chave e não aceita nada", async ({

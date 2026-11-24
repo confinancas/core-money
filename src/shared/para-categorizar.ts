@@ -136,18 +136,29 @@ export function cartaoDaIA(entrada: {
   return { modo: "com_ia", titulo: "Sem sugestões pendentes", podeAceitar: false };
 }
 
-// "Aceitar" (TASK-0304, A6): as linhas carregadas no filtro atual que têm sugestão de categoria (saídas), no máximo
-// 100 por chamada. As que o filtro esconde e as de páginas não carregadas ficam de fora.
+// "Aceitar" (TASK-0304, A6): as linhas carregadas no filtro atual que têm sugestão, no máximo 100 por chamada. Entradas
+// com sugestão de renda também entram (TASK-0903), até 20 por chamada, porque cada uma mexe em recebimento e renda; as
+// outras ficam na lista. As que o filtro esconde e as de páginas não carregadas ficam de fora.
 export const LIMITE_DO_ACEITE = 100;
+export const LIMITE_DE_ENTRADAS_NO_ACEITE = 20;
 export function paraAceitar<
   L extends { kind: string; suggestion: { categoryId?: string | null } | { option?: unknown } | null },
 >(linhas: readonly L[], limite = LIMITE_DO_ACEITE): L[] {
-  return linhas
-    .filter((l) => {
-      if (l.kind === "entrada" || l.suggestion === null) return false;
-      return "categoryId" in l.suggestion && Boolean(l.suggestion.categoryId);
-    })
-    .slice(0, limite);
+  const escolhidas: L[] = [];
+  let entradas = 0;
+  for (const linha of linhas) {
+    if (escolhidas.length >= limite) break;
+    const sugestao = linha.suggestion;
+    if (sugestao === null) continue;
+    if (linha.kind === "entrada") {
+      if (!("option" in sugestao) || !sugestao.option || entradas >= LIMITE_DE_ENTRADAS_NO_ACEITE) continue;
+      entradas += 1;
+      escolhidas.push(linha);
+    } else if ("categoryId" in sugestao && sugestao.categoryId) {
+      escolhidas.push(linha);
+    }
+  }
+  return escolhidas;
 }
 
 // Confirmações da visita (TASK-0304, A4): cada uma conta ela mesma e as iguais que resolveu. Desfazer tira a

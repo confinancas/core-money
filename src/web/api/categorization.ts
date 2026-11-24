@@ -41,7 +41,7 @@ export type RespostaDaFila = {
 
 export type RespostaDoAceite = {
   accepted: { transactionId: string; categoryId: string | null; ruleId: string | null }[];
-  alsoResolved: { transactionId: string; categoryId: string; ruleId: string | null }[];
+  alsoResolved: { transactionId: string; categoryId: string | null; ruleId: string | null }[];
   skipped: string[];
 };
 
@@ -64,7 +64,7 @@ export function acceptSuggestions(transactionIds: string[]): Promise<RespostaDoA
 }
 
 export function undoCategorization(
-  items: { transactionId: string; categoryId: string }[],
+  items: { transactionId: string; categoryId: string | null }[],
 ): Promise<RespostaDoDesfazer> {
   return apiFetch<RespostaDoDesfazer>("/api/categorization/undo", {
     method: "POST",

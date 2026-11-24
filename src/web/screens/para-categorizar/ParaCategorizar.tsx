@@ -22,7 +22,7 @@ import { ErrorState } from "../../components/ui/error-state";
 import { GreenTop } from "../../components/ui/green-top";
 import { Segmented } from "../../components/ui/segmented";
 import { SkeletonCard } from "../../components/ui/skeleton";
-import { categoriaDaSugestao, QueueRow } from "./QueueRow";
+import { categoriaDaSugestao, QueueRow, textoDaSugestao } from "./QueueRow";
 import { gravarVisita, lerVisita } from "./visita";
 
 // Tela Para categorizar (TASK-0304). Celular e tablet: uma coluna, como o protótipo. Desktop: cartão da IA e filtros à
@@ -42,7 +42,7 @@ type Confirmada = {
   nome: string;
   categoria: string;
   cor: string;
-  itens: { transactionId: string; categoryId: string }[];
+  itens: { transactionId: string; categoryId: string | null }[];
   iguais: number;
 };
 
@@ -101,23 +101,28 @@ export function ParaCategorizar() {
       setLinhas((atuais) => atuais.filter((linha) => !saidas.has(linha.transactionId)));
       const novas: (Confirmada & { regra: string | null })[] = [];
       for (const aceita of r.accepted) {
-        if (!aceita.categoryId) continue;
         const linha = escolhidas.find((l) => l.transactionId === aceita.transactionId);
         if (!linha) continue;
+        // Entrada (TASK-0903): sem categoria; o texto é o da sugestão de renda, e o desfazer manda categoryId nulo.
+        const entrada = linha.kind === "entrada";
+        if (!entrada && !aceita.categoryId) continue;
         novas.push({
           chave: aceita.transactionId,
           nome: linha.title,
-          categoria: categoriaDaSugestao(linha),
+          categoria: categoriaDaSugestao(linha) || textoDaSugestao(linha)?.texto || "",
           cor:
             (linha.suggestion && "categoryColor" in linha.suggestion && linha.suggestion.categoryColor) ||
             "#0E9A63",
-          itens: [{ transactionId: aceita.transactionId, categoryId: aceita.categoryId }],
+          itens: [{ transactionId: aceita.transactionId, categoryId: entrada ? null : aceita.categoryId }],
           iguais: 0,
           regra: aceita.ruleId,
         });
       }
       for (const igual of r.alsoResolved) {
-        const dona = novas.find((n) => n.regra !== null && n.regra === igual.ruleId) ?? novas[0];
+        const dona =
+          novas.find((n) => n.regra !== null && n.regra === igual.ruleId) ??
+          novas.find((n) => (igual.categoryId === null) === (n.itens[0]?.categoryId === null)) ??
+          novas[0];
         if (!dona) continue;
         dona.itens.push({ transactionId: igual.transactionId, categoryId: igual.categoryId });
         dona.iguais += 1;
@@ -151,7 +156,7 @@ export function ParaCategorizar() {
     }
   };
 
-  // "Aceitar": só as linhas carregadas no filtro atual com sugestão de categoria (no máximo 100 por chamada).
+  // "Aceitar": as linhas carregadas no filtro atual com sugestão (no máximo 100 por chamada, 20 delas entradas).
   const candidatas = paraAceitar(linhas);
   const aceitarTodas = () => void confirmar(candidatas);
 

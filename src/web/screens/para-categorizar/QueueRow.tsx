@@ -89,7 +89,7 @@ export function QueueRow({ linha, hoje, iaAtiva, ocupado, aoConfirmar }: Props) 
   // Sem a chave do Claude a linha não mostra sugestão nem ✓, mesmo que já haja sugestões gravadas (cenário 26).
   const sugestao = iaAtiva ? textoDaSugestao(linha) : null;
   const entrada = linha.kind === "entrada";
-  const podeConfirmar = !entrada && sugestao !== null;
+  const podeConfirmar = sugestao !== null;
   const detalhe = linhaDeDetalhe({
     dataLocal: linha.localDate,
     hoje,
@@ -136,7 +136,7 @@ export function QueueRow({ linha, hoje, iaAtiva, ocupado, aoConfirmar }: Props) 
           type="button"
           onClick={() => aoConfirmar(linha)}
           disabled={ocupado}
-          aria-label={`Confirmar ${categoriaDaSugestao(linha)} para ${linha.title}`}
+          aria-label={`Confirmar ${categoriaDaSugestao(linha) || sugestao?.texto || ""} para ${linha.title}`}
           className="grid size-11 shrink-0 place-items-center rounded-full border-[1.5px] border-chip-border bg-card text-primary disabled:opacity-50"
         >
           <IconeCheck size={20} />

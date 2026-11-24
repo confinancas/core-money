@@ -10,6 +10,7 @@ import { processNewTransactions } from "../../src/worker/categorization/pipeline
 import { createDb } from "../../src/worker/db/client";
 import { newMeter } from "../../src/worker/db/metered-d1";
 import type { Env } from "../../src/worker/env";
+import { computeCycleIncome } from "../../src/worker/income/cycle-income";
 import { saveSecret } from "../../src/worker/security/secrets";
 import {
   AGORA,
@@ -524,6 +525,33 @@ describe("entradas", () => {
     expect(linha.ai_income_kind).toBe("parte_salario");
     expect(linha.ai_fixed_income_id).toBe(rendaId);
     expect(linha.income_kind).toBeNull();
+  });
+
+  it("histórico (cenário 19, TASK-0903): o Pix de ciclo antigo é classificado pela IA e entra na renda do ciclo, sem fila; o do ciclo anterior continua na fila", async () => {
+    const lar = await criarLar();
+    await ciclos(lar);
+    await comChave();
+    const antigo = await pix(lar, "PIX HISTORICO", { localDate: "2026-08-20" });
+    await marcarCiclo(antigo, "2026-08");
+    const anterior = await pix(lar, "PIX CICLO ANTERIOR", { localDate: "2026-09-20" });
+    await marcarCiclo(anterior, "2026-09");
+    await importar(lar, [antigo, anterior]);
+    expect((await ler(antigo)).is_backfill).toBe(1);
+    expect((await ler(anterior)).is_backfill).toBe(0);
+
+    await rodar({ decidir: () => ({ entrada: "variavel", subtipo: "venda" }) }).resultado;
+
+    const doHistorico = await ler(antigo);
+    expect(doHistorico.income_kind).toBe("variavel");
+    expect(doHistorico.categorized_by).toBe("ia");
+    expect(doHistorico.rule_id).toBeNull();
+    expect(await naFila(antigo)).toBe(0);
+    const renda = await computeCycleIncome(createDb(env.DB, newMeter()), lar.householdId, "2026-08");
+    expect(renda?.variableCents).toBe(50000);
+
+    const doAnterior = await ler(anterior);
+    expect(doAnterior.income_kind).toBeNull();
+    expect(doAnterior.ai_income_kind).toBe("variavel");
   });
 
   it("variável sem subtipo vira outro; com venda, venda (cenário 20)", async () => {

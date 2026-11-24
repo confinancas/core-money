@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
+import type { ClassificacaoDeEntrada } from "../../shared/income";
 import {
   caminhoDoDetalhe,
   FILTROS_DA_FILA,
@@ -14,12 +15,26 @@ import type { AppEnv } from "../env";
 import { getSession, requireHousehold, type SessionResolver } from "../household/context";
 import { apiError } from "../http/errors";
 import {
+  ehEntrada,
+  type LinhaDaEntrada,
+  sugestaoDaLinha as sugestaoDeEntrada,
+} from "../income/classification";
+import {
+  aceiteDeEntradaStmts,
+  desfazerEntradaStmts,
+  entradasDaLeitura,
+  leituraDasEntradasStmts,
+} from "../income/classification-entradas";
+import {
   acceptSuggestionStmt,
   clearTransactionCategoryStmt,
   learnFromConfirmationStmts,
   undoLearnedRuleStmts,
 } from "./apply";
 import { decodeCursor, encodeCursor, queueCountsStmt, queuePageStmt, TAMANHO_DA_PAGINA } from "./queue-query";
+
+// Entradas aceitas por chamada (TASK-0903): cada uma mexe em recebimento e renda; as outras continuam na lista.
+const LIMITE_DE_ENTRADAS_NO_ACEITE = 20;
 
 // Fila Para categorizar (TASK-0304). Sessão obrigatória; tudo filtrado pelo lar da sessão. Uma ida ao D1 por rota
 // (db.batch). As gravações de categoria saem só de apply.ts. Montadas em /api/categorization.
@@ -39,7 +54,7 @@ const ids = z.array(z.string().min(1)).min(1).max(100);
 const corpoDoAceite = z.strictObject({ transactionIds: ids });
 const corpoDoDesfazer = z.strictObject({
   items: z
-    .array(z.strictObject({ transactionId: z.string().min(1), categoryId: z.string().min(1) }))
+    .array(z.strictObject({ transactionId: z.string().min(1), categoryId: z.string().min(1).nullable() }))
     .min(1)
     .max(100),
 });
@@ -171,7 +186,13 @@ export function categorizacaoRoutes(
       acceptSuggestionStmt(db, { householdId, transactionId, memberId, now }),
     );
     const aprende = learnFromConfirmationStmts(db, { householdId, transactionIds: lista, memberId, now });
-    const resultados = await db.$client.batch([...aceites, ...aprende.comandos]);
+    // A leitura das entradas (TASK-0903) vai no mesmo lote: sem entrada, o aceite continua em uma chamada.
+    const [linhasLidas, rendasLidas, ...resultados] = await db.$client.batch([
+      ...leituraDasEntradasStmts(db, householdId, lista),
+      ...aceites,
+      ...aprende.comandos,
+    ]);
+    const { linhas, rendas } = entradasDaLeitura(linhasLidas, rendasLidas);
 
     const categoriaDeCadaAceite = new Map<string, string>();
     lista.forEach((transactionId, indice) => {
@@ -192,22 +213,82 @@ export function categorizacaoRoutes(
       is_backfill: number;
     }[];
 
+    // Entradas com sugestão de renda (TASK-0903): uma ida para ler, outra para gravar. Até 20 por chamada.
+    const entradasParaAceitar: { linha: LinhaDaEntrada; classificacao: ClassificacaoDeEntrada }[] = [];
+    for (const transactionId of lista) {
+      const linha = linhas.get(transactionId);
+      if (!linha || !ehEntrada(linha) || linha.income_kind !== null || linha.categorized_at !== null)
+        continue;
+      if (linha.is_backfill !== 0) continue;
+      const sugestao = sugestaoDeEntrada(linha, rendas);
+      if (sugestao === null || entradasParaAceitar.length >= LIMITE_DE_ENTRADAS_NO_ACEITE) continue;
+      entradasParaAceitar.push({ linha, classificacao: sugestao });
+    }
+    const aceitasEntrada = new Set<string>();
+    const entradasAceitas: { transactionId: string; categoryId: null; ruleId: string | null }[] = [];
+    const iguaisDeEntrada: { transactionId: string; categoryId: null; ruleId: string | null }[] = [];
+    if (entradasParaAceitar.length > 0) {
+      const comandos: D1PreparedStatement[] = [];
+      const indices: { dosIguais: number; daRegra: number; id: string }[] = [];
+      for (const { linha, classificacao } of entradasParaAceitar) {
+        const aceite = aceiteDeEntradaStmts(db, householdId, { linha, classificacao, memberId, agora: now });
+        indices.push({
+          dosIguais: aceite.indiceDosIguais < 0 ? -1 : comandos.length + aceite.indiceDosIguais,
+          daRegra: aceite.indiceDaRegra < 0 ? -1 : comandos.length + aceite.indiceDaRegra,
+          id: linha.id,
+        });
+        comandos.push(...aceite.comandos);
+      }
+      const resultadosDasEntradas = await db.$client.batch(comandos);
+      // Um igual que outra entrada do mesmo lote já resolveu sai só em alsoResolved, nunca em accepted.
+      const resolvidasPorIguais = new Set<string>();
+      for (const { dosIguais } of indices) {
+        if (dosIguais < 0) continue;
+        for (const igual of (resultadosDasEntradas[dosIguais]?.results ?? []) as {
+          id: string;
+          rule_id: string | null;
+        }[]) {
+          resolvidasPorIguais.add(igual.id);
+          iguaisDeEntrada.push({ transactionId: igual.id, categoryId: null, ruleId: igual.rule_id });
+        }
+      }
+      for (const { daRegra, id } of indices) {
+        if (resolvidasPorIguais.has(id)) continue;
+        const regra = daRegra < 0 ? undefined : (resultadosDasEntradas[daRegra]?.results ?? [])[0];
+        aceitasEntrada.add(id);
+        entradasAceitas.push({
+          transactionId: id,
+          categoryId: null,
+          ruleId: (regra as { rule_id: string | null } | undefined)?.rule_id ?? null,
+        });
+      }
+      for (const id of resolvidasPorIguais) aceitasEntrada.add(id);
+    }
+
     const aceitas = lista.filter((transactionId) => categoriaDeCadaAceite.has(transactionId));
     return c.json(
       {
-        accepted: aceitas.map((transactionId) => ({
-          transactionId,
-          categoryId: categoriaDeCadaAceite.get(transactionId) ?? null,
-          ruleId: regraDaAceita.get(transactionId) ?? null,
-        })),
-        alsoResolved: iguais
-          .filter((linha) => !categoriaDeCadaAceite.has(linha.id) && linha.is_backfill === 0)
-          .map((linha) => ({
-            transactionId: linha.id,
-            categoryId: linha.category_id,
-            ruleId: linha.rule_id,
+        accepted: [
+          ...aceitas.map((transactionId) => ({
+            transactionId,
+            categoryId: categoriaDeCadaAceite.get(transactionId) ?? null,
+            ruleId: regraDaAceita.get(transactionId) ?? null,
           })),
-        skipped: lista.filter((transactionId) => !categoriaDeCadaAceite.has(transactionId)),
+          ...entradasAceitas,
+        ],
+        alsoResolved: [
+          ...iguais
+            .filter((linha) => !categoriaDeCadaAceite.has(linha.id) && linha.is_backfill === 0)
+            .map((linha) => ({
+              transactionId: linha.id,
+              categoryId: linha.category_id,
+              ruleId: linha.rule_id,
+            })),
+          ...iguaisDeEntrada,
+        ],
+        skipped: lista.filter(
+          (transactionId) => !categoriaDeCadaAceite.has(transactionId) && !aceitasEntrada.has(transactionId),
+        ),
       },
       200,
     );
@@ -221,7 +302,11 @@ export function categorizacaoRoutes(
     if (!corpo) return dadosInvalidos(c);
     const db = c.var.db;
     const now = agora().toISOString();
-    const itens = corpo.items;
+    // categoryId nulo é uma entrada do Pix recebido (TASK-0903); o resto é saída, como antes.
+    const itens = corpo.items.filter(
+      (item): item is { transactionId: string; categoryId: string } => item.categoryId !== null,
+    );
+    const entradas = corpo.items.filter((item) => item.categoryId === null).map((item) => item.transactionId);
 
     const desfazer = undoLearnedRuleStmts(db, { householdId, items: itens, memberId, now });
     const limpezas = itens.map((item) =>
@@ -232,7 +317,19 @@ export function categorizacaoRoutes(
         memberId,
       }),
     );
-    const resultados = await db.$client.batch([...desfazer.comandos, ...limpezas]);
+    // Entradas (TASK-0903) no mesmo lote: não precisam de leitura, então o desfazer continua em uma chamada.
+    const comandosDasEntradas: D1PreparedStatement[] = [];
+    const indicesDasEntradas: { id: string; indice: number }[] = [];
+    for (const transactionId of entradas) {
+      const desfaz = desfazerEntradaStmts(db, householdId, { transactionId, memberId, agora: now });
+      indicesDasEntradas.push({
+        id: transactionId,
+        indice:
+          desfazer.comandos.length + limpezas.length + comandosDasEntradas.length + desfaz.indiceDaVolta,
+      });
+      comandosDasEntradas.push(...desfaz.comandos);
+    }
+    const resultados = await db.$client.batch([...desfazer.comandos, ...limpezas, ...comandosDasEntradas]);
 
     const desfeitas = new Set<string>();
     itens.forEach((item, indice) => {
@@ -242,10 +339,19 @@ export function categorizacaoRoutes(
     });
     const voltas = (resultados[desfazer.indiceDasVoltas]?.results ?? []) as { id: string }[];
     const undone = [...desfeitas, ...voltas.map((linha) => linha.id).filter((id) => !desfeitas.has(id))];
+
+    const desfeitasEntrada = new Set<string>();
+    for (const { id, indice } of indicesDasEntradas) {
+      if ((resultados[indice]?.results ?? []).length > 0) desfeitasEntrada.add(id);
+    }
+
     return c.json(
       {
-        undone,
-        skipped: itens.map((item) => item.transactionId).filter((id) => !desfeitas.has(id)),
+        undone: [...undone, ...desfeitasEntrada],
+        skipped: [
+          ...itens.map((item) => item.transactionId).filter((id) => !desfeitas.has(id)),
+          ...entradas.filter((id) => !desfeitasEntrada.has(id)),
+        ],
       },
       200,
     );
