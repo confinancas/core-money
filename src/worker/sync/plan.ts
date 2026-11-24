@@ -12,7 +12,7 @@ export const DIAS_DO_FUTURO = 400;
 export const DIAS_DA_CONCILIACAO = 15;
 export const JANELAS_DE_CONCILIACAO = 25;
 
-export type SyncPhase = "inicio" | "faturas" | "transacoes" | "conciliar" | "fim";
+export type SyncPhase = "inicio" | "faturas" | "transacoes" | "pos_gravacao" | "conciliar" | "fim";
 export type SyncWindow = { from: string; to: string };
 
 // Uma conta do cursor. Cartões trazem a fatura aberta (já lida) e o intervalo de vencimento (gap, em dias).
@@ -31,6 +31,18 @@ export type SyncAccount = {
   } | null;
 };
 
+// O que a fase transacoes deixa para a fase pos_gravacao (TASK-0208): os ids gravados e para onde o cursor anda depois.
+export type PosGravacao = {
+  // Ids que nasceram nesta gravação (regras, tipo e fila de categorização) e os que já existiam (classificação e ciclo).
+  novas: string[];
+  existentes: string[];
+  // Dos existentes, os que esta mesma execução já tinha gravado (a repetição de uma fatia): completam regras e tipo.
+  daExecucao: string[];
+  // Para onde a fatia anda: a mesma página a partir de um offset, a próxima página, ou o fim da janela (os dois nulos).
+  offsetDepois: number | null;
+  paginaDepois: string | null;
+};
+
 // Estado de uma execução, guardado em sync_runs.cursor_json. seq protege contra mensagem repetida.
 export type SyncCursor = {
   seq: number;
@@ -47,6 +59,8 @@ export type SyncCursor = {
   conferir: boolean;
   // O item veio OUTDATED ou PARTIAL_SUCCESS nesta execução: a volta a ativo não acontece (TASK-0205, N6).
   instavelNoPluggy: boolean;
+  // Só na fase pos_gravacao (TASK-0208); nulo nas outras.
+  pos: PosGravacao | null;
 };
 
 // A mensagem da fila: uma fatia por vez (max_batch_size 1).
@@ -162,5 +176,6 @@ export function lerCursor(texto: string | null): SyncCursor {
     lidas: bruto.lidas ?? 0,
     conferir: bruto.conferir ?? false,
     instavelNoPluggy: bruto.instavelNoPluggy ?? false,
+    pos: bruto.pos ?? null,
   };
 }

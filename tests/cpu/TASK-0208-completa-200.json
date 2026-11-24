@@ -1,0 +1,48 @@
+{
+  "task": "TASK-0208",
+  "esvaziarBanco": true,
+  "sessao": true,
+  "setupSql": [
+    "INSERT INTO invites (id, household_id, kind, token_hash, created_at, used_at) VALUES ('cpu-0204-primeiro-acesso', NULL, 'primeiro_acesso', 'cpu-0204-codigo-ja-usado', '2026-11-10T00:00:00.000Z', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO households (id, brand, created_at) VALUES ('cpu-lar', 'matrimoney', '2026-11-10T00:00:00.000Z')",
+    "INSERT INTO members (id, household_id, name, email, role, created_at) VALUES ('cpu-membro-1', 'cpu-lar', '[TEST] Pessoa A', 'pessoa.a@example.com', 'titular', '2026-11-10T00:00:00.000Z')"
+  ],
+  "requests": [
+    {
+      "name": "POST preparo (200 linhas; fora da conta da fatia)",
+      "method": "POST",
+      "path": "/api/dev/sync-slice/preparo",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "body": {
+        "rodada": "{i}",
+        "rows": 200
+      }
+    },
+    {
+      "name": "POST completa-gravacao (mensagem de gravação real: LINHAS_POR_FATIA linhas lidas e gravadas, Meu Pluggy falso)",
+      "method": "POST",
+      "path": "/api/dev/sync-slice/completa-gravacao",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "body": {
+        "rodada": "{i}",
+        "rows": 200
+      }
+    },
+    {
+      "name": "POST completa-pos (mensagem pós-gravação real: classificação, ciclo, pipeline e tipo das 100 linhas)",
+      "method": "POST",
+      "path": "/api/dev/sync-slice/completa-pos",
+      "headers": {
+        "cookie": "{sessao}"
+      },
+      "body": {
+        "rodada": "{i}",
+        "rows": 200
+      }
+    }
+  ]
+}

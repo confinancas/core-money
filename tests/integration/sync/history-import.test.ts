@@ -10,7 +10,12 @@ import type { Env } from "../../../src/worker/env";
 import { type SyncMessage, somaDias } from "../../../src/worker/sync/plan";
 import { handleSyncBatch, type LoteDaFila, type MensagemDaFila } from "../../../src/worker/sync/queue";
 import { startRun } from "../../../src/worker/sync/runs";
-import { faturasReaisDoCartao, type ResultadoDaFatia, runSyncSlice } from "../../../src/worker/sync/slice";
+import {
+  faturasReaisDoCartao,
+  LINHAS_POR_FATIA,
+  type ResultadoDaFatia,
+  runSyncSlice,
+} from "../../../src/worker/sync/slice";
 import { callApi, semearPronto } from "../helpers/app";
 import {
   AGORA,
@@ -132,7 +137,7 @@ describe("importação: paginação, página grande e idempotência (cenários 3
     expect(linhas?.n).toBe(5);
   });
 
-  it("cenário 4: uma página de 500 linhas entra em 3 fatias (200 + 200 + 100), sem duplicar", async () => {
+  it("cenário 4: uma página de 500 linhas entra em fatias de LINHAS_POR_FATIA linhas, sem duplicar", async () => {
     const banco = await semearBanco();
     const runId = (await startRun(db(), banco.itemId, "historico", AGORA)) as string;
     const base = pluggyFalsoEmMemoria(0);
@@ -162,11 +167,12 @@ describe("importação: paginação, página grande e idempotência (cenários 3
       }
       return base(entrada, init);
     };
-    // inicio, faturas e as três fatias da página grande: 200, 400 e 500 linhas gravadas.
+    // inicio, faturas e as fatias da página grande, cada uma em duas mensagens (gravação e pós-gravação, TASK-0208).
+    const fatias = Math.ceil(500 / LINHAS_POR_FATIA);
     const passos: Passo[] = [];
     const medidor = newMeter();
     let seq = 0;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 2 + 2 * fatias; i++) {
       const resultado = await runSyncSlice(
         AMBIENTE,
         { db: createDb(env.DB, medidor), fetch: grande },
@@ -175,9 +181,9 @@ describe("importação: paginação, página grande e idempotência (cenários 3
       );
       passos.push({ resultado, chamadasDaFatia: 0 });
       seq += 1;
-      if (i >= 2) {
+      if (i >= 2 && i % 2 === 0) {
         const n = await contaDeTransacoes(banco.itemId);
-        expect(n).toBe(Math.min(500, (i - 1) * 200));
+        expect(n).toBe(Math.min(500, (i / 2) * LINHAS_POR_FATIA));
       }
     }
     expect(passos.every((passo) => passo.resultado.tipo === "continua")).toBe(true);
@@ -531,13 +537,17 @@ describe("importação: conciliação em 25 janelas depois das transações (fas
     expect(conciliacoes.map((leitura) => leitura.w)).toEqual(Array.from({ length: 25 }, (_, k) => k));
     // As 25 fatias são contíguas, depois das transações e antes da fim.
     expect(fases.indexOf("fim") - fases.indexOf("conciliar")).toBe(25);
-    expect(fases.lastIndexOf("transacoes")).toBeLessThan(fases.indexOf("conciliar"));
+    expect(Math.max(fases.lastIndexOf("transacoes"), fases.lastIndexOf("pos_gravacao"))).toBeLessThan(
+      fases.indexOf("conciliar"),
+    );
     // Nenhuma fatia de conciliação chama o Pluggy; cada uma faz poucas idas ao D1 (ler a execução, conciliar, gravar o cursor).
     expect(Math.max(...conciliacoes.map((leitura) => leitura.chamadasAoPluggy))).toBe(0);
     expect(Math.max(...conciliacoes.map((leitura) => leitura.idasAoD1))).toBeLessThanOrEqual(4);
 
     // O total cresce em 25 quando a fase transacoes acaba: a última fatia de transações é a que vê o total de importação.
-    const ultimaDeTransacoes = leituras.filter((leitura) => leitura.fase === "transacoes").at(-1);
+    const ultimaDeTransacoes = leituras
+      .filter((leitura) => leitura.fase === "transacoes" || leitura.fase === "pos_gravacao")
+      .at(-1);
     const totalDaImportacao = ultimaDeTransacoes?.totalAntes ?? -1;
     expect(conciliacoes[0]?.totalAntes).toBe(totalDaImportacao + 25);
     expect(conciliacoes[0]?.feitasAntes).toBe(totalDaImportacao);

@@ -10,6 +10,7 @@ import { nomeDaChave } from "../pluggy/connections";
 import { encryptSecret } from "../security/crypto";
 import { startRun } from "../sync/runs";
 import { type ResultadoDaFatia, runSyncSlice } from "../sync/slice";
+import { registrarEtapasDeMedicao } from "./medicao-etapas";
 import { pluggyFalsoEmMemoria } from "./pluggy-fake-fetch";
 
 const FASES = ["inicio", "faturas", "transacoes", "fim"] as const;
@@ -22,6 +23,8 @@ export type OpcoesDasRotasDeDev = { fetch?: typeof fetch };
 export function devRoutes(resolveSession: SessionResolver, opcoes: OpcoesDasRotasDeDev = {}): Hono<AppEnv> {
   const rotas = new Hono<AppEnv>();
   rotas.use(requireHousehold(resolveSession));
+  // Medição por etapa da fatia (TASK-0208): caminhos próprios, mesmo guarda DEV_ROUTES.
+  registrarEtapasDeMedicao(rotas);
 
   rotas.post("/sync-slice", async (c) => {
     const { householdId } = getSession(c);

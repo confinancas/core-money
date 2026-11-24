@@ -23,18 +23,46 @@ const LOTE_DO_PIPELINE = 100;
 //      As TASK-0303, 0902 e 0903 acrescentam os seus passos depois deste.
 //   4. tipo de gasto (TASK-0802): padrão e regras automáticas (corretora, caixinha), só nas inseridas, em lotes de 100.
 //      Depois do pipeline, para que a categoria e a regra de categoria já tenham gravado o tipo delas.
+// As quatro etapas, exportadas para a medição por etapa (TASK-0208). Cada uma sozinha dá o mesmo resultado que dá dentro
+// do afterIngest, na mesma ordem.
+export async function etapaClassificacao(
+  db: Db,
+  householdId: string,
+  ids: string[],
+  now: string,
+): Promise<void> {
+  await classifyMovements(db, householdId, ids, now);
+}
+
+export async function etapaCiclo(db: Db, householdId: string, ids: string[]): Promise<void> {
+  await assignCycleKeys(db, householdId, ids);
+}
+
+export async function etapaPipeline(
+  db: Db,
+  householdId: string,
+  insertedIds: string[],
+  now: string,
+): Promise<void> {
+  for (let inicio = 0; inicio < insertedIds.length; inicio += LOTE_DO_PIPELINE) {
+    const lote = insertedIds.slice(inicio, inicio + LOTE_DO_PIPELINE);
+    await processNewTransactions(db, householdId, lote, now);
+  }
+}
+
+export async function etapaTipos(db: Db, householdId: string, insertedIds: string[]): Promise<void> {
+  for (let inicio = 0; inicio < insertedIds.length; inicio += LOTE_DO_PIPELINE) {
+    const lote = insertedIds.slice(inicio, inicio + LOTE_DO_PIPELINE);
+    await applySpendTypesOnImport(db, householdId, lote);
+  }
+}
+
 export async function afterIngest(db: Db, ctx: AfterIngestContext): Promise<void> {
   const ids = [...ctx.insertedIds, ...ctx.updatedIds];
-  await classifyMovements(db, ctx.householdId, ids, ctx.now);
-  await assignCycleKeys(db, ctx.householdId, ids);
-  for (let inicio = 0; inicio < ctx.insertedIds.length; inicio += LOTE_DO_PIPELINE) {
-    const lote = ctx.insertedIds.slice(inicio, inicio + LOTE_DO_PIPELINE);
-    await processNewTransactions(db, ctx.householdId, lote, ctx.now);
-  }
-  for (let inicio = 0; inicio < ctx.insertedIds.length; inicio += LOTE_DO_PIPELINE) {
-    const lote = ctx.insertedIds.slice(inicio, inicio + LOTE_DO_PIPELINE);
-    await applySpendTypesOnImport(db, ctx.householdId, lote);
-  }
+  await etapaClassificacao(db, ctx.householdId, ids, ctx.now);
+  await etapaCiclo(db, ctx.householdId, ids);
+  await etapaPipeline(db, ctx.householdId, ctx.insertedIds, ctx.now);
+  await etapaTipos(db, ctx.householdId, ctx.insertedIds);
 }
 
 // Reavaliação do ciclo de todos os lançamentos e faturas de um cartão (TASK-0204, B1-2). A gravação só reavalia os

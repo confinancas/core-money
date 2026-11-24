@@ -77,6 +77,15 @@ describe("repetição de uma fatia da própria execução (N9)", () => {
           DIA_2,
         );
         expect(repetida.tipo).toBe("continua");
+        // A gravação repetida vê as linhas como da própria execução; quem completa regras e tipo é a mensagem
+        // pós-gravação que vem depois (TASK-0208).
+        const pos = await runSyncSlice(
+          AMBIENTE,
+          { db: createDb(env.DB, newMeter()), fetch },
+          { runId, seq: seq + 1, tentativa: 1 },
+          DIA_2,
+        );
+        expect(pos.tipo).toBe("continua");
         expect(await filaDaIA()).toBeGreaterThan(0);
         return;
       }
